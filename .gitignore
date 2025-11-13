@@ -73,7 +73,11 @@ htmlcov/
 
 # Anki files
 *.apkg
+*.colpkg
 /temp_files
+backend/media/
+frontend_pid.txt
+backend_pid.txt
 
 # Documentation builds
 docs/_build/
