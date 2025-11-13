@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { apiService } from '../services/api';
-import { CardGenerationRequest, Language } from '../types';
+import { CardGenerationRequest, Language, WordMedia } from '../types';
 
 interface GenerateButtonProps {
   words: string[];
   language: Language;
   translations: Record<string, string>;
   deckName: string;
+  wordMedia?: Record<string, WordMedia>;
   onSuccess?: () => void;
   onError?: (error: string) => void;
 }
@@ -16,6 +17,7 @@ export const GenerateButton: React.FC<GenerateButtonProps> = ({
   language,
   translations,
   deckName,
+  wordMedia = {},
   onSuccess,
   onError,
 }) => {
@@ -73,12 +75,51 @@ export const GenerateButton: React.FC<GenerateButtonProps> = ({
     setIsLoading(true);
 
     try {
+      // Подготавливаем медиафайлы
+      const audioFiles: Record<string, string> = {};
+      const imageFiles: Record<string, string> = {};
+
+      console.log('GenerateButton: words:', words);
+      console.log('GenerateButton: wordMedia:', wordMedia);
+
+      words.forEach((word) => {
+        const media = wordMedia[word];
+        console.log(`GenerateButton: обработка слова "${word}":`, media);
+        console.log(`GenerateButton: media?.imagePath для "${word}":`, media?.imagePath);
+        console.log(`GenerateButton: media?.audioPath для "${word}":`, media?.audioPath);
+        if (media) {
+          // Проверяем imagePath - может быть строкой или undefined
+          if (media.imagePath && typeof media.imagePath === 'string' && media.imagePath.trim() !== '') {
+            imageFiles[word] = media.imagePath;
+            console.log(`GenerateButton: ✅ добавлено изображение для "${word}":`, media.imagePath);
+          } else {
+            console.warn(`GenerateButton: ⚠️ imagePath пустой или невалидный для "${word}":`, media.imagePath);
+          }
+          // Проверяем audioPath - может быть строкой или undefined
+          if (media.audioPath && typeof media.audioPath === 'string' && media.audioPath.trim() !== '') {
+            audioFiles[word] = media.audioPath;
+            console.log(`GenerateButton: ✅ добавлено аудио для "${word}":`, media.audioPath);
+          } else {
+            console.warn(`GenerateButton: ⚠️ audioPath пустой или невалидный для "${word}":`, media.audioPath);
+          }
+        } else {
+          console.warn(`GenerateButton: ❌ медиа не найдено для слова "${word}"`);
+        }
+      });
+
+      console.log('GenerateButton: audioFiles:', audioFiles);
+      console.log('GenerateButton: imageFiles:', imageFiles);
+
       const requestData: CardGenerationRequest = {
         words: words.join(', '),
         language,
         translations,
         deck_name: deckName,
+        ...(Object.keys(audioFiles).length > 0 && { audio_files: audioFiles }),
+        ...(Object.keys(imageFiles).length > 0 && { image_files: imageFiles }),
       };
+
+      console.log('GenerateButton: requestData:', requestData);
 
       const response = await apiService.generateCards(requestData);
       await downloadFile(response.file_id, response.deck_name);

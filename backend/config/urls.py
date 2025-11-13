@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from apps.cards.urls import media_urlpatterns
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -25,6 +26,7 @@ urlpatterns = [
     path('api/user/', include('apps.users.urls')),
     path('api/words/', include('apps.words.urls')),
     path('api/cards/', include('apps.cards.urls')),
+    path('api/media/', include((media_urlpatterns, 'media'), namespace='media')),
     # API root для проверки
     path('api/', include('rest_framework.urls')),
 ]

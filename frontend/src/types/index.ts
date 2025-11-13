@@ -49,3 +49,30 @@ export interface AuthResponse {
   preferred_language?: Language;
 }
 
+// Media types
+export interface MediaGenerationResponse {
+  image_url?: string;
+  audio_url?: string;
+  image_id?: string;
+  audio_id?: string;
+  file_path?: string;
+}
+
+export interface MediaUploadResponse {
+  image_url?: string;
+  audio_url?: string;
+  image_id?: string;
+  audio_id?: string;
+  file_path?: string;
+}
+
+export interface WordMedia {
+  word: string;
+  imageUrl?: string;
+  audioUrl?: string;
+  imageId?: string;
+  audioId?: string;
+  imagePath?: string;
+  audioPath?: string;
+}
+

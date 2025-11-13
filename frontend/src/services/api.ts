@@ -7,6 +7,8 @@ import {
   CardGenerationResponse,
   ApiError,
   Language,
+  MediaGenerationResponse,
+  MediaUploadResponse,
 } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -106,6 +108,7 @@ class ApiService {
   async generateCards(
     data: CardGenerationRequest
   ): Promise<CardGenerationResponse> {
+    console.log('apiService.generateCards: отправляемые данные:', JSON.stringify(data, null, 2));
     const response = await this.api.post<CardGenerationResponse>(
       '/cards/generate/',
       data
@@ -116,6 +119,51 @@ class ApiService {
   async downloadCards(fileId: string): Promise<Blob> {
     const response = await this.api.get(`/cards/download/${fileId}/`, {
       responseType: 'blob',
+    });
+    return response.data;
+  }
+
+  // Media generation endpoints
+  async generateImage(
+    word: string,
+    translation: string,
+    language: Language
+  ): Promise<MediaGenerationResponse> {
+    const response = await this.api.post<MediaGenerationResponse>('/media/generate-image/', {
+      word,
+      translation,
+      language,
+    });
+    return response.data;
+  }
+
+  async generateAudio(word: string, language: Language): Promise<MediaGenerationResponse> {
+    const response = await this.api.post<MediaGenerationResponse>('/media/generate-audio/', {
+      word,
+      language,
+    });
+    return response.data;
+  }
+
+  // Media upload endpoints
+  async uploadImage(file: File): Promise<MediaUploadResponse> {
+    const formData = new FormData();
+    formData.append('image', file);
+    const response = await this.api.post<MediaUploadResponse>('/media/upload-image/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  }
+
+  async uploadAudio(file: File): Promise<MediaUploadResponse> {
+    const formData = new FormData();
+    formData.append('audio', file);
+    const response = await this.api.post<MediaUploadResponse>('/media/upload-audio/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
     return response.data;
   }

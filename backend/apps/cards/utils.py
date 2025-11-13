@@ -105,14 +105,27 @@ def generate_apkg(
         )
         deck.add_note(note)
     
-    # Создаем пакет и добавляем медиафайлы
-    package = Package(deck)
+    # Собираем все медиафайлы из words_data
+    all_media_files = []
+    for word_data in words_data:
+        if word_data.get('audio_file'):
+            audio_path = Path(word_data['audio_file'])
+            if audio_path.exists() and str(audio_path) not in all_media_files:
+                all_media_files.append(str(audio_path))
+        if word_data.get('image_file'):
+            image_path = Path(word_data['image_file'])
+            if image_path.exists() and str(image_path) not in all_media_files:
+                all_media_files.append(str(image_path))
     
+    # Добавляем медиафайлы из параметра media_files (если есть)
     if media_files:
-        # Фильтруем только существующие файлы
-        existing_media = [f for f in media_files if Path(f).exists()]
-        if existing_media:
-            package.media_files = existing_media
+        for media_file in media_files:
+            media_path = Path(media_file)
+            if media_path.exists() and str(media_path) not in all_media_files:
+                all_media_files.append(str(media_path))
+    
+    # Создаем пакет с медиафайлами
+    package = Package(deck, media_files=all_media_files if all_media_files else None)
     
     # Генерируем уникальное имя файла, если не указано
     if output_path is None:

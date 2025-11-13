@@ -166,6 +166,79 @@ Authorization: Token <your-token>
 
 **Response:** Бинарный файл .apkg
 
+### Генерация медиафайлов через OpenAI
+
+#### POST `/api/media/generate-image/`
+
+Генерация изображения для слова через OpenAI DALL-E 3 (требует аутентификации).
+
+**Request Body:**
+```json
+{
+  "word": "casa",
+  "translation": "дом",
+  "language": "pt"
+}
+```
+
+**Response:**
+```json
+{
+  "image_url": "/media/images/uuid.jpg",
+  "image_id": "uuid"
+}
+```
+
+#### POST `/api/media/generate-audio/`
+
+Генерация аудио для слова через OpenAI TTS-1-HD (требует аутентификации).
+
+**Request Body:**
+```json
+{
+  "word": "casa",
+  "language": "pt"
+}
+```
+
+**Response:**
+```json
+{
+  "audio_url": "/media/audio/uuid.mp3",
+  "audio_id": "uuid"
+}
+```
+
+### Загрузка собственных медиафайлов
+
+#### POST `/api/media/upload-image/`
+
+Загрузка собственного изображения (требует аутентификации).
+
+**Request:** `multipart/form-data` с полем `image` (файл)
+
+**Response:**
+```json
+{
+  "image_url": "/media/images/uuid.jpg",
+  "image_id": "uuid"
+}
+```
+
+#### POST `/api/media/upload-audio/`
+
+Загрузка собственного аудио (требует аутентификации).
+
+**Request:** `multipart/form-data` с полем `audio` (файл)
+
+**Response:**
+```json
+{
+  "audio_url": "/media/audio/uuid.mp3",
+  "audio_id": "uuid"
+}
+```
+
 ## Коды ошибок
 
 - `400` - Bad Request (неверные данные)
