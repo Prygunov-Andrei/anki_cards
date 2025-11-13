@@ -1,5 +1,7 @@
 # Anki Card Generator
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/Prygunov-Andrei/anki_cards)
+
 ## Описание
 
 **Anki Card Generator** — веб-приложение для автоматической генерации карточек Anki для изучения иностранных языков. Приложение позволяет создавать двусторонние карточки с переводами, аудио и изображениями, которые можно импортировать в популярное приложение для запоминания Anki.
@@ -151,7 +153,7 @@
 #### 1. Клонирование репозитория
 
 ```bash
-git clone git@github.com:Prygunov-Andrei/anki_cards.git
+git clone https://github.com/Prygunov-Andrei/anki_cards.git
 cd anki_cards
 ```
 

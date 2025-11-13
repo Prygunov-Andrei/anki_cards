@@ -78,3 +78,8 @@ htmlcov/
 # Documentation builds
 docs/_build/
 
+# Logs
+*.log
+backend.log
+frontend.log
+
