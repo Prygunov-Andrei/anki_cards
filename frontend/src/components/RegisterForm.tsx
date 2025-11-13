@@ -41,8 +41,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
   };
 
   return (
-    <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">Регистрация</h2>
+    <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
+      <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">Регистрация</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -50,7 +50,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
           </div>
         )}
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="username" className="block text-sm font-medium text-gray-900 mb-1">
             Имя пользователя
           </label>
           <input
@@ -59,11 +59,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           />
         </div>
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="email" className="block text-sm font-medium text-gray-900 mb-1">
             Email
           </label>
           <input
@@ -72,25 +72,25 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           />
         </div>
         <div>
-          <label htmlFor="preferredLanguage" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="preferredLanguage" className="block text-sm font-medium text-gray-900 mb-1">
             Предпочитаемый язык
           </label>
           <select
             id="preferredLanguage"
             value={preferredLanguage}
             onChange={(e) => setPreferredLanguage(e.target.value as Language)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           >
             <option value="pt">Португальский</option>
             <option value="de">Немецкий</option>
           </select>
         </div>
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="password" className="block text-sm font-medium text-gray-900 mb-1">
             Пароль
           </label>
           <input
@@ -99,11 +99,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           />
         </div>
         <div>
-          <label htmlFor="passwordConfirm" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="passwordConfirm" className="block text-sm font-medium text-gray-900 mb-1">
             Подтвердите пароль
           </label>
           <input
@@ -112,7 +112,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           />
         </div>
         <button
@@ -123,11 +123,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
           {isLoading ? 'Регистрация...' : 'Зарегистрироваться'}
         </button>
       </form>
-      <p className="mt-4 text-center text-sm text-gray-600">
+      <p className="mt-4 text-center text-sm text-gray-700">
         Уже есть аккаунт?{' '}
         <button
           onClick={onSwitchToLogin}
-          className="text-blue-600 hover:underline"
+          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
         >
           Войти
         </button>

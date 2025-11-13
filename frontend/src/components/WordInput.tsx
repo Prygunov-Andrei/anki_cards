@@ -40,8 +40,9 @@ export const WordInput: React.FC<WordInputProps> = ({ value, onChange }) => {
     }
 
     // Добавляем новые слова, исключая дубликаты
-    const newWords = [...new Set([...value, ...words])];
-    onChange(newWords);
+    const allWords = [...value, ...words];
+    const uniqueWords = Array.from(new Set(allWords));
+    onChange(uniqueWords);
     setInputValue('');
     setError('');
   };
