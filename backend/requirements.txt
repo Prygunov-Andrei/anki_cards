@@ -1,0 +1,14 @@
+Django==4.2.7
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+psycopg2-binary==2.9.9
+genanki==0.13.0
+python-dotenv==1.0.0
+Pillow==10.1.0
+dj-database-url==2.1.0
+
+# Testing
+pytest==7.4.3
+pytest-django==4.7.0
+pytest-cov==4.1.0
+
