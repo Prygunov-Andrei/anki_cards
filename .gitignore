@@ -82,6 +82,10 @@ backend_pid.txt
 # Documentation builds
 docs/_build/
 
+# Documentation archives
+docs_archive.tar.gz
+docs_archive.zip
+
 # Logs
 *.log
 backend.log
