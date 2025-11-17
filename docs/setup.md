@@ -239,5 +239,5 @@ git push origin feature/new-feature
 
 1. Ознакомьтесь с [API документацией](./api.md)
 2. Изучите [архитектуру приложения](./architecture.md)
-3. Посмотрите [план разработки](./development-plan.md)
+3. Посмотрите [план разработки](./DEVELOPMENT_PLAN.md)
 4. Проверьте [статус проекта](./status.md)

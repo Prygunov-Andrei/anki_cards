@@ -77,10 +77,11 @@ export const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       const response = await apiService.generateImage(word, translation, language);
       console.log(`MediaGenerator [${word}]: ответ от API:`, response);
       if (response.image_url) {
-        const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        // Для медиафайлов используем базовый URL без /api/
+        const baseUrl = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace('/api', '');
         const fullUrl = response.image_url.startsWith('http')
           ? response.image_url
-          : `${apiBaseUrl}${response.image_url}`;
+          : `${baseUrl}${response.image_url}`;
         setImageUrl(fullUrl);
         setImagePath(response.file_path);
         setImageId(response.image_id);
@@ -118,10 +119,11 @@ export const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     try {
       const response = await apiService.generateAudio(word, language);
       if (response.audio_url) {
-        const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        // Для медиафайлов используем базовый URL без /api/
+        const baseUrl = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace('/api', '');
         const fullUrl = response.audio_url.startsWith('http')
           ? response.audio_url
-          : `${apiBaseUrl}${response.audio_url}`;
+          : `${baseUrl}${response.audio_url}`;
         setAudioUrl(fullUrl);
         setAudioPath(response.file_path);
         setAudioId(response.audio_id);
@@ -157,10 +159,11 @@ export const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     try {
       const response = await apiService.uploadImage(file);
       if (response.image_url) {
-        const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        // Для медиафайлов используем базовый URL без /api/
+        const baseUrl = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace('/api', '');
         const fullUrl = response.image_url.startsWith('http')
           ? response.image_url
-          : `${apiBaseUrl}${response.image_url}`;
+          : `${baseUrl}${response.image_url}`;
         setImageUrl(fullUrl);
         setImagePath(response.file_path);
         setImageId(response.image_id);
@@ -196,10 +199,11 @@ export const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     try {
       const response = await apiService.uploadAudio(file);
       if (response.audio_url) {
-        const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        // Для медиафайлов используем базовый URL без /api/
+        const baseUrl = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace('/api', '');
         const fullUrl = response.audio_url.startsWith('http')
           ? response.audio_url
-          : `${apiBaseUrl}${response.audio_url}`;
+          : `${baseUrl}${response.audio_url}`;
         setAudioUrl(fullUrl);
         setAudioPath(response.file_path);
         setAudioId(response.audio_id);
