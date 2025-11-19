@@ -7,6 +7,7 @@ import {
   CardGenerationResponse,
   ApiError,
   Language,
+  ImageStyle,
   MediaGenerationResponse,
   MediaUploadResponse,
   UserPrompt,
@@ -130,12 +131,14 @@ class ApiService {
   async generateImage(
     word: string,
     translation: string,
-    language: Language
+    language: Language,
+    imageStyle: ImageStyle = 'balanced'
   ): Promise<MediaGenerationResponse> {
     const response = await this.api.post<MediaGenerationResponse>('/media/generate-image/', {
       word,
       translation,
       language,
+      image_style: imageStyle,
     });
     return response.data;
   }

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import GeneratedDeck, UserPrompt
+from .models import GeneratedDeck, UserPrompt, PartOfSpeechCache
 
 
 @admin.register(GeneratedDeck)
@@ -40,5 +40,23 @@ class UserPromptAdmin(admin.ModelAdmin):
         }),
         ('Даты', {
             'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(PartOfSpeechCache)
+class PartOfSpeechCacheAdmin(admin.ModelAdmin):
+    """Административная панель для модели PartOfSpeechCache"""
+    list_display = ['word', 'language', 'part_of_speech', 'article', 'created_at']
+    list_filter = ['language', 'part_of_speech', 'created_at']
+    search_fields = ['word', 'part_of_speech']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('word', 'language', 'part_of_speech', 'article')
+        }),
+        ('Даты', {
+            'fields': ('created_at',)
         }),
     )

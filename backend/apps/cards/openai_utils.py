@@ -11,7 +11,8 @@ from openai import OpenAI
 from django.conf import settings
 from django.core.files.base import ContentFile
 from PIL import Image
-from .prompt_utils import get_user_prompt, format_prompt
+from .prompt_utils import get_user_prompt
+from .default_prompts import get_default_prompt, format_prompt
 
 
 def get_openai_client() -> OpenAI:
@@ -31,8 +32,9 @@ def generate_image_with_dalle(
     language: str,
     user=None,
     native_language: str = 'русском',
-    english_translation: str = None
-) -> Path:
+    english_translation: str = None,
+    image_style: str = 'balanced'
+) -> tuple[Path, str]:
     """
     Генерирует изображение для слова через OpenAI DALL-E 3
     
@@ -40,12 +42,13 @@ def generate_image_with_dalle(
         word: Исходное слово
         translation: Перевод слова
         language: Язык слова (pt или de)
-        user: Пользователь (для получения пользовательского промпта)
+        user: Пользователь (не используется, оставлен для совместимости)
         native_language: Родной язык пользователя
         english_translation: Английский перевод (опционально)
+        image_style: Стиль генерации изображения (minimalistic, balanced, creative)
     
     Returns:
-        Path к сохраненному изображению
+        Кортеж (Path к сохраненному изображению, промпт)
     
     Raises:
         ValueError: Если API ключ не установлен
@@ -53,11 +56,9 @@ def generate_image_with_dalle(
     """
     client = get_openai_client()
     
-    # Получаем промпт пользователя или заводской
-    prompt_template = get_user_prompt(user, 'image') if user else None
-    if not prompt_template:
-        # Fallback на старый промпт, если промпт не найден
-        prompt_template = f"A simple, clear illustration of {{word}} ({{translation}} in Russian). The image should be educational and suitable for a language learning flashcard."
+    # Используем промпт для выбранного стиля
+    from .default_prompts import get_image_prompt_for_style
+    prompt_template = get_image_prompt_for_style(image_style)
     
     # Формируем промпт для генерации изображения
     prompt = format_prompt(
@@ -68,6 +69,12 @@ def generate_image_with_dalle(
         native_language=native_language,
         english_translation=english_translation or translation
     )
+    
+    # Логируем промпт для отладки
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[DALL-E] Слово: '{word}', Перевод: '{translation}'")
+    logger.info(f"[DALL-E] Финальный промпт: {prompt}")
     
     try:
         # Вызываем DALL-E 3 API
@@ -111,7 +118,7 @@ def generate_image_with_dalle(
         # Сохраняем изображение
         image.save(file_path, "JPEG", quality=95)
         
-        return file_path
+        return file_path, prompt
         
     except Exception as e:
         raise Exception(f"Ошибка при генерации изображения через DALL-E 3: {str(e)}")
@@ -120,7 +127,8 @@ def generate_image_with_dalle(
 def generate_audio_with_tts(
     word: str,
     language: str,
-    user=None
+    user=None,
+    use_voice_variety: bool = True
 ) -> Path:
     """
     Генерирует аудио для слова через OpenAI TTS-1-HD
@@ -143,14 +151,21 @@ def generate_audio_with_tts(
     # Для аудио промпт используется только для инструкций, сам текст - это слово
     prompt_template = get_user_prompt(user, 'audio') if user else None
     
-    # Определяем голос в зависимости от языка
+    # Определяем голос в зависимости от языка и разнообразия
     # OpenAI TTS поддерживает голоса: alloy, echo, fable, onyx, nova, shimmer
-    # Для португальского и немецкого используем универсальные голоса
-    voice_map = {
-        'pt': 'nova',  # Более мягкий голос для португальского
-        'de': 'onyx',  # Более четкий голос для немецкого
-    }
-    voice = voice_map.get(language, 'alloy')
+    import random
+    
+    if use_voice_variety:
+        # Разнообразие голосов: женские (nova, shimmer), мужские (onyx, echo), универсальные (alloy, fable)
+        all_voices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+        voice = random.choice(all_voices)
+    else:
+        # Стандартное поведение: голос зависит от языка
+        voice_map = {
+            'pt': 'nova',  # Более мягкий голос для португальского
+            'de': 'onyx',  # Более четкий голос для немецкого
+        }
+        voice = voice_map.get(language, 'alloy')
     
     try:
         # Вызываем TTS API

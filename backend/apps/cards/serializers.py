@@ -34,6 +34,12 @@ class CardGenerationSerializer(serializers.Serializer):
         max_length=200,
         required=True
     )
+    image_style = serializers.ChoiceField(
+        choices=[('minimalistic', 'Минималистичный'), ('balanced', 'Сбалансированный'), ('creative', 'Творческий')],
+        required=False,
+        default='balanced',
+        help_text="Стиль генерации изображений для всей колоды"
+    )
     
     def validate_words(self, value):
         """Валидация списка слов"""
@@ -65,6 +71,12 @@ class ImageGenerationSerializer(serializers.Serializer):
     language = serializers.ChoiceField(
         choices=[('pt', 'Португальский'), ('de', 'Немецкий')],
         required=True
+    )
+    image_style = serializers.ChoiceField(
+        choices=[('minimalistic', 'Минималистичный'), ('balanced', 'Сбалансированный'), ('creative', 'Творческий')],
+        required=False,
+        default='balanced',
+        help_text="Стиль генерации изображения"
     )
 
 

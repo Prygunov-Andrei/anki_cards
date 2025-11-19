@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
-import { Language, WordMedia } from '../types';
+import { Language, WordMedia, ImageStyle } from '../types';
 import { FileUpload } from './FileUpload';
 
 interface MediaGeneratorProps {
@@ -8,6 +8,7 @@ interface MediaGeneratorProps {
   translation: string;
   language: Language;
   onMediaChange: (media: WordMedia) => void;
+  imageStyle?: ImageStyle;
   initialMedia?: WordMedia;
 }
 
@@ -16,6 +17,7 @@ export const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   translation,
   language,
   onMediaChange,
+  imageStyle = 'balanced',
   initialMedia,
 }) => {
   console.log(`MediaGenerator [${word}]: компонент монтируется, initialMedia:`, initialMedia);
@@ -74,8 +76,13 @@ export const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setIsGeneratingImage(true);
     setError('');
     try {
-      const response = await apiService.generateImage(word, translation, language);
+      const response = await apiService.generateImage(word, translation, language, imageStyle);
       console.log(`MediaGenerator [${word}]: ответ от API:`, response);
+      if (response.dalle_prompt) {
+        console.log(`MediaGenerator [${word}]: ========== ПРОМПТ ДЛЯ DALL-E ==========`);
+        console.log(`MediaGenerator [${word}]:`, response.dalle_prompt);
+        console.log(`MediaGenerator [${word}]: ======================================`);
+      }
       if (response.image_url) {
         // Для медиафайлов используем базовый URL без /api/
         const baseUrl = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace('/api', '');

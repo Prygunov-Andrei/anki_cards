@@ -216,16 +216,18 @@ def generate_image_view(request):
     word = serializer.validated_data['word']
     translation = serializer.validated_data['translation']
     language = serializer.validated_data['language']
+    image_style = serializer.validated_data.get('image_style', 'balanced')
     
     try:
-        # Генерируем изображение с использованием промпта пользователя
-        image_path = generate_image_with_dalle(
+        # Генерируем изображение с использованием выбранного стиля
+        image_path, dalle_prompt = generate_image_with_dalle(
             word=word,
             translation=translation,
             language=language,
             user=request.user,
             native_language='русском',  # TODO: получить из профиля пользователя
-            english_translation=None  # TODO: получить из перевода или API
+            english_translation=None,  # TODO: получить из перевода или API
+            image_style=image_style
         )
         
         # Получаем относительный путь для URL
@@ -239,7 +241,8 @@ def generate_image_view(request):
         return Response({
             'image_url': image_url,
             'image_id': image_id,
-            'file_path': str(image_path)
+            'file_path': str(image_path),
+            'dalle_prompt': dalle_prompt  # Для отладки - показываем промпт в ответе
         }, status=status.HTTP_201_CREATED)
     
     except ValueError as e:

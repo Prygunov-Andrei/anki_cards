@@ -5,6 +5,8 @@ import { LanguageSelector } from './LanguageSelector';
 import { TranslationInput } from './TranslationInput';
 import { GenerateButton } from './GenerateButton';
 import { MediaGenerator } from './MediaGenerator';
+import { ImageStyleSelector } from './ImageStyleSelector';
+import { ImageStyle } from '../types';
 import { Language, WordMedia } from '../types';
 
 export const MainPage: React.FC = () => {
@@ -14,6 +16,7 @@ export const MainPage: React.FC = () => {
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [deckName, setDeckName] = useState('');
   const [wordMedia, setWordMedia] = useState<Record<string, WordMedia>>({});
+  const [imageStyle, setImageStyle] = useState<ImageStyle>('balanced');
 
   const handleSuccess = () => {
     // Очищаем форму после успешной генерации
@@ -87,6 +90,8 @@ export const MainPage: React.FC = () => {
             />
           </div>
 
+          <ImageStyleSelector value={imageStyle} onChange={setImageStyle} />
+
           <LanguageSelector value={language} onChange={setLanguage} />
 
           <WordInput value={words} onChange={setWords} />
@@ -118,6 +123,7 @@ export const MainPage: React.FC = () => {
                       translation={translation}
                       language={language}
                       onMediaChange={handleMediaChangeForWord}
+                      imageStyle={imageStyle}
                       initialMedia={wordMedia[word]}
                     />
                   );
@@ -132,6 +138,7 @@ export const MainPage: React.FC = () => {
             translations={translations}
             deckName={deckName}
             wordMedia={wordMedia}
+            imageStyle={imageStyle}
             onSuccess={handleSuccess}
           />
         </div>

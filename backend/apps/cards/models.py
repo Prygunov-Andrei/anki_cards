@@ -108,3 +108,42 @@ class UserPrompt(models.Model):
                     raise ValidationError(
                         f'Промпт должен содержать плейсхолдер {placeholder}'
                     )
+
+
+class PartOfSpeechCache(models.Model):
+    """Модель для кэширования результатов определения части речи"""
+    
+    word = models.CharField(
+        max_length=200,
+        verbose_name='Слово'
+    )
+    language = models.CharField(
+        max_length=2,
+        verbose_name='Язык'
+    )
+    part_of_speech = models.CharField(
+        max_length=50,
+        verbose_name='Часть речи'
+    )
+    article = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        verbose_name='Артикль (для немецкого)'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата создания'
+    )
+    
+    class Meta:
+        verbose_name = 'Кэш части речи'
+        verbose_name_plural = 'Кэш частей речи'
+        unique_together = [['word', 'language']]
+        indexes = [
+            models.Index(fields=['word', 'language']),
+        ]
+    
+    def __str__(self):
+        article_str = f" ({self.article})" if self.article else ""
+        return f"{self.word} ({self.language}): {self.part_of_speech}{article_str}"

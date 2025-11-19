@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { apiService } from '../services/api';
-import { CardGenerationRequest, Language, WordMedia } from '../types';
+import { CardGenerationRequest, Language, WordMedia, ImageStyle } from '../types';
 
 interface GenerateButtonProps {
   words: string[];
@@ -8,6 +8,7 @@ interface GenerateButtonProps {
   translations: Record<string, string>;
   deckName: string;
   wordMedia?: Record<string, WordMedia>;
+  imageStyle?: ImageStyle;
   onSuccess?: () => void;
   onError?: (error: string) => void;
 }
@@ -18,6 +19,7 @@ export const GenerateButton: React.FC<GenerateButtonProps> = ({
   translations,
   deckName,
   wordMedia = {},
+  imageStyle = 'balanced',
   onSuccess,
   onError,
 }) => {
@@ -115,6 +117,7 @@ export const GenerateButton: React.FC<GenerateButtonProps> = ({
         language,
         translations,
         deck_name: deckName,
+        image_style: imageStyle,
         ...(Object.keys(audioFiles).length > 0 && { audio_files: audioFiles }),
         ...(Object.keys(imageFiles).length > 0 && { image_files: imageFiles }),
       };

@@ -19,6 +19,8 @@ export interface Word {
 }
 
 // Card generation types
+export type ImageStyle = 'minimalistic' | 'balanced' | 'creative';
+
 export interface CardGenerationRequest {
   words: string;
   language: Language;
@@ -26,6 +28,7 @@ export interface CardGenerationRequest {
   audio_files?: Record<string, string>;
   image_files?: Record<string, string>;
   deck_name: string;
+  image_style?: ImageStyle;
 }
 
 export interface CardGenerationResponse {
@@ -56,6 +59,7 @@ export interface MediaGenerationResponse {
   image_id?: string;
   audio_id?: string;
   file_path?: string;
+  dalle_prompt?: string; // Промпт, отправленный в DALL-E (для отладки)
 }
 
 export interface MediaUploadResponse {
