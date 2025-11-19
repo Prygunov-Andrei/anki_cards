@@ -11,6 +11,7 @@ from openai import OpenAI
 from django.conf import settings
 from django.core.files.base import ContentFile
 from PIL import Image
+from .prompt_utils import get_user_prompt, format_prompt
 
 
 def get_openai_client() -> OpenAI:
@@ -27,7 +28,10 @@ def get_openai_client() -> OpenAI:
 def generate_image_with_dalle(
     word: str,
     translation: str,
-    language: str
+    language: str,
+    user=None,
+    native_language: str = 'русском',
+    english_translation: str = None
 ) -> Path:
     """
     Генерирует изображение для слова через OpenAI DALL-E 3
@@ -36,6 +40,9 @@ def generate_image_with_dalle(
         word: Исходное слово
         translation: Перевод слова
         language: Язык слова (pt или de)
+        user: Пользователь (для получения пользовательского промпта)
+        native_language: Родной язык пользователя
+        english_translation: Английский перевод (опционально)
     
     Returns:
         Path к сохраненному изображению
@@ -46,8 +53,21 @@ def generate_image_with_dalle(
     """
     client = get_openai_client()
     
+    # Получаем промпт пользователя или заводской
+    prompt_template = get_user_prompt(user, 'image') if user else None
+    if not prompt_template:
+        # Fallback на старый промпт, если промпт не найден
+        prompt_template = f"A simple, clear illustration of {{word}} ({{translation}} in Russian). The image should be educational and suitable for a language learning flashcard."
+    
     # Формируем промпт для генерации изображения
-    prompt = f"A simple, clear illustration of {word} ({translation} in Russian). The image should be educational and suitable for a language learning flashcard."
+    prompt = format_prompt(
+        prompt_template,
+        word=word,
+        translation=translation,
+        language=language,
+        native_language=native_language,
+        english_translation=english_translation or translation
+    )
     
     try:
         # Вызываем DALL-E 3 API
@@ -99,7 +119,8 @@ def generate_image_with_dalle(
 
 def generate_audio_with_tts(
     word: str,
-    language: str
+    language: str,
+    user=None
 ) -> Path:
     """
     Генерирует аудио для слова через OpenAI TTS-1-HD
@@ -107,6 +128,7 @@ def generate_audio_with_tts(
     Args:
         word: Исходное слово
         language: Язык слова (pt или de)
+        user: Пользователь (для получения пользовательского промпта)
     
     Returns:
         Path к сохраненному аудиофайлу
@@ -116,6 +138,10 @@ def generate_audio_with_tts(
         Exception: При ошибках API OpenAI
     """
     client = get_openai_client()
+    
+    # Получаем промпт пользователя или заводской
+    # Для аудио промпт используется только для инструкций, сам текст - это слово
+    prompt_template = get_user_prompt(user, 'audio') if user else None
     
     # Определяем голос в зависимости от языка
     # OpenAI TTS поддерживает голоса: alloy, echo, fable, onyx, nova, shimmer
@@ -128,6 +154,8 @@ def generate_audio_with_tts(
     
     try:
         # Вызываем TTS API
+        # Для TTS промпт не используется напрямую, но может быть использован в будущем
+        # для настройки стиля произношения
         response = client.audio.speech.create(
             model="tts-1-hd",
             voice=voice,

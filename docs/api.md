@@ -239,6 +239,114 @@ Authorization: Token <your-token>
 }
 ```
 
+### Управление промптами
+
+#### GET `/api/user/prompts/`
+
+Получение всех промптов пользователя (требует аутентификации).
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "prompt_type": "image",
+    "prompt_type_display": "Генерация изображений",
+    "custom_prompt": "Простое, четкое изображение слова '{word}'...",
+    "is_custom": false,
+    "created_at": "2024-12-17T12:00:00Z",
+    "updated_at": "2024-12-17T12:00:00Z"
+  }
+]
+```
+
+#### GET `/api/user/prompts/{prompt_type}/`
+
+Получение конкретного промпта пользователя (требует аутентификации).
+
+**Path Parameters:**
+- `prompt_type`: Тип промпта (`image`, `audio`, `word_analysis`, `translation`, `deck_name`, `part_of_speech`, `category`)
+
+**Response:**
+```json
+{
+  "id": 1,
+  "prompt_type": "image",
+  "prompt_type_display": "Генерация изображений",
+  "custom_prompt": "Простое, четкое изображение слова '{word}'...",
+  "is_custom": false,
+  "created_at": "2024-12-17T12:00:00Z",
+  "updated_at": "2024-12-17T12:00:00Z"
+}
+```
+
+#### PATCH `/api/user/prompts/{prompt_type}/update/`
+
+Обновление промпта пользователя (требует аутентификации).
+
+**Path Parameters:**
+- `prompt_type`: Тип промпта
+
+**Request Body:**
+```json
+{
+  "custom_prompt": "Новый промпт с плейсхолдерами {word} и {translation}"
+}
+```
+
+**Response:**
+```json
+{
+  "id": 1,
+  "prompt_type": "image",
+  "prompt_type_display": "Генерация изображений",
+  "custom_prompt": "Новый промпт с плейсхолдерами {word} и {translation}",
+  "is_custom": true,
+  "created_at": "2024-12-17T12:00:00Z",
+  "updated_at": "2024-12-17T12:30:00Z"
+}
+```
+
+**Ошибки:**
+- `400` - Промпт не содержит обязательные плейсхолдеры для данного типа
+
+#### POST `/api/user/prompts/{prompt_type}/reset/`
+
+Сброс промпта до заводских настроек (требует аутентификации).
+
+**Path Parameters:**
+- `prompt_type`: Тип промпта
+
+**Response:**
+```json
+{
+  "id": 1,
+  "prompt_type": "image",
+  "prompt_type_display": "Генерация изображений",
+  "custom_prompt": "Заводской промпт...",
+  "is_custom": false,
+  "created_at": "2024-12-17T12:00:00Z",
+  "updated_at": "2024-12-17T12:35:00Z"
+}
+```
+
+**Доступные типы промптов:**
+- `image` - Генерация изображений (DALL-E)
+- `audio` - Генерация аудио (TTS)
+- `word_analysis` - Анализ смешанных языков
+- `translation` - Перевод слов
+- `deck_name` - Генерация названия колоды
+- `part_of_speech` - Определение части речи
+- `category` - Определение категории
+
+**Плейсхолдеры:**
+- `{word}` - Исходное слово
+- `{translation}` - Перевод слова
+- `{language}` - Язык слова
+- `{native_language}` - Родной язык пользователя
+- `{learning_language}` - Язык изучения
+- `{english_translation}` - Английский перевод
+
 ## Коды ошибок
 
 - `400` - Bad Request (неверные данные)

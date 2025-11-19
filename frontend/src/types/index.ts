@@ -76,3 +76,27 @@ export interface WordMedia {
   audioPath?: string;
 }
 
+// Prompt types
+export type PromptType =
+  | 'image'
+  | 'audio'
+  | 'word_analysis'
+  | 'translation'
+  | 'deck_name'
+  | 'part_of_speech'
+  | 'category';
+
+export interface UserPrompt {
+  id: number;
+  prompt_type: PromptType;
+  prompt_type_display: string;
+  custom_prompt: string;
+  is_custom: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPromptUpdate {
+  custom_prompt: string;
+}
+

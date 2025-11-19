@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import GeneratedDeck
+from .models import GeneratedDeck, UserPrompt
 
 
 @admin.register(GeneratedDeck)
@@ -19,5 +19,26 @@ class GeneratedDeckAdmin(admin.ModelAdmin):
         }),
         ('Даты', {
             'fields': ('created_at',)
+        }),
+    )
+
+
+@admin.register(UserPrompt)
+class UserPromptAdmin(admin.ModelAdmin):
+    """Административная панель для модели UserPrompt"""
+    list_display = ['user', 'prompt_type', 'is_custom', 'updated_at']
+    list_filter = ['prompt_type', 'is_custom', 'updated_at']
+    search_fields = ['user__username', 'prompt_type']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('user', 'prompt_type', 'is_custom')
+        }),
+        ('Промпт', {
+            'fields': ('custom_prompt',)
+        }),
+        ('Даты', {
+            'fields': ('created_at', 'updated_at')
         }),
     )

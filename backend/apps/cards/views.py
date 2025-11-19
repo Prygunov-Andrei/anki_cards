@@ -11,16 +11,19 @@ from rest_framework.response import Response
 from django.core.files.storage import default_storage
 
 from apps.words.models import Word
-from .models import GeneratedDeck
+from .models import GeneratedDeck, UserPrompt
 from .serializers import (
     CardGenerationSerializer,
     ImageGenerationSerializer,
     AudioGenerationSerializer,
     ImageUploadSerializer,
-    AudioUploadSerializer
+    AudioUploadSerializer,
+    UserPromptSerializer,
+    UserPromptUpdateSerializer
 )
 from .utils import generate_apkg
 from .openai_utils import generate_image_with_dalle, generate_audio_with_tts
+from .prompt_utils import get_or_create_user_prompt, reset_user_prompt_to_default
 
 
 @api_view(['POST'])
@@ -215,8 +218,15 @@ def generate_image_view(request):
     language = serializer.validated_data['language']
     
     try:
-        # Генерируем изображение
-        image_path = generate_image_with_dalle(word, translation, language)
+        # Генерируем изображение с использованием промпта пользователя
+        image_path = generate_image_with_dalle(
+            word=word,
+            translation=translation,
+            language=language,
+            user=request.user,
+            native_language='русском',  # TODO: получить из профиля пользователя
+            english_translation=None  # TODO: получить из перевода или API
+        )
         
         # Получаем относительный путь для URL
         media_root = Path(settings.MEDIA_ROOT)
@@ -258,8 +268,12 @@ def generate_audio_view(request):
     language = serializer.validated_data['language']
     
     try:
-        # Генерируем аудио
-        audio_path = generate_audio_with_tts(word, language)
+        # Генерируем аудио с использованием промпта пользователя
+        audio_path = generate_audio_with_tts(
+            word=word,
+            language=language,
+            user=request.user
+        )
         
         # Получаем относительный путь для URL
         media_root = Path(settings.MEDIA_ROOT)
@@ -381,4 +395,116 @@ def upload_audio_view(request):
     except Exception as e:
         return Response({
             'error': f'Ошибка при загрузке аудио: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_prompts_view(request):
+    """
+    Получение всех промптов пользователя
+    """
+    try:
+        # Получаем или создаем промпты для всех типов
+        prompt_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
+        prompts = []
+        
+        for prompt_type in prompt_types:
+            user_prompt = get_or_create_user_prompt(request.user, prompt_type)
+            prompts.append(user_prompt)
+        
+        serializer = UserPromptSerializer(prompts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({
+            'error': f'Ошибка при получении промптов: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_prompt_view(request, prompt_type):
+    """
+    Получение конкретного промпта пользователя
+    """
+    # Проверяем валидность типа промпта
+    valid_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
+    if prompt_type not in valid_types:
+        return Response({
+            'error': f'Неверный тип промпта. Доступные типы: {", ".join(valid_types)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        user_prompt = get_or_create_user_prompt(request.user, prompt_type)
+        serializer = UserPromptSerializer(user_prompt)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({
+            'error': f'Ошибка при получении промпта: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_user_prompt_view(request, prompt_type):
+    """
+    Обновление промпта пользователя
+    """
+    # Проверяем валидность типа промпта
+    valid_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
+    if prompt_type not in valid_types:
+        return Response({
+            'error': f'Неверный тип промпта. Доступные типы: {", ".join(valid_types)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        user_prompt = get_or_create_user_prompt(request.user, prompt_type)
+        serializer = UserPromptUpdateSerializer(user_prompt, data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Валидация плейсхолдеров
+        try:
+            user_prompt.custom_prompt = serializer.validated_data['custom_prompt']
+            user_prompt.is_custom = True
+            user_prompt.full_clean()  # Вызывает метод clean() модели
+            user_prompt.save()
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        result_serializer = UserPromptSerializer(user_prompt)
+        return Response(result_serializer.data, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({
+            'error': f'Ошибка при обновлении промпта: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reset_user_prompt_view(request, prompt_type):
+    """
+    Сброс промпта до заводских настроек
+    """
+    # Проверяем валидность типа промпта
+    valid_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
+    if prompt_type not in valid_types:
+        return Response({
+            'error': f'Неверный тип промпта. Доступные типы: {", ".join(valid_types)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        user_prompt = reset_user_prompt_to_default(request.user, prompt_type)
+        serializer = UserPromptSerializer(user_prompt)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({
+            'error': f'Ошибка при сбросе промпта: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

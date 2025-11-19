@@ -9,6 +9,9 @@ import {
   Language,
   MediaGenerationResponse,
   MediaUploadResponse,
+  UserPrompt,
+  UserPromptUpdate,
+  PromptType,
 } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -165,6 +168,33 @@ class ApiService {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  }
+
+  // Prompt endpoints
+  async getUserPrompts(): Promise<UserPrompt[]> {
+    const response = await this.api.get<UserPrompt[]>('/user/prompts/');
+    return response.data;
+  }
+
+  async getUserPrompt(promptType: PromptType): Promise<UserPrompt> {
+    const response = await this.api.get<UserPrompt>(`/user/prompts/${promptType}/`);
+    return response.data;
+  }
+
+  async updateUserPrompt(
+    promptType: PromptType,
+    data: UserPromptUpdate
+  ): Promise<UserPrompt> {
+    const response = await this.api.patch<UserPrompt>(
+      `/user/prompts/${promptType}/update/`,
+      data
+    );
+    return response.data;
+  }
+
+  async resetUserPrompt(promptType: PromptType): Promise<UserPrompt> {
+    const response = await this.api.post<UserPrompt>(`/user/prompts/${promptType}/reset/`);
     return response.data;
   }
 }

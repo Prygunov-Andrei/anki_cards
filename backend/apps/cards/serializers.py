@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from .models import UserPrompt
 
 
 class CardGenerationSerializer(serializers.Serializer):
@@ -129,5 +130,41 @@ class AudioUploadSerializer(serializers.Serializer):
         if not value.name.lower().endswith('.mp3'):
             raise serializers.ValidationError("Файл должен быть в формате MP3")
         
+        return value
+
+
+class UserPromptSerializer(serializers.ModelSerializer):
+    """Сериализатор для промптов пользователя"""
+    
+    prompt_type_display = serializers.CharField(
+        source='get_prompt_type_display',
+        read_only=True
+    )
+    
+    class Meta:
+        model = UserPrompt
+        fields = [
+            'id',
+            'prompt_type',
+            'prompt_type_display',
+            'custom_prompt',
+            'is_custom',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class UserPromptUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления промпта"""
+    
+    class Meta:
+        model = UserPrompt
+        fields = ['custom_prompt']
+    
+    def validate_custom_prompt(self, value):
+        """Валидация промпта с проверкой плейсхолдеров"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Промпт не может быть пустым")
         return value
 
