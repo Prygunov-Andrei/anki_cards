@@ -22,7 +22,7 @@ from .serializers import (
     UserPromptUpdateSerializer
 )
 from .utils import generate_apkg
-from .openai_utils import generate_image_with_dalle, generate_audio_with_tts
+from .llm_utils import generate_image_with_dalle, generate_audio_with_tts
 from .prompt_utils import get_or_create_user_prompt, reset_user_prompt_to_default
 
 
