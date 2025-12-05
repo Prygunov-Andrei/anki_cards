@@ -30,6 +30,32 @@ DEFAULT_PROMPTS = {
     
     'category': """Определи категорию для слова '{word}' на языке {language}.
 Верни JSON: {{'category': 'название_категории'}}""",
+    
+    'language_detection': """Определи язык слова '{word}'. 
+Верни ТОЛЬКО код языка: 'ru' (русский), 'pt' (португальский), 'de' (немецкий), 'en' (английский).
+Если не уверен, верни наиболее вероятный код.""",
+    
+    'word_analysis': """Дан список слов: {words_list}
+Определи, какие слова на изучаемом языке ({learning_language}), а какие на родном языке ({native_language}).
+Верни ТОЛЬКО JSON без дополнительного текста в формате: {{"слово_на_изучаемом": "перевод_на_родном"}}
+Если слово уже на родном языке, не включай его в результат.""",
+    
+    'translation': """Переведи следующие слова с {learning_language} на {native_language}: {words_list}
+Верни ТОЛЬКО JSON без дополнительного текста в формате: {{"слово": "перевод"}}""",
+    
+    'german_word_processing': """Обработай немецкое слово '{word}':
+1. Если это существительное - добавь правильный артикль (der/die/das) и напиши с заглавной буквы
+2. Если это глагол или другое - оставь без артикля, но исправь регистр если нужно
+Верни ТОЛЬКО обработанное слово без дополнительного текста.""",
+    
+    'deck_name': """На основе списка слов на {learning_language} сгенерируй 
+краткое и понятное название колоды на {native_language}.
+Учти категории и тематику слов. Название должно быть коротким (2-4 слова).
+Верни ТОЛЬКО название без дополнительного текста.""",
+    
+    'category': """Определи категорию для списка слов на языке {language}: {words_list}
+Верни ТОЛЬКО название категории на {native_language} без дополнительного текста.
+Примеры категорий: Еда, Спорт, Природа, Технологии, Одежда, Дом, Транспорт, Животные, Цвета, Числа и т.д.""",
 }
 
 
@@ -70,7 +96,8 @@ def format_prompt(
     language: str = None,
     native_language: str = None,
     learning_language: str = None,
-    english_translation: str = None
+    english_translation: str = None,
+    words_list: str = None
 ) -> str:
     """
     Форматирует промпт, заменяя плейсхолдеры на реальные значения
@@ -83,6 +110,7 @@ def format_prompt(
         native_language: Родной язык пользователя
         learning_language: Язык изучения
         english_translation: Английский перевод
+        words_list: Список слов (строка)
     
     Returns:
         Отформатированный промпт
@@ -97,6 +125,7 @@ def format_prompt(
         '{native_language}': native_language or 'русском',
         '{learning_language}': learning_language or '',
         '{english_translation}': english_translation or translation or '',
+        '{words_list}': words_list or '',
     }
     
     for placeholder, value in replacements.items():

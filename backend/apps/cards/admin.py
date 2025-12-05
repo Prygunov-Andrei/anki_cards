@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import GeneratedDeck, UserPrompt, PartOfSpeechCache
+from .models import GeneratedDeck, UserPrompt, Deck, PartOfSpeechCache, Token, TokenTransaction
 
 
 @admin.register(GeneratedDeck)
@@ -60,3 +60,86 @@ class PartOfSpeechCacheAdmin(admin.ModelAdmin):
             'fields': ('created_at',)
         }),
     )
+
+
+@admin.register(Deck)
+class DeckAdmin(admin.ModelAdmin):
+    """Административная панель для модели Deck"""
+    list_display = ['name', 'user', 'target_lang', 'source_lang', 'words_count', 'updated_at']
+    list_filter = ['target_lang', 'source_lang', 'created_at', 'updated_at']
+    search_fields = ['name', 'user__username']
+    readonly_fields = ['created_at', 'updated_at']
+    filter_horizontal = ['words']
+    
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('user', 'name', 'cover', 'target_lang', 'source_lang')
+        }),
+        ('Слова', {
+            'fields': ('words',)
+        }),
+        ('Даты', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(Token)
+class TokenAdmin(admin.ModelAdmin):
+    """Административная панель для модели Token (баланс токенов)"""
+    list_display = ['user', 'balance', 'updated_at']
+    list_filter = ['updated_at']
+    search_fields = ['user__username']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('user', 'balance')
+        }),
+        ('Даты', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+    
+    actions = ['add_100_tokens', 'add_500_tokens']
+    
+    @admin.action(description='Начислить 100 токенов')
+    def add_100_tokens(self, request, queryset):
+        for token in queryset:
+            token.balance += 100
+            token.save()
+            TokenTransaction.objects.create(
+                user=token.user,
+                transaction_type='earned',
+                amount=100,
+                description='Начислено администратором'
+            )
+        self.message_user(request, f'Начислено 100 токенов {queryset.count()} пользователям')
+    
+    @admin.action(description='Начислить 500 токенов')
+    def add_500_tokens(self, request, queryset):
+        for token in queryset:
+            token.balance += 500
+            token.save()
+            TokenTransaction.objects.create(
+                user=token.user,
+                transaction_type='earned',
+                amount=500,
+                description='Начислено администратором'
+            )
+        self.message_user(request, f'Начислено 500 токенов {queryset.count()} пользователям')
+
+
+@admin.register(TokenTransaction)
+class TokenTransactionAdmin(admin.ModelAdmin):
+    """Административная панель для истории транзакций токенов"""
+    list_display = ['user', 'transaction_type', 'amount', 'description', 'created_at']
+    list_filter = ['transaction_type', 'created_at']
+    search_fields = ['user__username', 'description']
+    readonly_fields = ['user', 'transaction_type', 'amount', 'description', 'created_at']
+    
+    def has_add_permission(self, request):
+        return False  # Запрещаем добавление вручную
+    
+    def has_change_permission(self, request, obj=None):
+        return False  # Запрещаем изменение

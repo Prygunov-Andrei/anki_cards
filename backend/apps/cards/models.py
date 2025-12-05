@@ -34,6 +34,9 @@ class GeneratedDeck(models.Model):
         verbose_name = 'Сгенерированная колода'
         verbose_name_plural = 'Сгенерированные колоды'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+        ]
     
     def __str__(self):
         return f"{self.deck_name} ({self.user.username})"
@@ -84,6 +87,9 @@ class UserPrompt(models.Model):
         verbose_name_plural = 'Промпты пользователей'
         unique_together = [['user', 'prompt_type']]
         ordering = ['prompt_type']
+        indexes = [
+            models.Index(fields=['user', 'prompt_type']),
+        ]
     
     def __str__(self):
         return f"{self.user.username} - {self.get_prompt_type_display()}"
@@ -147,3 +153,155 @@ class PartOfSpeechCache(models.Model):
     def __str__(self):
         article_str = f" ({self.article})" if self.article else ""
         return f"{self.word} ({self.language}): {self.part_of_speech}{article_str}"
+
+
+class Deck(models.Model):
+    """Модель колоды карточек"""
+    
+    LANGUAGE_CHOICES = [
+        ('pt', 'Португальский'),
+        ('de', 'Немецкий'),
+    ]
+    
+    NATIVE_LANGUAGE_CHOICES = [
+        ('ru', 'Русский'),
+        ('en', 'English'),
+        ('pt', 'Português'),
+        ('de', 'Deutsch'),
+    ]
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='decks',
+        verbose_name='Пользователь'
+    )
+    name = models.CharField(
+        max_length=200,
+        verbose_name='Название колоды'
+    )
+    cover = models.ImageField(
+        upload_to='deck_covers/',
+        null=True,
+        blank=True,
+        verbose_name='Обложка колоды'
+    )
+    target_lang = models.CharField(
+        max_length=2,
+        choices=LANGUAGE_CHOICES,
+        verbose_name='Язык изучения'
+    )
+    source_lang = models.CharField(
+        max_length=2,
+        choices=NATIVE_LANGUAGE_CHOICES,
+        default='ru',
+        verbose_name='Родной язык'
+    )
+    words = models.ManyToManyField(
+        'words.Word',
+        related_name='decks',
+        blank=True,
+        verbose_name='Слова'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата создания'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Дата обновления'
+    )
+    
+    class Meta:
+        verbose_name = 'Колода'
+        verbose_name_plural = 'Колоды'
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['user', 'updated_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.user.username})"
+    
+    @property
+    def words_count(self):
+        """Количество слов в колоде"""
+        return self.words.count()
+
+
+class Token(models.Model):
+    """Модель токенов пользователя (баланс)"""
+    
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='token',
+        verbose_name='Пользователь'
+    )
+    balance = models.IntegerField(
+        default=0,
+        verbose_name='Баланс токенов'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата создания'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Дата обновления'
+    )
+    
+    class Meta:
+        verbose_name = 'Токен'
+        verbose_name_plural = 'Токены'
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"{self.user.username}: {self.balance} токенов"
+
+
+class TokenTransaction(models.Model):
+    """Модель транзакций токенов (история операций)"""
+    
+    TRANSACTION_TYPE_CHOICES = [
+        ('earned', 'Начислено'),
+        ('spent', 'Потрачено'),
+        ('refund', 'Возвращено'),
+    ]
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='token_transactions',
+        verbose_name='Пользователь'
+    )
+    transaction_type = models.CharField(
+        max_length=10,
+        choices=TRANSACTION_TYPE_CHOICES,
+        verbose_name='Тип транзакции'
+    )
+    amount = models.IntegerField(
+        verbose_name='Сумма'
+    )
+    description = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        verbose_name='Описание'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата транзакции'
+    )
+    
+    class Meta:
+        verbose_name = 'Транзакция токенов'
+        verbose_name_plural = 'Транзакции токенов'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+        ]
+    
+    def __str__(self):
+        type_display = dict(self.TRANSACTION_TYPE_CHOICES).get(self.transaction_type, self.transaction_type)
+        return f"{self.user.username}: {type_display} {self.amount} токенов"

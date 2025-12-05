@@ -3,6 +3,7 @@
 """
 import random
 import uuid
+import re
 from pathlib import Path
 from typing import List, Dict, Optional
 from genanki import Deck, Note, Model, Package
@@ -137,4 +138,71 @@ def generate_apkg(
     package.write_to_file(str(output_path))
     
     return output_path
+
+
+def parse_words_input(text: str) -> List[str]:
+    """
+    Умный парсинг ввода слов: разбивает строку по запятым/переносам,
+    определяет словосочетания (по заглавной букве), чистит мусор.
+    
+    Args:
+        text: Строка с вводом слов (через запятую, с переносами строк)
+    
+    Returns:
+        Список слов/словосочетаний (очищенных от лишних символов)
+    
+    Примеры:
+        "casa, tempo, vida" -> ["casa", "tempo", "vida"]
+        "casa, Carro novo, vida" -> ["casa", "Carro novo", "vida"]
+        "casa\ntempo\nvida" -> ["casa", "tempo", "vida"]
+    """
+    if not text or not text.strip():
+        return []
+    
+    # Заменяем переносы строк на запятые для единообразной обработки
+    text = text.replace('\n', ',').replace('\r', ',')
+    
+    # Разбиваем по запятым
+    parts = text.split(',')
+    
+    words = []
+    
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        
+        # Убираем точки в конце (но не внутри слова)
+        part = re.sub(r'\.$', '', part).strip()
+        
+        if not part:
+            continue
+        
+        # Если слово начинается с заглавной буквы и предыдущее слово тоже с заглавной,
+        # это может быть продолжение словосочетания
+        if part[0].isupper() and words:
+            prev_word = words[-1]
+            # Объединяем только если предыдущее слово тоже с заглавной и короткое (вероятно часть фразы)
+            if prev_word and prev_word[0].isupper() and len(prev_word.split()) == 1:
+                # Объединяем с предыдущим словом
+                words[-1] = f"{prev_word} {part}"
+            else:
+                # Отдельное слово/словосочетание
+                words.append(part)
+        else:
+            # Обычное слово
+            words.append(part)
+    
+    # Очищаем от лишних пробелов и пустых строк
+    words = [w.strip() for w in words if w.strip()]
+    
+    # Убираем дубликаты, сохраняя порядок
+    seen = set()
+    unique_words = []
+    for word in words:
+        if word.lower() not in seen:
+            seen.add(word.lower())
+            unique_words.append(word)
+    
+    return unique_words
 

@@ -9,15 +9,16 @@ Backend для веб-приложения автоматической гене
 Backend обеспечивает API для:
 - Управления пользователями и аутентификации
 - Генерации карточек Anki (.apkg)
-- Интеграции с OpenAI (DALL-E 3, TTS-1-HD) для генерации медиа
+- Интеграции с OpenAI (DALL-E 3, TTS-1-HD) и Google Gemini (Nano Banana) для генерации медиа
 - Управления библиотекой слов
 
 **Фронтенд:** Находится в стадии полной переработки (см. [План разработки](./docs/DEVELOPMENT_PLAN.md)).
 
 ## Документация
 
-- **[План разработки](./docs/DEVELOPMENT_PLAN.md)** — детальный план работ (Backend + задания для Frontend)
-- **[Деплой](./docs/DEPLOYMENT.md)** — инструкция по деплою
+- **[План разработки Backend](./docs/DEVELOPMENT_PLAN.md)** — план Backend разработки (завершен)
+- **[Техническое задание Frontend](./docs/FRONTEND_TASKS.md)** — полное ТЗ для Frontend разработчика (18 этапов)
+- **[Деплой](./docs/DEPLOYMENT.md)** — информация о деплое (будет дополнено)
 
 ## Быстрый старт (Backend)
 
@@ -41,6 +42,10 @@ Backend обеспечивает API для:
    # OpenAI API Key (ОБЯЗАТЕЛЬНО для генерации медиа!)
    # Получить ключ: https://platform.openai.com/api-keys
    OPENAI_API_KEY=sk-proj-...
+   
+   # Google Gemini API Key (опционально, для альтернативной генерации изображений)
+   # Получить ключ: https://ai.google.dev/
+   GEMINI_API_KEY=AIzaSy...
    ```
 
 3. Опциональные переменные:
@@ -63,16 +68,43 @@ Backend обеспечивает API для:
 
 Скрипт создаст виртуальное окружение, установит зависимости, применит миграции и запустит сервер на http://localhost:8000.
 
+### Разработка с фронтендом (ngrok)
+
+Для подключения облачного фронтенда (Figma Make) к локальному бэкенду используется **ngrok**:
+
+```bash
+# 1. Запустите бэкенд
+./start.sh
+# Django запустится на http://localhost:8000
+
+# 2. Запустите ngrok туннель (в отдельном терминале)
+ngrok http 8000
+# ngrok выдаст публичный URL, например: https://f6c058cfd2ea.ngrok-free.app
+
+# 3. Используйте публичный URL в настройках фронтенда:
+# BASE_URL: 'https://f6c058cfd2ea.ngrok-free.app/api/'
+```
+
+> **Примечание:** ngrok URL меняется при каждом перезапуске. Текущий URL можно узнать:
+> - В консоли ngrok
+> - Через `curl http://localhost:4040/api/tunnels`
+
+Подробнее см. [Техническое задание Frontend](./docs/FRONTEND_TASKS.md#подключение-к-backend-ngrok).
+
 ## Структура проекта
 
 ```
 anki-card-generator/
-├── backend/          # Django проект
-├── docs/             # Документация
-├── scripts/          # Скрипты
-├── nginx/            # Конфигурация Nginx
-├── docker-compose.yml
-└── start.sh          # Скрипт запуска
+├── backend/              # Django проект
+├── docs/                 # Документация
+│   ├── DEVELOPMENT_PLAN.md   # План Backend разработки
+│   ├── FRONTEND_TASKS.md     # ТЗ для Frontend
+│   └── DEPLOYMENT.md         # Информация о деплое
+├── nginx/                # Конфигурация Nginx
+│   ├── nginx.conf            # Production конфиг
+│   └── nginx.dev.conf        # Development конфиг
+├── start.sh              # Скрипт запуска бэкенда
+└── README.md             # Этот файл
 ```
 
 ---
@@ -134,7 +166,8 @@ backend/
 
 2. **Генерация медиафайлов (опционально):**
    - Frontend → POST `/api/media/generate-image/` или `/api/media/generate-audio/` (с токеном)
-   - Backend → Вызов OpenAI API (DALL-E 3 для изображений, TTS-1-HD для аудио)
+   - Backend → Вызов OpenAI API (DALL-E 3 для изображений, TTS-1-HD для аудио) или Google Gemini API (Nano Banana для изображений)
+   - Провайдер выбирается из настроек пользователя или может быть указан в запросе
    - Backend → Сохранение медиафайла локально
    - Backend → Возврат URL к медиафайлу
    - Frontend → Предпросмотр медиафайла
@@ -182,9 +215,13 @@ Index: (user, original_word, language) - unique
 - **Колода обязательно должна иметь название** при создании.
 - Для создания .apkg файлов используется библиотека `genanki` (Python).
 
-### Модели OpenAI
+### Модели для генерации медиа
 
-- **Изображения:** DALL-E 3 (`dall-e-3`)
+- **OpenAI:**
+  - **Изображения:** DALL-E 3 (`dall-e-3`)
+  - **Аудио:** TTS-1-HD (`tts-1-hd`)
+- **Google Gemini:**
+  - **Изображения:** Nano Banana Pro (`nano-banana-pro-preview`)
   - Размер: 1024x1024
   - Промпт формируется автоматически на основе слова и перевода
 - **Аудио:** TTS-1-HD (`tts-1-hd`)
@@ -231,9 +268,12 @@ Authorization: Token <your-token>
   - Параметр `image_style`: `minimalistic` (минималистичный), `balanced` (сбалансированный, по умолчанию), `creative` (творческий).
 - **GET `/api/cards/download/<file_id>/`** - Скачивание сгенерированного .apkg файла.
 
-#### Генерация медиафайлов через OpenAI
+#### Генерация медиафайлов
 
-- **POST `/api/media/generate-image/`** - Генерация изображения для слова через OpenAI DALL-E 3.
+- **POST `/api/media/generate-image/`** - Генерация изображения для слова.
+  - Поддерживает два провайдера: OpenAI DALL-E 3 (по умолчанию) и Google Gemini Nano Banana
+  - Параметр `provider`: `'openai'` или `'gemini'` (опционально, если не указан - используется из профиля пользователя)
+  - Параметр `image_style`: `'minimalistic'`, `'balanced'`, `'creative'`
 - **POST `/api/media/generate-audio/`** - Генерация аудио для слова через OpenAI TTS-1-HD.
 
 #### Загрузка собственных медиафайлов

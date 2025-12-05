@@ -69,8 +69,14 @@ class UserLoginSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     """Сериализатор для профиля пользователя"""
     
+    avatar = serializers.ImageField(required=False, allow_null=True)
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'preferred_language', 'created_at']
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'avatar', 'native_language', 'learning_language',
+            'theme', 'mode', 'preferred_language', 'image_provider', 'gemini_model', 'created_at'
+        ]
         read_only_fields = ['id', 'username', 'created_at']
 
