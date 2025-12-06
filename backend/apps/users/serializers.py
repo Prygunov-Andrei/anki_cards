@@ -70,6 +70,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
     """Сериализатор для профиля пользователя"""
     
     avatar = serializers.ImageField(required=False, allow_null=True)
+    native_language = serializers.ChoiceField(
+        choices=User.NATIVE_LANGUAGE_CHOICES,
+        required=False
+    )
+    learning_language = serializers.ChoiceField(
+        choices=User.LEARNING_LANGUAGE_CHOICES,
+        required=False
+    )
     
     class Meta:
         model = User
@@ -79,4 +87,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'theme', 'mode', 'preferred_language', 'image_provider', 'gemini_model', 'created_at'
         ]
         read_only_fields = ['id', 'username', 'created_at']
+    
+    def validate(self, data):
+        """Валидация: родной и изучаемый языки не должны совпадать"""
+        native = data.get('native_language', self.instance.native_language if self.instance else None)
+        learning = data.get('learning_language', self.instance.learning_language if self.instance else None)
+        
+        if native and learning and native == learning:
+            raise serializers.ValidationError({
+                'learning_language': 'Родной и изучаемый языки должны быть разными'
+            })
+        
+        return data
 

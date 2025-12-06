@@ -11,15 +11,23 @@ class User(AbstractUser):
     ]
     
     NATIVE_LANGUAGE_CHOICES = [
-        ('ru', 'Русский'),
+        ('ru', 'Russian'),
         ('en', 'English'),
-        ('pt', 'Português'),
-        ('de', 'Deutsch'),
+        ('pt', 'Portuguese'),
+        ('de', 'German'),
+        ('es', 'Spanish'),
+        ('fr', 'French'),
+        ('it', 'Italian'),
     ]
     
     LEARNING_LANGUAGE_CHOICES = [
-        ('pt', 'Português'),
-        ('de', 'Deutsch'),
+        ('ru', 'Russian'),
+        ('en', 'English'),
+        ('pt', 'Portuguese'),
+        ('de', 'German'),
+        ('es', 'Spanish'),
+        ('fr', 'French'),
+        ('it', 'Italian'),
     ]
     
     THEME_CHOICES = [
@@ -73,14 +81,14 @@ class User(AbstractUser):
     native_language = models.CharField(
         max_length=2,
         choices=NATIVE_LANGUAGE_CHOICES,
-        default='ru',
+        default='en',
         verbose_name='Родной язык'
     )
     
     learning_language = models.CharField(
         max_length=2,
         choices=LEARNING_LANGUAGE_CHOICES,
-        default='pt',
+        default='de',
         verbose_name='Язык изучения'
     )
     
