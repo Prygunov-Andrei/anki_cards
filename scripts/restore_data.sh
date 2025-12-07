@@ -34,7 +34,6 @@ fi
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMP_DIR="/tmp/anki_restore_$$"
-BACKUP_NAME=$(basename "$BACKUP_ARCHIVE" .tar.gz)
 
 echo -e "${BLUE}📦 Восстановление данных из бэкапа...${NC}"
 echo -e "${BLUE}   Архив: $BACKUP_ARCHIVE${NC}"
@@ -53,11 +52,23 @@ echo -e "${BLUE}📂 Распаковка архива...${NC}"
 mkdir -p "$TEMP_DIR"
 tar -xzf "$BACKUP_ARCHIVE" -C "$TEMP_DIR"
 
-if [ ! -f "$TEMP_DIR/$BACKUP_NAME/data.json" ]; then
+# Определяем имя папки внутри архива (может быть разным)
+BACKUP_DIR=$(find "$TEMP_DIR" -name "data.json" -type f | head -1 | xargs dirname)
+if [ -z "$BACKUP_DIR" ]; then
+    # Пробуем найти по паттерну data_*
+    BACKUP_DIR=$(find "$TEMP_DIR" -type d -name "data_*" | head -1)
+fi
+
+if [ -z "$BACKUP_DIR" ] || [ ! -f "$BACKUP_DIR/data.json" ]; then
     echo -e "${RED}❌ Ошибка: файл data.json не найден в архиве${NC}"
+    echo -e "${YELLOW}   Содержимое архива:${NC}"
+    ls -la "$TEMP_DIR"
     rm -rf "$TEMP_DIR"
     exit 1
 fi
+
+BACKUP_NAME=$(basename "$BACKUP_DIR")
+echo -e "${GREEN}✅ Найден бэкап в папке: $BACKUP_NAME${NC}"
 
 echo -e "${GREEN}✅ Архив распакован${NC}"
 echo ""
