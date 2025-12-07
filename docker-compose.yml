@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: anki_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-anki_db}
+      POSTGRES_USER: ${POSTGRES_USER:-anki_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-anki_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-anki_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - anki_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: anki_backend
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    volumes:
+      - ./backend:/app
+      - backend_media:/app/media
+      - backend_static:/app/staticfiles
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-anki_user}:${POSTGRES_PASSWORD:-anki_password}@db:5432/${POSTGRES_DB:-anki_db}
+      - DEBUG=${DEBUG:-False}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - anki_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: anki_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - anki_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backend_media:
+  backend_static:
+
+networks:
+  anki_network:
+    driver: bridge
+

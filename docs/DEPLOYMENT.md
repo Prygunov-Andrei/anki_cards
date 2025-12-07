@@ -1,51 +1,407 @@
-# 🚀 Документация по деплою
+# 🚀 Деплой приложения
 
-> **Статус:** В разработке. Деплой будет настроен после завершения разработки фронтенда.
+## Обзор
 
-## Текущий статус
+Приложение состоит из:
+- **Backend**: Django + PostgreSQL
+- **Frontend**: React + Vite (собирается в статические файлы, отдается через Nginx)
+- **Database**: PostgreSQL
 
-- **Backend:** ✅ Готов к деплою
-- **Frontend:** 🔄 В разработке
-- **Production сервер:** `194.87.200.188` (`www.get-anki.fun`)
+Все компоненты контейнеризированы с помощью Docker.
 
-## Информация для будущего деплоя
+---
 
-### Сервер
+## 📋 Предварительные требования
 
-- **IP:** 194.87.200.188
-- **Домен:** www.get-anki.fun
-- **OS:** Ubuntu
+### На сервере должны быть установлены:
 
-### Требования
+1. **Docker** (версия 20.10+)
+2. **Docker Compose** (версия 2.0+)
+3. **Git**
 
-- Python 3.10+
-- PostgreSQL 12+
-- Nginx
-- SSL сертификат (Let's Encrypt)
-
-### Конфигурация Nginx
-
-Production конфигурация находится в `nginx/nginx.conf`.
-
-### Настройка DNS
-
-На сайте регистратора домена добавить A-записи:
-- `www.get-anki.fun` → `194.87.200.188`
-- `get-anki.fun` → `194.87.200.188`
-
-### SSL (Let's Encrypt)
+### Проверка установки:
 
 ```bash
-certbot certonly --standalone -d www.get-anki.fun -d get-anki.fun \
-  --non-interactive --agree-tos --email admin@get-anki.fun
+docker --version
+docker-compose --version
+git --version
 ```
 
 ---
 
-## Скрипты деплоя
+## 🔧 Подготовка к деплою
 
-Скрипты находятся в папке `scripts/`. Они будут обновлены после завершения разработки.
+### 1. Синхронизация фронтенда (если нужно)
+
+Если были изменения фронтенда в Figma Make:
+
+```bash
+./scripts/sync_frontend.sh
+```
+
+### 2. Настройка переменных окружения
+
+Создайте файл `.env` в корне проекта:
+
+```bash
+cp .env.example .env
+nano .env  # или используйте любой редактор
+```
+
+**Обязательные переменные:**
+
+```env
+# Database
+POSTGRES_DB=anki_db
+POSTGRES_USER=anki_user
+POSTGRES_PASSWORD=strong_password_here
+
+# Django
+SECRET_KEY=your-very-secret-key-here-generate-with-openssl
+DEBUG=False
+ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+
+# OpenAI (ОБЯЗАТЕЛЬНО для генерации медиа)
+OPENAI_API_KEY=sk-proj-...
+
+# Google Gemini (опционально)
+GEMINI_API_KEY=AIzaSy...
+```
+
+**Генерация SECRET_KEY:**
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+### 3. Настройка backend/.env
+
+Создайте `backend/.env`:
+
+```bash
+cd backend
+cp .env.example .env  # если есть
+nano .env
+```
+
+Минимум:
+
+```env
+SECRET_KEY=your-secret-key-here
+DEBUG=False
+OPENAI_API_KEY=sk-proj-...
+GEMINI_API_KEY=AIzaSy...  # опционально
+```
 
 ---
 
-*Полная инструкция по деплою будет добавлена после завершения разработки фронтенда.*
+## 🐳 Локальное тестирование Docker
+
+Перед деплоем на сервер протестируйте локально:
+
+```bash
+# Сборка образов
+docker-compose build
+
+# Запуск
+docker-compose up -d
+
+# Проверка логов
+docker-compose logs -f
+
+# Остановка
+docker-compose down
+```
+
+Приложение будет доступно:
+- Frontend: http://localhost
+- Backend API: http://localhost/api/
+- Admin: http://localhost/admin/
+
+---
+
+## 📤 Деплой на удаленный сервер
+
+### Вариант 1: Через Git (рекомендуется)
+
+1. **На сервере клонируйте репозиторий:**
+
+```bash
+git clone https://github.com/your-username/anki_cards.git
+cd anki_cards
+```
+
+2. **Создайте `.env` файл:**
+
+```bash
+cp .env.example .env
+nano .env  # заполните все переменные
+```
+
+3. **Создайте `backend/.env`:**
+
+```bash
+cd backend
+cp .env.example .env  # если есть
+nano .env
+cd ..
+```
+
+4. **Соберите и запустите:**
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml build
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+5. **Проверьте статус:**
+
+```bash
+docker-compose ps
+docker-compose logs -f
+```
+
+### Вариант 2: Через SCP (альтернатива)
+
+1. **Локально соберите архив:**
+
+```bash
+tar -czf anki_cards.tar.gz \
+  --exclude='.git' \
+  --exclude='node_modules' \
+  --exclude='venv' \
+  --exclude='*.pyc' \
+  --exclude='__pycache__' \
+  --exclude='.env' \
+  --exclude='backend/.env' \
+  .
+```
+
+2. **Скопируйте на сервер:**
+
+```bash
+scp anki_cards.tar.gz user@your-server:/path/to/destination/
+```
+
+3. **На сервере:**
+
+```bash
+cd /path/to/destination
+tar -xzf anki_cards.tar.gz
+cd anki_cards
+# Создайте .env файлы
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+---
+
+## 🔄 Обновление приложения
+
+### Обновление кода:
+
+```bash
+# На сервере
+cd /path/to/anki_cards
+
+# Получить последние изменения
+git pull origin main
+
+# Если были изменения фронтенда, синхронизируйте
+./scripts/sync_frontend.sh
+
+# Пересобрать и перезапустить
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml build
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Применить миграции (если были изменения в БД)
+docker-compose exec backend python manage.py migrate
+```
+
+### Обновление только фронтенда:
+
+```bash
+# Синхронизация
+./scripts/sync_frontend.sh
+
+# Пересборка только фронтенда
+docker-compose build frontend
+docker-compose up -d frontend
+```
+
+---
+
+## 🛠️ Управление контейнерами
+
+### Просмотр логов:
+
+```bash
+# Все сервисы
+docker-compose logs -f
+
+# Только backend
+docker-compose logs -f backend
+
+# Только frontend
+docker-compose logs -f frontend
+```
+
+### Остановка:
+
+```bash
+docker-compose down
+```
+
+### Остановка с удалением volumes (⚠️ удалит данные БД):
+
+```bash
+docker-compose down -v
+```
+
+### Перезапуск:
+
+```bash
+docker-compose restart
+```
+
+### Выполнение команд в контейнере:
+
+```bash
+# Django shell
+docker-compose exec backend python manage.py shell
+
+# Создание суперпользователя
+docker-compose exec backend python manage.py createsuperuser
+
+# Применение миграций
+docker-compose exec backend python manage.py migrate
+
+# Сборка статики
+docker-compose exec backend python manage.py collectstatic --noinput
+```
+
+---
+
+## 🔒 Настройка Nginx (опционально, для SSL)
+
+Если нужен HTTPS, настройте Nginx как reverse proxy:
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://localhost:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+---
+
+## 📊 Мониторинг
+
+### Проверка здоровья:
+
+```bash
+# Backend health check
+curl http://localhost:8000/health/
+
+# Frontend
+curl http://localhost/
+```
+
+### Статус контейнеров:
+
+```bash
+docker-compose ps
+```
+
+### Использование ресурсов:
+
+```bash
+docker stats
+```
+
+---
+
+## 🐛 Решение проблем
+
+### Проблема: Контейнеры не запускаются
+
+```bash
+# Проверьте логи
+docker-compose logs
+
+# Проверьте конфигурацию
+docker-compose config
+```
+
+### Проблема: База данных не подключается
+
+```bash
+# Проверьте переменные окружения
+docker-compose exec backend env | grep DATABASE
+
+# Проверьте доступность БД
+docker-compose exec backend python manage.py dbshell
+```
+
+### Проблема: Статические файлы не загружаются
+
+```bash
+# Пересоберите статику
+docker-compose exec backend python manage.py collectstatic --noinput
+```
+
+### Проблема: Медиафайлы не отдаются
+
+Проверьте:
+1. Права доступа к `backend/media/`
+2. Настройки `MEDIA_ROOT` и `MEDIA_URL` в `settings.py`
+3. Конфигурацию Nginx в `frontend/nginx.conf`
+
+---
+
+## 📝 Чек-лист деплоя
+
+- [ ] Docker и Docker Compose установлены
+- [ ] `.env` файл создан и заполнен
+- [ ] `backend/.env` создан и заполнен
+- [ ] `SECRET_KEY` сгенерирован
+- [ ] `OPENAI_API_KEY` указан
+- [ ] `ALLOWED_HOSTS` содержит домен сервера
+- [ ] `DEBUG=False` в продакшене
+- [ ] Локальное тестирование прошло успешно
+- [ ] Код загружен на сервер
+- [ ] Контейнеры запущены и работают
+- [ ] Health check проходит
+- [ ] Создан суперпользователь
+- [ ] SSL настроен (если нужен)
+
+---
+
+## 🔐 Безопасность
+
+1. **Никогда не коммитьте `.env` файлы в Git**
+2. **Используйте сильные пароли для БД**
+3. **В продакшене всегда `DEBUG=False`**
+4. **Настройте файрвол на сервере**
+5. **Используйте HTTPS (SSL)**
+6. **Регулярно обновляйте зависимости**
+
+---
+
+**Последнее обновление:** 7 декабря 2025

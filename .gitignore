@@ -97,3 +97,7 @@ frontend.log
 # Frontend sync marker
 .last_frontend_sync
 
+# Frontend environment files (не перезаписываются при синхронизации)
+frontend/.env.production
+frontend/.env.production.local
+

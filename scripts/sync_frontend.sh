@@ -112,6 +112,21 @@ if [ -d "$FRONTEND_DIR" ]; then
     cp -r "$FRONTEND_DIR" "$BACKUP_DIR"
 fi
 
+# Сохраняем защищенные файлы (не перезаписываются при синхронизации)
+PROTECTED_FILES=(
+    ".env.production"
+    ".env.production.local"
+)
+BACKUP_PROTECTED="$TEMP_DIR/protected-files-backup"
+mkdir -p "$BACKUP_PROTECTED"
+
+for file in "${PROTECTED_FILES[@]}"; do
+    if [ -f "$FRONTEND_DIR/$file" ]; then
+        echo -e "${YELLOW}💾 Сохранение защищенного файла: $file${NC}"
+        cp "$FRONTEND_DIR/$file" "$BACKUP_PROTECTED/$file"
+    fi
+done
+
 # Удаляем старый frontend (кроме .git, если есть)
 if [ -d "$FRONTEND_DIR" ]; then
     rm -rf "$FRONTEND_DIR"
@@ -121,6 +136,14 @@ fi
 mkdir -p "$FRONTEND_DIR"
 cp -r "$FIGMA_REPO_DIR"/* "$FRONTEND_DIR/"
 cp -r "$FIGMA_REPO_DIR"/.gitignore "$FRONTEND_DIR/" 2>/dev/null || true
+
+# Восстанавливаем защищенные файлы
+for file in "${PROTECTED_FILES[@]}"; do
+    if [ -f "$BACKUP_PROTECTED/$file" ]; then
+        echo -e "${GREEN}✅ Восстановление защищенного файла: $file${NC}"
+        cp "$BACKUP_PROTECTED/$file" "$FRONTEND_DIR/$file"
+    fi
+done
 
 # Сохраняем маркер синхронизации
 echo "$LATEST_COMMIT_HASH" > "$SYNC_MARKER"
