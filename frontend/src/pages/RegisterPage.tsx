@@ -9,8 +9,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import authService from '../services/authService';
 import { showSuccess, showError } from '../utils/toast-helpers';
 import { LanguageSelector } from '../components/LanguageSelector';
-import logoLight from '../assets/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
-import logoDark from '../assets/8438de77d51aa44238d74565f4aecffecf7eb633.png';
+const logoLight = '/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
+const logoDark = '/8438de77d51aa44238d74565f4aecffecf7eb633.png';
 
 /**
  * Страница регистрации (всегда на английском языке)
