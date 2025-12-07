@@ -19,8 +19,8 @@ import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from './ui/sheet';
 import { VisuallyHidden } from './ui/visually-hidden';
 import { TokenBalanceWidget } from './TokenBalanceWidget';
-import logoLight from 'figma:asset/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
-import logoDark from 'figma:asset/8438de77d51aa44238d74565f4aecffecf7eb633.png';
+import logoLight from '../assets/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
+import logoDark from '../assets/8438de77d51aa44238d74565f4aecffecf7eb633.png';
 
 /**
  * Компонент Header - шапка приложения с навигацией
