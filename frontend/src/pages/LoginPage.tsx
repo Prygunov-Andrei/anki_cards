@@ -22,7 +22,8 @@ export default function LoginPage() {
   
   const { login } = useAuthContext();
   const navigate = useNavigate();
-  const { isDark } = useTheme();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
 
   // Валидация формы
   const validateForm = (): boolean => {
@@ -104,11 +105,25 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-4">
         <Card className="p-8 space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-20 h-20 mx-auto flex items-center justify-center">
+            <div className="w-20 h-20 mx-auto flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-xl">
               <img 
                 src={isDark ? logoDark : logoLight} 
                 alt="ANKI Generator Logo" 
-                className="w-full h-full rounded-xl object-cover shadow-lg"
+                className="w-full h-full rounded-xl object-contain shadow-lg"
+                onError={(e) => {
+                  console.error('Logo load error:', e.currentTarget.src);
+                  console.error('Trying fallback...');
+                  // Fallback: try the other logo
+                  const fallbackSrc = isDark ? logoLight : logoDark;
+                  if (e.currentTarget.src !== fallbackSrc) {
+                    e.currentTarget.src = fallbackSrc;
+                  } else {
+                    console.error('Both logos failed to load');
+                  }
+                }}
+                onLoad={() => {
+                  console.log('Logo loaded successfully:', isDark ? logoDark : logoLight);
+                }}
               />
             </div>
           </div>

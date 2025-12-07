@@ -29,7 +29,8 @@ export default function RegisterPage() {
   
   const { login } = useAuthContext();
   const navigate = useNavigate();
-  const { isDark } = useTheme();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
 
   // Валидация формы
   const validateForm = (): boolean => {
