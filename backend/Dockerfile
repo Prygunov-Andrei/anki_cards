@@ -11,8 +11,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Копирование requirements и установка зависимостей
+# Используем pip cache mount для ускорения
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt
 
 # Копирование кода приложения
 COPY . .
@@ -20,12 +22,9 @@ COPY . .
 # Создание директорий для медиа и статики
 RUN mkdir -p media staticfiles
 
-# Сборка статических файлов (если нужно)
-RUN python manage.py collectstatic --noinput || true
-
 # Порт
 EXPOSE 8000
 
-# Команда запуска
+# Команда запуска (collectstatic выполняется в docker-compose.yml при запуске)
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
 

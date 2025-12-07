@@ -101,3 +101,8 @@ frontend.log
 frontend/.env.production
 frontend/.env.production.local
 
+# Backups
+backups/
+*.tar.gz
+!docker-compose*.yml
+
