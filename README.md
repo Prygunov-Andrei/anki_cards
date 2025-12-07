@@ -12,7 +12,7 @@ Backend обеспечивает API для:
 - Интеграции с OpenAI (DALL-E 3, TTS-1-HD) и Google Gemini (Nano Banana) для генерации медиа
 - Управления библиотекой слов
 
-**Фронтенд:** Находится в стадии полной переработки (см. [План разработки](./docs/DEVELOPMENT_PLAN.md)).
+**Фронтенд:** Интегрирован в проект (см. [Инструкции по запуску](./frontend/README.md)).
 
 ## Документация
 
@@ -96,6 +96,10 @@ ngrok http 8000
 ```
 anki-card-generator/
 ├── backend/              # Django проект
+├── frontend/             # React + Vite фронтенд
+│   ├── src/                  # Исходный код
+│   ├── package.json          # Зависимости
+│   └── vite.config.ts        # Конфигурация Vite
 ├── docs/                 # Документация
 │   ├── DEVELOPMENT_PLAN.md   # План Backend разработки
 │   ├── FRONTEND_TASKS.md     # ТЗ для Frontend

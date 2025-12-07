@@ -48,8 +48,11 @@ yarn-error.log*
 .npm
 .eslintcache
 
-# React
+# React / Frontend
 /build
+frontend/build
+frontend/node_modules
+frontend/.vite
 .DS_Store
 *.pem
 
