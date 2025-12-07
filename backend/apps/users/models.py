@@ -6,8 +6,13 @@ class User(AbstractUser):
     """Расширенная модель пользователя"""
     
     LANGUAGE_CHOICES = [
-        ('pt', 'Португальский'),
-        ('de', 'Немецкий'),
+        ('ru', 'Russian'),
+        ('en', 'English'),
+        ('pt', 'Portuguese'),
+        ('de', 'German'),
+        ('es', 'Spanish'),
+        ('fr', 'French'),
+        ('it', 'Italian'),
     ]
     
     NATIVE_LANGUAGE_CHOICES = [
@@ -53,7 +58,7 @@ class User(AbstractUser):
     preferred_language = models.CharField(
         max_length=2,
         choices=LANGUAGE_CHOICES,
-        default='pt',
+        default='en',
         verbose_name='Предпочитаемый язык'
     )
     

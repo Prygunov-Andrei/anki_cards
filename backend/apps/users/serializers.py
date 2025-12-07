@@ -15,10 +15,23 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         required=True,
         style={'input_type': 'password'}
     )
+    native_language = serializers.ChoiceField(
+        choices=User.NATIVE_LANGUAGE_CHOICES,
+        required=False,
+        help_text='Родной язык пользователя'
+    )
+    learning_language = serializers.ChoiceField(
+        choices=User.LEARNING_LANGUAGE_CHOICES,
+        required=False,
+        help_text='Язык изучения'
+    )
     
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password_confirm', 'preferred_language']
+        fields = [
+            'username', 'email', 'password', 'password_confirm',
+            'preferred_language', 'native_language', 'learning_language'
+        ]
         extra_kwargs = {
             'email': {'required': True},
             'preferred_language': {'required': True},
@@ -29,6 +42,16 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'password': 'Пароли не совпадают'
             })
+        
+        # Валидация: родной и изучаемый языки не должны совпадать
+        native = attrs.get('native_language')
+        learning = attrs.get('learning_language')
+        
+        if native and learning and native == learning:
+            raise serializers.ValidationError({
+                'learning_language': 'Родной и изучаемый языки должны быть разными'
+            })
+        
         return attrs
     
     def create(self, validated_data):

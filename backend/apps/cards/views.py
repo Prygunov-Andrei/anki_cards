@@ -172,14 +172,35 @@ def generate_cards_view(request):
                     break
         
         if audio_path:
-            # Проверяем существование файла
-            if os.path.exists(audio_path):
-                word_data['audio_file'] = audio_path
-                if audio_path not in media_files:
-                    media_files.append(audio_path)
-                logger.info(f"✅ Добавлено аудио для '{word}': {audio_path}")
+            # Преобразуем путь в абсолютный (обрабатываем относительные пути и полные URL)
+            normalized_audio_path = None
+            if audio_path.startswith('http://') or audio_path.startswith('https://'):
+                # Полный URL - извлекаем относительный путь
+                if '/media/audio/' in audio_path:
+                    relative_path = 'audio/' + audio_path.split('/media/audio/')[-1]
+                    normalized_audio_path = Path(settings.MEDIA_ROOT) / relative_path
+                elif '/media/' in audio_path:
+                    relative_path = audio_path.split('/media/')[-1]
+                    normalized_audio_path = Path(settings.MEDIA_ROOT) / relative_path
+            elif audio_path.startswith('/media/'):
+                # Относительный путь, начинающийся с /media/
+                relative_path = audio_path.replace('/media/', '')
+                normalized_audio_path = Path(settings.MEDIA_ROOT) / relative_path
+            elif not Path(audio_path).is_absolute():
+                # Относительный путь без /media/
+                normalized_audio_path = Path(settings.MEDIA_ROOT) / audio_path
             else:
-                logger.error(f"❌ Файл аудио не существует: {audio_path}")
+                # Уже абсолютный путь
+                normalized_audio_path = Path(audio_path)
+            
+            # Проверяем существование файла
+            if normalized_audio_path and normalized_audio_path.exists():
+                word_data['audio_file'] = str(normalized_audio_path)
+                if str(normalized_audio_path) not in media_files:
+                    media_files.append(str(normalized_audio_path))
+                logger.info(f"✅ Добавлено аудио для '{word}': {normalized_audio_path}")
+            else:
+                logger.error(f"❌ Файл аудио не существует: {normalized_audio_path} (исходный путь: {audio_path})")
         else:
             logger.warning(f"⚠️ Аудио не найдено для '{word}'. Доступные ключи: {list(audio_files.keys())}")
         
@@ -195,14 +216,35 @@ def generate_cards_view(request):
                     break
         
         if image_path:
-            # Проверяем существование файла
-            if os.path.exists(image_path):
-                word_data['image_file'] = image_path
-                if image_path not in media_files:
-                    media_files.append(image_path)
-                logger.info(f"✅ Добавлено изображение для '{word}': {image_path}")
+            # Преобразуем путь в абсолютный (обрабатываем относительные пути и полные URL)
+            normalized_image_path = None
+            if image_path.startswith('http://') or image_path.startswith('https://'):
+                # Полный URL - извлекаем относительный путь
+                if '/media/images/' in image_path:
+                    relative_path = 'images/' + image_path.split('/media/images/')[-1]
+                    normalized_image_path = Path(settings.MEDIA_ROOT) / relative_path
+                elif '/media/' in image_path:
+                    relative_path = image_path.split('/media/')[-1]
+                    normalized_image_path = Path(settings.MEDIA_ROOT) / relative_path
+            elif image_path.startswith('/media/'):
+                # Относительный путь, начинающийся с /media/
+                relative_path = image_path.replace('/media/', '')
+                normalized_image_path = Path(settings.MEDIA_ROOT) / relative_path
+            elif not Path(image_path).is_absolute():
+                # Относительный путь без /media/
+                normalized_image_path = Path(settings.MEDIA_ROOT) / image_path
             else:
-                logger.error(f"❌ Файл изображения не существует: {image_path}")
+                # Уже абсолютный путь
+                normalized_image_path = Path(image_path)
+            
+            # Проверяем существование файла
+            if normalized_image_path and normalized_image_path.exists():
+                word_data['image_file'] = str(normalized_image_path)
+                if str(normalized_image_path) not in media_files:
+                    media_files.append(str(normalized_image_path))
+                logger.info(f"✅ Добавлено изображение для '{word}': {normalized_image_path}")
+            else:
+                logger.error(f"❌ Файл изображения не существует: {normalized_image_path} (исходный путь: {image_path})")
         else:
             logger.warning(f"⚠️ Изображение не найдено для '{word}'. Доступные ключи: {list(image_files.keys())}")
         
@@ -988,14 +1030,17 @@ def deck_remove_word_view(request, deck_id):
 @permission_classes([IsAuthenticated])
 def deck_update_word_view(request, deck_id, word_id):
     """
-    Обновление слова в колоде (медиа-файлы, перевод)
+    Обновление слова в колоде (слово, перевод, медиа-файлы)
     
     PATCH /api/cards/decks/{deck_id}/words/{word_id}/
     {
-        "image_file": "/media/images/xxx.jpg",  // опционально
-        "audio_file": "/media/audio/yyy.mp3",   // опционально
-        "translation": "новый перевод"          // опционально
+        "original_word": "новое слово",        // опционально, max 200 символов
+        "translation": "новый перевод",        // опционально, max 200 символов
+        "image_file": "/media/images/xxx.jpg", // опционально
+        "audio_file": "/media/audio/yyy.mp3"   // опционально
     }
+    
+    Можно отправлять одно или несколько полей одновременно.
     """
     deck = get_object_or_404(Deck, id=deck_id, user=request.user)
     
@@ -1009,40 +1054,93 @@ def deck_update_word_view(request, deck_id, word_id):
     
     # Обновляем поля
     updated_fields = []
+    errors = {}
     
-    # Обновление изображения
-    image_file = request.data.get('image_file')
-    if image_file:
-        relative_path = image_file.replace('/media/', '') if image_file.startswith('/media/') else image_file
-        word.image_file.name = relative_path
-        updated_fields.append('image_file')
-    
-    # Обновление аудио
-    audio_file = request.data.get('audio_file')
-    if audio_file:
-        relative_path = audio_file.replace('/media/', '') if audio_file.startswith('/media/') else audio_file
-        word.audio_file.name = relative_path
-        updated_fields.append('audio_file')
+    # Обновление исходного слова
+    original_word = request.data.get('original_word')
+    if original_word is not None:
+        original_word = original_word.strip()
+        if not original_word:
+            errors['original_word'] = 'Поле не может быть пустым'
+        elif len(original_word) > 200:
+            errors['original_word'] = 'Максимальная длина: 200 символов'
+        else:
+            # Проверяем уникальность (user, original_word, language)
+            existing_word = Word.objects.filter(
+                user=request.user,
+                original_word=original_word,
+                language=word.language
+            ).exclude(id=word_id).first()
+            
+            if existing_word:
+                errors['original_word'] = f'Слово "{original_word}" уже существует для этого языка'
+            else:
+                word.original_word = original_word
+                updated_fields.append('original_word')
     
     # Обновление перевода
     translation = request.data.get('translation')
-    if translation:
-        word.translation = translation
-        updated_fields.append('translation')
+    if translation is not None:
+        translation = translation.strip()
+        if not translation:
+            errors['translation'] = 'Поле не может быть пустым'
+        elif len(translation) > 200:
+            errors['translation'] = 'Максимальная длина: 200 символов'
+        else:
+            word.translation = translation
+            updated_fields.append('translation')
     
-    if updated_fields:
-        word.save()
-        logger.info(f"Слово ID={word_id} обновлено. Поля: {updated_fields}")
-        
+    # Обновление изображения
+    image_file = request.data.get('image_file')
+    if image_file is not None:
+        if image_file == '' or image_file is None:
+            # Удаление изображения
+            word.image_file = None
+            updated_fields.append('image_file')
+        else:
+            relative_path = image_file.replace('/media/', '') if image_file.startswith('/media/') else image_file
+            word.image_file.name = relative_path
+            updated_fields.append('image_file')
+    
+    # Обновление аудио
+    audio_file = request.data.get('audio_file')
+    if audio_file is not None:
+        if audio_file == '' or audio_file is None:
+            # Удаление аудио
+            word.audio_file = None
+            updated_fields.append('audio_file')
+        else:
+            relative_path = audio_file.replace('/media/', '') if audio_file.startswith('/media/') else audio_file
+            word.audio_file.name = relative_path
+            updated_fields.append('audio_file')
+    
+    # Если есть ошибки валидации
+    if errors:
         return Response({
-            'id': word.id,
-            'original_word': word.original_word,
-            'translation': word.translation,
-            'language': word.language,
-            'image_file': word.image_file.url if word.image_file else None,
-            'audio_file': word.audio_file.url if word.audio_file else None,
-            'updated_fields': updated_fields
-        }, status=status.HTTP_200_OK)
+            'error': 'Ошибки валидации',
+            'errors': errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Если есть поля для обновления
+    if updated_fields:
+        try:
+            word.save()
+            logger.info(f"Слово ID={word_id} обновлено. Поля: {updated_fields}")
+            
+            return Response({
+                'id': word.id,
+                'original_word': word.original_word,
+                'translation': word.translation,
+                'language': word.language,
+                'image_file': word.image_file.url if word.image_file else None,
+                'audio_file': word.audio_file.url if word.audio_file else None,
+                'updated_fields': updated_fields
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении слова ID={word_id}: {str(e)}")
+            return Response({
+                'error': f'Ошибка при сохранении: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     else:
         return Response({
             'error': 'Не указаны поля для обновления'
@@ -1075,6 +1173,9 @@ def deck_generate_apkg_view(request, deck_id):
         words_data = []
         media_files = []
         
+        logger.info(f"📦 Начало генерации .apkg из колоды '{deck.name}' (ID: {deck_id})")
+        logger.info(f"📝 Количество слов в колоде: {words.count()}")
+        
         for word in words:
             word_data = {
                 'original_word': word.original_word,
@@ -1082,19 +1183,68 @@ def deck_generate_apkg_view(request, deck_id):
             }
             
             if word.audio_file:
-                word_data['audio_file'] = str(word.audio_file.path)
-                media_files.append(str(word.audio_file.path))
+                # Получаем имя файла из URL или пути
+                audio_name = word.audio_file.name
+                
+                # Если это URL, извлекаем имя файла
+                if audio_name.startswith('http://') or audio_name.startswith('https://'):
+                    # Извлекаем имя файла из URL: https://.../media/audio/filename.mp3 -> audio/filename.mp3
+                    if '/media/audio/' in audio_name:
+                        audio_name = 'audio/' + audio_name.split('/media/audio/')[-1]
+                    elif '/media/' in audio_name:
+                        audio_name = audio_name.split('/media/')[-1]
+                    else:
+                        # Если не можем извлечь, берем последнюю часть URL
+                        audio_name = 'audio/' + audio_name.split('/')[-1]
+                
+                # Формируем полный путь к файлу
+                audio_path = Path(settings.MEDIA_ROOT) / audio_name
+                
+                if audio_path.exists():
+                    word_data['audio_file'] = str(audio_path)
+                    media_files.append(str(audio_path))
+                    logger.info(f"  🔊 Слово '{word.original_word}': аудио = {audio_path} ✅")
+                else:
+                    logger.warning(f"  🔊 Слово '{word.original_word}': аудио не найдено: {audio_path} ❌")
             
             if word.image_file:
-                word_data['image_file'] = str(word.image_file.path)
-                media_files.append(str(word.image_file.path))
+                # Получаем имя файла из URL или пути
+                image_name = word.image_file.name
+                
+                # Если это URL, извлекаем имя файла
+                if image_name.startswith('http://') or image_name.startswith('https://'):
+                    # Извлекаем имя файла из URL: https://.../media/images/filename.jpg -> images/filename.jpg
+                    if '/media/images/' in image_name:
+                        image_name = 'images/' + image_name.split('/media/images/')[-1]
+                    elif '/media/' in image_name:
+                        image_name = image_name.split('/media/')[-1]
+                    else:
+                        # Если не можем извлечь, берем последнюю часть URL
+                        image_name = 'images/' + image_name.split('/')[-1]
+                
+                # Формируем полный путь к файлу
+                image_path = Path(settings.MEDIA_ROOT) / image_name
+                
+                if image_path.exists():
+                    word_data['image_file'] = str(image_path)
+                    media_files.append(str(image_path))
+                    logger.info(f"  🖼️ Слово '{word.original_word}': изображение = {image_path} ✅")
+                else:
+                    logger.warning(f"  🖼️ Слово '{word.original_word}': изображение не найдено: {image_path} ❌")
             
             words_data.append(word_data)
+        
+        logger.info(f"📊 Итого подготовлено:")
+        logger.info(f"  - Слов: {len(words_data)}")
+        logger.info(f"  - Медиафайлов: {len(media_files)}")
+        logger.info(f"  - Пути к медиафайлам: {media_files}")
         
         # Генерируем .apkg файл
         file_id = str(uuid.uuid4())
         output_path = Path(settings.MEDIA_ROOT) / "temp_files" / f"{file_id}.apkg"
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"🎯 Вызов generate_apkg с {len(words_data)} словами и {len(media_files)} медиафайлами")
         
         generate_apkg(
             words_data=words_data,
@@ -1102,6 +1252,10 @@ def deck_generate_apkg_view(request, deck_id):
             media_files=media_files if media_files else None,
             output_path=output_path
         )
+        
+        # Проверяем размер созданного файла
+        file_size = output_path.stat().st_size if output_path.exists() else 0
+        logger.info(f"✅ .apkg файл создан: {output_path} (размер: {file_size / 1024:.2f} KB)")
         
         # Сохраняем информацию о сгенерированной колоде
         generated_deck = GeneratedDeck.objects.create(

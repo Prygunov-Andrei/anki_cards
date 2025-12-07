@@ -13,6 +13,7 @@ from .serializers import (
     UserLoginSerializer,
     UserProfileSerializer,
 )
+from apps.cards.token_utils import add_tokens
 
 User = get_user_model()
 
@@ -29,7 +30,13 @@ def register_view(request):
     serializer = UserRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
+        
+        # Создаем токен авторизации
         token, created = Token.objects.get_or_create(user=user)
+        
+        # Начисляем стартовые 100 токенов новому пользователю
+        add_tokens(user, amount=100, description="Стартовые токены при регистрации")
+        
         return Response({
             'user_id': user.id,
             'token': token.key,

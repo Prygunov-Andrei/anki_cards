@@ -4,9 +4,12 @@
 import random
 import uuid
 import re
+import logging
 from pathlib import Path
 from typing import List, Dict, Optional
 from genanki import Deck, Note, Model, Package
+
+logger = logging.getLogger(__name__)
 
 
 def create_card_model() -> Model:
@@ -108,22 +111,79 @@ def generate_apkg(
     
     # Собираем все медиафайлы из words_data
     all_media_files = []
+    seen_files = set()  # Для отслеживания уже добавленных файлов
+    
+    # Получаем MEDIA_ROOT для преобразования относительных путей
+    from django.conf import settings
+    media_root = Path(settings.MEDIA_ROOT)
+    
     for word_data in words_data:
+        # Обработка аудио
         if word_data.get('audio_file'):
             audio_path = Path(word_data['audio_file'])
-            if audio_path.exists() and str(audio_path) not in all_media_files:
-                all_media_files.append(str(audio_path))
+            # Преобразуем в абсолютный путь, если нужно
+            if not audio_path.is_absolute():
+                audio_path = media_root / audio_path
+            else:
+                audio_path = audio_path.resolve()
+            
+            audio_str = str(audio_path)
+            if audio_path.exists():
+                if audio_str not in seen_files:
+                    all_media_files.append(audio_str)
+                    seen_files.add(audio_str)
+                    logger.info(f"✅ Добавлен аудиофайл: {audio_str}")
+                else:
+                    logger.debug(f"⚠️ Аудиофайл уже добавлен: {audio_str}")
+            else:
+                logger.warning(f"❌ Аудиофайл не найден: {audio_str}")
+        
+        # Обработка изображений
         if word_data.get('image_file'):
             image_path = Path(word_data['image_file'])
-            if image_path.exists() and str(image_path) not in all_media_files:
-                all_media_files.append(str(image_path))
+            # Преобразуем в абсолютный путь, если нужно
+            if not image_path.is_absolute():
+                image_path = media_root / image_path
+            else:
+                image_path = image_path.resolve()
+            
+            image_str = str(image_path)
+            if image_path.exists():
+                if image_str not in seen_files:
+                    all_media_files.append(image_str)
+                    seen_files.add(image_str)
+                    logger.info(f"✅ Добавлен файл изображения: {image_str}")
+                else:
+                    logger.debug(f"⚠️ Файл изображения уже добавлен: {image_str}")
+            else:
+                logger.warning(f"❌ Файл изображения не найден: {image_str}")
     
     # Добавляем медиафайлы из параметра media_files (если есть)
     if media_files:
         for media_file in media_files:
             media_path = Path(media_file)
-            if media_path.exists() and str(media_path) not in all_media_files:
-                all_media_files.append(str(media_path))
+            # Преобразуем в абсолютный путь, если нужно
+            if not media_path.is_absolute():
+                media_path = media_root / media_path
+            else:
+                media_path = media_path.resolve()
+            
+            media_str = str(media_path)
+            if media_path.exists():
+                if media_str not in seen_files:
+                    all_media_files.append(media_str)
+                    seen_files.add(media_str)
+                    logger.info(f"✅ Добавлен медиафайл из параметра: {media_str}")
+                else:
+                    logger.debug(f"⚠️ Медиафайл уже добавлен: {media_str}")
+            else:
+                logger.warning(f"❌ Медиафайл не найден: {media_str}")
+    
+    logger.info(f"📦 Всего медиафайлов для добавления в .apkg: {len(all_media_files)}")
+    if all_media_files:
+        logger.info(f"📋 Список медиафайлов: {all_media_files}")
+    else:
+        logger.warning("⚠️ Медиафайлы не найдены! .apkg будет создан без медиа.")
     
     # Создаем пакет с медиафайлами
     package = Package(deck, media_files=all_media_files if all_media_files else None)
