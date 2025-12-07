@@ -18,6 +18,7 @@ Backend обеспечивает API для:
 
 - **[План разработки Backend](./docs/DEVELOPMENT_PLAN.md)** — план Backend разработки (завершен)
 - **[Техническое задание Frontend](./docs/FRONTEND_TASKS.md)** — полное ТЗ для Frontend разработчика (18 этапов)
+- **[Workflow разработки](./docs/WORKFLOW_QUICK_START.md)** — как работать с Frontend (Figma Make) + Backend (локально) ⭐
 - **[Деплой](./docs/DEPLOYMENT.md)** — информация о деплое (будет дополнено)
 
 ## Быстрый старт (Backend)

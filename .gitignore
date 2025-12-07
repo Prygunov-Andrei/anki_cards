@@ -94,3 +94,6 @@ docs_archive.zip
 backend.log
 frontend.log
 
+# Frontend sync marker
+.last_frontend_sync
+
