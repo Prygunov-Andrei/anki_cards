@@ -92,3 +92,20 @@ export const truncateText = (text: string, maxLength: number): string => {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + '...';
 };
+
+/**
+ * Проверить, является ли слово техническим пустым словом
+ */
+export const isEmptyWord = (word: string): boolean => {
+  return word.startsWith('_empty_');
+};
+
+/**
+ * Отобразить слово: если это техническое пустое слово, показать вопросительные знаки
+ */
+export const displayWord = (word: string): string => {
+  if (isEmptyWord(word)) {
+    return '???';
+  }
+  return word;
+};

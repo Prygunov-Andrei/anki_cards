@@ -16,7 +16,7 @@ def words_list_view(request):
     
     # Фильтрация по языку
     language = request.query_params.get('language', None)
-    if language in ['pt', 'de']:
+    if language in ['ru', 'en', 'pt', 'de', 'es', 'fr', 'it']:
         words = words.filter(language=language)
     
     # Поиск по словам и переводам

@@ -12,7 +12,7 @@ import { AvatarUpload } from '../components/AvatarUpload';
 import { LanguageSelector, isValidNativeLanguage, isValidLearningLanguage } from '../components/LanguageSelector';
 import { MediaModelSelector, MediaModel, mediaModelToBackend, backendToMediaModel } from '../components/MediaModelSelector';
 import { profileService } from '../services/profile.service';
-import { X } from 'lucide-react';
+import { X, Volume2, Sparkles } from 'lucide-react';
 import { translations, SupportedLocale } from '../locales';
 
 /**
@@ -36,6 +36,7 @@ export default function ProfilePage() {
       (user?.image_provider || 'openai') as 'openai' | 'gemini',
       (user?.gemini_model || 'gemini-2.5-flash-image') as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
     ),
+    audio_provider: (user?.audio_provider || 'openai') as 'openai' | 'gtts',
   });
 
   // Синхронизируем форму с данными пользователя
@@ -51,9 +52,17 @@ export default function ProfilePage() {
           (user.image_provider || 'openai') as 'openai' | 'gemini',
           (user.gemini_model || 'gemini-2.5-flash-image') as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
         ),
+        audio_provider: (user.audio_provider || 'openai') as 'openai' | 'gtts',
       });
     }
   }, [user]);
+
+  // Автоматически переключать на gTTS для португальского
+  useEffect(() => {
+    if (formData.learning_language === 'pt' && formData.audio_provider === 'openai') {
+      setFormData((prev) => ({ ...prev, audio_provider: 'gtts' }));
+    }
+  }, [formData.learning_language]);
 
   /**
    * Обработка изменения аватара
@@ -121,6 +130,7 @@ export default function ProfilePage() {
         learning_language: formData.learning_language,
         image_provider: backendFormat.image_provider,
         gemini_model: backendFormat.gemini_model,
+        audio_provider: formData.audio_provider, // Добавляем провайдер аудио
       };
 
       // Логируем данные перед отправкой
@@ -201,6 +211,10 @@ export default function ProfilePage() {
           showError(t.errors.validation, {
             description: errorData.gemini_model[0] || 'Invalid Gemini model',
           });
+        } else if (errorData.audio_provider) {
+          showError(t.errors.validation, {
+            description: errorData.audio_provider[0] || 'Invalid audio provider',
+          });
         } else {
           // Показываем общую ошибку с деталями
           const errorMessage = JSON.stringify(errorData);
@@ -237,6 +251,7 @@ export default function ProfilePage() {
           (user.image_provider || 'openai') as 'openai' | 'gemini',
           (user.gemini_model || 'gemini-2.5-flash-image') as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
         ),
+        audio_provider: (user.audio_provider || 'openai') as 'openai' | 'gtts',
       });
     }
     setAvatarFile(null);
@@ -262,6 +277,7 @@ export default function ProfilePage() {
       formData.native_language !== languageBackendToCode(user.native_language || 'ru') ||
       formData.learning_language !== languageBackendToCode(user.learning_language || 'de') || // де по умолчанию, так как en не поддерживается для learning_language
       formData.media_model !== currentMediaModel ||
+      formData.audio_provider !== (user.audio_provider || 'openai') ||
       avatarFile !== null ||
       shouldRemoveAvatar
     );
@@ -368,13 +384,123 @@ export default function ProfilePage() {
         {/* Блок генерации медиа */}
         <Card className="p-6">
           <h2 className="mb-6 text-xl text-gray-900 dark:text-gray-100">{t.profile.mediaGeneration}</h2>
-          <MediaModelSelector
-            value={formData.media_model}
-            onChange={(model) =>
-              setFormData((prev) => ({ ...prev, media_model: model }))
-            }
-            disabled={isLoading}
-          />
+          
+          {/* Провайдер изображений */}
+          <div className="mb-6">
+            <Label className="mb-3 block text-sm text-gray-700 dark:text-gray-300">
+              {t.profile.imageProvider}
+            </Label>
+            <MediaModelSelector
+              value={formData.media_model}
+              onChange={(model) =>
+                setFormData((prev) => ({ ...prev, media_model: model }))
+              }
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Провайдер аудио */}
+          <div>
+            <Label className="mb-3 block text-sm text-gray-700 dark:text-gray-300">
+              {t.profile.audioProvider}
+            </Label>
+            <div className="grid gap-3">
+              {/* OpenAI TTS */}
+              <button
+                type="button"
+                onClick={() => !isLoading && setFormData((prev) => ({ ...prev, audio_provider: 'openai' }))}
+                disabled={isLoading}
+                className={`
+                  relative w-full text-left transition-all duration-200
+                  ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                `}
+              >
+                <Card
+                  className={`
+                    p-4 transition-all duration-200
+                    ${formData.audio_provider === 'openai'
+                      ? 'border-2 border-[#4FACFE] bg-gradient-to-br from-[#4FACFE]/5 to-transparent shadow-md'
+                      : 'border-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm'
+                    }
+                  `}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`
+                      flex h-10 w-10 shrink-0 items-center justify-center rounded-lg
+                      bg-gradient-to-br from-[#4FACFE] to-[#00F2FE]
+                    `}>
+                      <Sparkles className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm text-gray-900 dark:text-gray-100">
+                          {t.profile.openaiTTS}
+                        </h3>
+                        <span className="shrink-0 text-xs text-gray-600 dark:text-gray-400">
+                          {t.profile.paid}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        {t.profile.openaiTTSDescription}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </button>
+
+              {/* Google TTS (gTTS) */}
+              <button
+                type="button"
+                onClick={() => !isLoading && setFormData((prev) => ({ ...prev, audio_provider: 'gtts' }))}
+                disabled={isLoading}
+                className={`
+                  relative w-full text-left transition-all duration-200
+                  ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                `}
+              >
+                <Card
+                  className={`
+                    p-4 transition-all duration-200
+                    ${formData.audio_provider === 'gtts'
+                      ? 'border-2 border-[#4FACFE] bg-gradient-to-br from-[#4FACFE]/5 to-transparent shadow-md'
+                      : 'border-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm'
+                    }
+                  `}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`
+                      flex h-10 w-10 shrink-0 items-center justify-center rounded-lg
+                      bg-gradient-to-br from-[#FFD93D] to-[#FFA93D]
+                    `}>
+                      <Volume2 className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm text-gray-900 dark:text-gray-100">
+                          {t.profile.googleTTS}
+                        </h3>
+                        <span className="shrink-0 text-xs text-gray-600 dark:text-gray-400">
+                          {t.profile.free}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        {t.profile.googleTTSDescription}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </button>
+            </div>
+
+            {/* Подсказка для португальского */}
+            {formData.learning_language === 'pt' && formData.audio_provider === 'openai' && (
+              <div className="mt-3 rounded-lg bg-orange-50 dark:bg-orange-900/20 p-3 border border-orange-200 dark:border-orange-800">
+                <p className="text-xs text-orange-800 dark:text-orange-200">
+                  ⚠️ {t.profile.portugueseWarning}
+                </p>
+              </div>
+            )}
+          </div>
         </Card>
 
         {/* Кнопки действий */}

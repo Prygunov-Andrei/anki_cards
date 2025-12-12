@@ -4,6 +4,7 @@ import { Deck } from '../types';
 import { deckService } from '../services/deck.service';
 import { DeckCard } from '../components/DeckCard';
 import { DeleteDeckModal } from '../components/DeleteDeckModal';
+import { InvertWordsConfirmModal } from '../components/InvertWordsConfirmModal';
 import { NetworkErrorBanner } from '../components/NetworkErrorBanner';
 import { Skeleton } from '../components/ui/skeleton';
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
@@ -20,6 +21,8 @@ export default function DecksPage() {
   const [hasNetworkError, setHasNetworkError] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
+  const [isInvertWordsModalOpen, setIsInvertWordsModalOpen] = useState(false);
+  const [selectedDeckForInvert, setSelectedDeckForInvert] = useState<Deck | null>(null);
   const navigate = useNavigate();
 
   // Загрузка колод при монтировании
@@ -77,7 +80,7 @@ export default function DecksPage() {
   };
 
   /**
-   * Генерация .apkg файла
+   * Генерация .apkg файла для колоды
    */
   const handleGenerateApkg = async (deck: Deck) => {
     // Проверяем только words_count, а не наличие массива words
@@ -93,11 +96,108 @@ export default function DecksPage() {
         description: t.decks.collectingApkg,
       });
 
+      // 🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ГЕНЕРАЦИЕЙ
+      console.log('='.repeat(80));
+      console.log('🚀 ГЕНЕРАЦИЯ .APKG ФАЙЛА - НАЧАЛО');
+      console.log('='.repeat(80));
+      console.log('📋 Информация о колоде (базовая):');
+      console.log('  - ID колоды:', deck.id);
+      console.log('  - Название:', deck.name);
+      console.log('  - Количество слов (words_count):', deck.words_count);
+      console.log('  - Целевой язык:', deck.target_lang);
+      console.log('  - Исходный язык:', deck.source_lang);
+      console.log('');
+      console.log('⚠️ ВНИМАНИЕ: На DecksPage нет детальной информации о словах');
+      console.log('   Загружаем полную информацию о колоде...');
+      
+      // Загружаем полную информацию о колоде для диагностики
+      const fullDeck = await deckService.getDeck(deck.id);
+      
+      console.log('');
+      console.log('📦 Полная информация о колоде получена:');
+      console.log('  - Количество слов (реальное):', fullDeck.words?.length || 0);
+      
+      if (fullDeck.words && fullDeck.words.length > 0) {
+        const wordsWithImage = fullDeck.words.filter(w => w.image_file && w.image_file.trim() !== '').length;
+        const wordsWithAudio = fullDeck.words.filter(w => w.audio_file && w.audio_file.trim() !== '').length;
+        
+        console.log('');
+        console.log('📊 Статистика медиа:');
+        console.log('  - Слов с изображениями:', wordsWithImage, 'из', fullDeck.words.length);
+        console.log('  - Слов с аудио:', wordsWithAudio, 'из', fullDeck.words.length);
+        
+        console.log('');
+        console.log('📝 ПОЛНЫЙ СПИСОК СЛОВ С МЕДИА:');
+        fullDeck.words.forEach((word, index) => {
+          console.log(`  ${index + 1}. "${word.original_word}" -> "${word.translation}"`);
+          console.log(`     ID: ${word.id}`);
+          console.log(`     Изображение: ${word.image_file || '❌ НЕТ'}`);
+          console.log(`     Аудио: ${word.audio_file || '❌ НЕТ'}`);
+        });
+      } else {
+        console.warn('⚠️ В колоде нет слов!');
+      }
+      console.log('='.repeat(80));
+
       // Генерация .apkg файла
+      console.log('📡 Отправка запроса на бэкенд: POST /api/decks/' + deck.id + '/generate-apkg/');
       const { file_id } = await deckService.generateDeckApkg(deck.id);
+      console.log('✅ Бэкенд вернул file_id:', file_id);
 
       // Скачивание файла
+      console.log('📡 Скачивание файла: GET /api/decks/download/' + file_id + '/');
       const blob = await deckService.downloadDeck(file_id);
+
+      // 🔍 ДИАГНОСТИКА: Проверяем размер файла
+      const sizeMB = blob.size / 1024 / 1024;
+      const sizeKB = blob.size / 1024;
+      console.log('');
+      console.log('📦 РЕЗУЛЬТАТ:');
+      console.log(`  - Размер файла: ${sizeKB.toFixed(2)} KB (${sizeMB.toFixed(2)} MB, ${blob.size} bytes)`);
+      console.log(`  - Тип файла: ${blob.type}`);
+      
+      if (sizeKB < 100) {
+        console.error('');
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: Размер файла слишком мал!');
+        console.error('   Ожидаемый размер для колоды с медиа: минимум 500 KB - 5 MB');
+        console.error(`   Текущий размер: ${sizeKB.toFixed(2)} KB`);
+        console.error('');
+        console.error('🔍 ДИАГНОСТИКА ПРОБЛЕМЫ:');
+        
+        if (fullDeck.words && fullDeck.words.length > 0) {
+          const wordsWithImage = fullDeck.words.filter(w => w.image_file && w.image_file.trim() !== '').length;
+          const wordsWithAudio = fullDeck.words.filter(w => w.audio_file && w.audio_file.trim() !== '').length;
+          
+          console.error(`   - Слов с изображениями во фронтенде: ${wordsWithImage} из ${fullDeck.words.length}`);
+          console.error(`   - Слов с аудио во фронтенде: ${wordsWithAudio} из ${fullDeck.words.length}`);
+          
+          if (wordsWithImage > 0 || wordsWithAudio > 0) {
+            console.error('');
+            console.error('   ⚠️ Медиа-файлы ЕСТЬ во фронтенде, но НЕТ в .apkg!');
+            console.error('   ❌ ПРОБЛЕМА НА БЭКЕНДЕ: Бэкенд не упаковывает медиа в .apkg файл');
+            console.error('');
+            console.error('   💡 РЕШЕНИЕ:');
+            console.error('      1. Проверьте Django бэкенд: функцию generate_apkg()');
+            console.error('      2. Убедитесь, что медиа-файлы копируются в .apkg архив');
+            console.error('      3. Проверьте пути к медиа-файлам на сервере');
+            console.error('      4. Проверьте логи Django на наличие ошибок');
+            console.error('');
+            console.error('   🔍 ПРОВЕРЬТЕ НА БЭКЕНДЕ:');
+            console.error('      - Существуют ли файлы физически на диске?');
+            console.error('      - Корректны ли пути к файлам?');
+            console.error('      - Права доступа к медиа-файлам?');
+          } else {
+            console.error('');
+            console.error('   ⚠️ Медиа-файлов НЕТ во фронтенде');
+            console.error('   💡 Сгенерируйте медиа для слов перед экспортом .apkg');
+          }
+        }
+        console.error('');
+        console.error('='.repeat(80));
+      } else {
+        console.log('✅ Размер файла в норме - медиа, вероятно, включены');
+        console.log('='.repeat(80));
+      }
 
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -125,6 +225,164 @@ export default function DecksPage() {
   const openDeleteModal = (deck: Deck) => {
     setSelectedDeck(deck);
     setIsDeleteModalOpen(true);
+  };
+
+  /**
+   * Объединить колоды
+   */
+  const handleMergeDecks = async (sourceDeckId: number, targetDeckId: number) => {
+    try {
+      showInfo(t.decks.mergingDecks);
+
+      const result = await deckService.mergeDecks({
+        deck_ids: [sourceDeckId, targetDeckId],
+        target_deck_id: targetDeckId,
+        delete_source_decks: true,
+      });
+
+      showSuccess(t.decks.decksMerged, {
+        description: `${t.decks.mergedWords}: ${result.words_count}`,
+      });
+
+      // Обновляем список колод
+      await loadDecks();
+    } catch (error: any) {
+      console.error('Error merging decks:', error);
+      showError(t.decks.couldNotMergeDecks, {
+        description: error?.response?.data?.error || error.message || t.common.unknownError,
+      });
+    }
+  };
+
+  /**
+   * Инвертировать все слова в колоде
+   */
+  const handleInvertAllWords = async () => {
+    if (!selectedDeckForInvert) return;
+
+    try {
+      showInfo(t.words.invertingAllWords);
+
+      const result = await deckService.invertAllWords(selectedDeckForInvert.id);
+
+      showSuccess(
+        `${result.inverted_words_count} ${t.words.wordsInverted}`,
+        {
+          description: result.message,
+        }
+      );
+
+      // Закрываем модалку
+      setIsInvertWordsModalOpen(false);
+      setSelectedDeckForInvert(null);
+
+      // Обновляем список колод
+      await loadDecks();
+    } catch (error: any) {
+      console.error('Error inverting words:', error);
+      showError(t.common.error, {
+        description: error?.response?.data?.error || error.message || t.common.unknownError,
+      });
+    }
+  };
+
+  /**
+   * Открыть модальное окно подтверждения инвертирования слов
+   */
+  const openInvertWordsModal = (deck: Deck) => {
+    setSelectedDeckForInvert(deck);
+    setIsInvertWordsModalOpen(true);
+  };
+
+  /**
+   * Создать пустые карточки для всех слов в колоде
+   */
+  const handleCreateEmptyCards = async (deck: Deck) => {
+    if (deck.words_count === 0) {
+      showError(t.decks.emptyDeck, {
+        description: t.decks.addWords,
+      });
+      return;
+    }
+
+    try {
+      showInfo(t.words.creatingEmptyCards);
+
+      const result = await deckService.createEmptyCards(deck.id);
+
+      // Логируем полный ответ для отладки
+      console.log('[Empty Cards] Full response:', result);
+      console.log('[Empty Cards] empty_cards_count:', result.empty_cards_count);
+      console.log('[Empty Cards] empty_cards:', result.empty_cards);
+      console.log('[Empty Cards] skipped_cards:', result.skipped_cards);
+      console.log('[Empty Cards] errors:', result.errors);
+
+      // Детальное логирование пропущенных карточек
+      if (result.skipped_cards && result.skipped_cards.length > 0) {
+        console.log('[Empty Cards] Skipped cards details:');
+        result.skipped_cards.forEach((card, index) => {
+          console.log(`  ${index + 1}. Word ID: ${card.word_id}, Reason: ${card.reason}`);
+        });
+      }
+
+      // Детальное логирование ошибок
+      if (result.errors && result.errors.length > 0) {
+        console.error('[Empty Cards] ⚠️ ERRORS DETAILS:');
+        result.errors.forEach((error, index) => {
+          console.error(`  ${index + 1}. Word ID: ${error.word_id}, Error: ${error.error}`);
+        });
+      }
+
+      // Проверяем результат
+      if (result.empty_cards_count > 0) {
+        showSuccess(
+          `${result.empty_cards_count} ${t.words.emptyCardsCreated}`,
+          {
+            description: result.message,
+          }
+        );
+      } else if (result.errors && result.errors.length > 0) {
+        // Были ошибки - показываем их с приоритетом
+        console.error('[Empty Cards] Errors occurred!');
+        console.error('[Empty Cards] Errors:', result.errors);
+        
+        // Проверяем, это ошибка дубликата пустого слова?
+        const isDuplicateEmptyWordError = result.errors.some(e => 
+          e.error?.includes('duplicate key value') && 
+          e.error?.includes('original_word')
+        );
+        
+        if (isDuplicateEmptyWordError) {
+          showError('⚠️ Ограничение функциональности', {
+            description: `Создана 1 пустая карточка. Остальные ${result.errors.length} не созданы из-за технического ограничения. Используйте создание пустой карточки для каждого слова отдельно.`,
+          });
+        } else {
+          showError(t.common.error, {
+            description: `${result.errors.length} ошибок при создании карточек`,
+          });
+        }
+      } else if (result.skipped_cards && result.skipped_cards.length > 0) {
+        // Все карточки были пропущены (уже существуют)
+        console.log('[Empty Cards] All cards were skipped!');
+        console.log('[Empty Cards] Skipped cards:', result.skipped_cards);
+        showInfo(t.words.emptyCardsAlreadyExist || 'Пустые карточки уже существуют', {
+          description: `${result.skipped_cards.length} ${t.words.cardsSkipped || 'карточек пропущено'}: ${result.skipped_cards.map(c => c.reason).join(', ')}`,
+        });
+      } else {
+        // Непонятная ситуация - 0 создано, 0 пропущено, 0 ошибок
+        console.warn('[Empty Cards] Strange response - no cards created, skipped, or errors!');
+        console.warn('[Empty Cards] This might be a backend issue!');
+        showInfo(result.message);
+      }
+
+      // Обновляем список колод
+      await loadDecks();
+    } catch (error: any) {
+      console.error('Error creating empty cards:', error);
+      showError(t.common.error, {
+        description: error?.response?.data?.error || error.message || t.common.unknownError,
+      });
+    }
   };
 
   // Состояние загрузки
@@ -184,6 +442,10 @@ export default function DecksPage() {
             onEdit={handleEditDeck}
             onDelete={openDeleteModal}
             onGenerateApkg={handleGenerateApkg}
+            onMerge={handleMergeDecks}
+            onInvertAll={openInvertWordsModal}
+            onCreateEmptyCards={handleCreateEmptyCards}
+            availableDecks={decks.filter((d) => d.id !== deck.id)}
           />
         ))}
       </div>
@@ -196,6 +458,17 @@ export default function DecksPage() {
         onCancel={() => {
           setIsDeleteModalOpen(false);
           setSelectedDeck(null);
+        }}
+      />
+
+      {/* Модальное окно подтверждения инвертирования слов */}
+      <InvertWordsConfirmModal
+        isOpen={isInvertWordsModalOpen}
+        deck={selectedDeckForInvert}
+        onConfirm={handleInvertAllWords}
+        onCancel={() => {
+          setIsInvertWordsModalOpen(false);
+          setSelectedDeckForInvert(null);
         }}
       />
     </div>

@@ -45,7 +45,7 @@ urlpatterns = [
     path('api/', include('rest_framework.urls')),
 ]
 
-# Serve media files
+# Serve media and static files
 from django.views.static import serve
 from django.urls import re_path
 
@@ -53,3 +53,9 @@ from django.urls import re_path
 urlpatterns += [
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]
+
+# Serve static files in production (for Django admin)
+if not settings.DEBUG:
+    urlpatterns += [
+        re_path(r'^static/(?P<path>.*)$', serve, {'document_root': settings.STATIC_ROOT}),
+    ]

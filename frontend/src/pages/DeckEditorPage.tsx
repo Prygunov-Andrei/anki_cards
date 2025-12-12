@@ -21,14 +21,17 @@ import {
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
 import { getLanguageName } from '../utils/language-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
+import { useAuthContext } from '../contexts/AuthContext';
+import { Card } from '../components/ui/card';
 
 /**
  * Страница DeckEditorPage - редактор колоды
- * Логика как на главной: добавляем слова → настройки медиа → генерация карточек → добавление в колоду
+ * Логика как на главной: добавляем слова → настройки медиа → генерация карточек → добавление в олоду
  * iOS 25 стиль, оптимизирован для iPhone 17 Air
  */
 const DeckEditorPage: React.FC = () => {
   const t = useTranslation();
+  const { user } = useAuthContext();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -45,6 +48,8 @@ const DeckEditorPage: React.FC = () => {
   const [generateImages, setGenerateImages] = useState(true);
   const [generateAudio, setGenerateAudio] = useState(true);
   const [imageStyle, setImageStyle] = useState<ImageStyle>('balanced');
+  const [imageProvider, setImageProvider] = useState<'auto' | 'openai' | 'gemini' | 'nano-banana'>('auto');
+  const [audioProvider, setAudioProvider] = useState<'auto' | 'openai' | 'gtts'>('auto');
   
   // Прогресс генерации
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>('idle');
@@ -217,6 +222,7 @@ const DeckEditorPage: React.FC = () => {
               language: deck.target_lang,
               image_style: imageStyle,
               word_id: word.id, // Передаем ID слова для привязки медиа
+              provider: imageProvider, // Используем провайдер из настроек
             });
 
             console.log(`✅ Image generated for "${word.original_word}"`);
@@ -247,9 +253,12 @@ const DeckEditorPage: React.FC = () => {
           });
 
           try {
+            const provider = audioProvider === 'auto' ? undefined : audioProvider;
+
             await deckService.generateAudio({
               word: word.original_word,
               language: deck.target_lang,
+              provider, // Используем провайдер из настроек
               word_id: word.id, // Передаем ID слова для привязки медиа
             });
 
@@ -350,6 +359,7 @@ const DeckEditorPage: React.FC = () => {
         language: deck.target_lang,
         image_style: imageStyle,
         word_id: wordId, // Привязываем к слову в колоде
+        provider: imageProvider, // Используем провайдер из настроек
       });
 
       // Перезагружаем колоду с обновлёнными данными
@@ -377,9 +387,12 @@ const DeckEditorPage: React.FC = () => {
         description: `${t.decks.creatingNewAudioFor} "${word}"`,
       });
 
+      const provider = audioProvider === 'auto' ? undefined : audioProvider;
+
       await deckService.generateAudio({
         word,
         language: deck.target_lang,
+        provider, // Используем провайдер из настроек
         word_id: wordId, // Привязываем к слову в колоде
       });
 
@@ -392,6 +405,66 @@ const DeckEditorPage: React.FC = () => {
     } catch (error) {
       console.error(`Error regenerating audio for "${word}":`, error);
       showError(t.decks.couldNotCreateAudio, {
+        description: t.toast.tryAgain,
+      });
+    }
+  };
+
+  /**
+   * Удаление изображения у слова
+   */
+  const handleDeleteImage = async (wordId: number) => {
+    if (!deck) return;
+
+    try {
+      showInfo('Удаление изображения...', {
+        description: 'Удаляем изображение',
+      });
+
+      // Удаляем изображение, установив image_file в пустую строку
+      await deckService.updateWordMedia(deck.id, wordId, {
+        image_file: '',
+      });
+
+      // Перезагружаем колоду с обновлёнными данными
+      await loadDeck();
+
+      showSuccess('Изображение удалено!', {
+        description: 'Изображение успешно удалено',
+      });
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      showError('Не удалось удалить изображение', {
+        description: t.toast.tryAgain,
+      });
+    }
+  };
+
+  /**
+   * Удаление аудио у слова
+   */
+  const handleDeleteAudio = async (wordId: number) => {
+    if (!deck) return;
+
+    try {
+      showInfo('Удаление аудио...', {
+        description: 'Удаляем аудио',
+      });
+
+      // Удаляем аудио, установив audio_file в пустую строку
+      await deckService.updateWordMedia(deck.id, wordId, {
+        audio_file: '',
+      });
+
+      // Перезагружаем колоду с обновлёнными данными
+      await loadDeck();
+
+      showSuccess('удио удалено!', {
+        description: 'Аудио успешно удалено',
+      });
+    } catch (error) {
+      console.error('Error deleting audio:', error);
+      showError('Не удалось удалить аудио', {
         description: t.toast.tryAgain,
       });
     }
@@ -414,7 +487,7 @@ const DeckEditorPage: React.FC = () => {
 
     try {
       showInfo(t.decks.movingCard, {
-        description: `${t.decks.movingToDeck} "${toDeckName}"`,
+        description: `${t.decks.movingToDeck} \"${toDeckName}\"`,
       });
 
       // Используем метод копирования и переноса (работает через существующие API)
@@ -434,12 +507,62 @@ const DeckEditorPage: React.FC = () => {
       await loadDeck();
 
       showSuccess(t.decks.cardMoved, {
-        description: `${t.decks.wordAddedToDeck} "${toDeckName}"`,
+        description: `${t.decks.wordAddedToDeck} \"${toDeckName}\"`,
       });
     } catch (error) {
       console.error('Error moving card:', error);
       showError(t.decks.couldNotMoveCard, {
         description: t.toast.tryAgain,
+      });
+    }
+  };
+
+  /**
+   * Инвертировать слово
+   */
+  const handleInvertWord = async (wordId: number) => {
+    if (!deck) return;
+
+    try {
+      showInfo(t.words.invertingWord);
+
+      const result = await deckService.invertWord(deck.id, wordId);
+
+      showSuccess(t.words.wordInverted, {
+        description: result.message,
+      });
+
+      // Перезагружаем колоду, чтобы обновить список слов
+      await loadDeck();
+    } catch (error: any) {
+      console.error('Error inverting word:', error);
+      showError(t.common.error, {
+        description: error?.response?.data?.error || error.message || t.common.unknownError,
+      });
+    }
+  };
+
+  /**
+   * Создать пустую карточку для слова
+   */
+  const handleCreateEmptyCard = async (wordId: number) => {
+    if (!deck) return;
+
+    try {
+      showInfo(t.words.creatingEmptyCard);
+
+      const result = await deckService.createEmptyCard(deck.id, wordId);
+
+      showSuccess(t.words.emptyCardCreated, {
+        description: result.message,
+      });
+
+      // Перезагружаем колоду, чтобы обновить список слов
+      await loadDeck();
+    } catch (error: any) {
+      console.error('Error creating empty card:', error);
+      showError(t.common.error, {
+        description: error?.response?.data?.error || error.message || t.common.unknownError,
       });
     }
   };
@@ -502,46 +625,93 @@ const DeckEditorPage: React.FC = () => {
       setGenerationStatus('creating_deck');
       setGenerationProgress({ current: 0, total: 0, currentWord: '' });
 
+      // 🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ГЕНЕРАЦИЕЙ
+      console.log('='.repeat(80));
+      console.log('🚀 ГЕНЕРАЦИЯ .APKG ФАЙЛА - НАЧАЛО');
+      console.log('='.repeat(80));
+      console.log('📋 Информация о колоде:');
+      console.log('  - ID колоды:', deck.id);
+      console.log('  - Название:', deck.name);
+      console.log('  - Количество слов:', deck.words?.length || 0);
+      console.log('  - Целевой язык:', deck.target_lang);
+      console.log('  - Исходный язык:', deck.source_lang);
+      
+      if (deck.words && deck.words.length > 0) {
+        const wordsWithImage = deck.words.filter(w => w.image_file && w.image_file.trim() !== '').length;
+        const wordsWithAudio = deck.words.filter(w => w.audio_file && w.audio_file.trim() !== '').length;
+        
+        console.log('');
+        console.log('📊 Статистика медиа:');
+        console.log('  - Слов с изображениями:', wordsWithImage, 'из', deck.words.length);
+        console.log('  - Слов с аудио:', wordsWithAudio, 'из', deck.words.length);
+        
+        console.log('');
+        console.log('📝 ПОЛНЫЙ СПИСОК СЛОВ С МЕДИА:');
+        deck.words.forEach((word, index) => {
+          console.log(`  ${index + 1}. "${word.original_word}" -> "${word.translation}"`);
+          console.log(`     ID: ${word.id}`);
+          console.log(`     Изображение: ${word.image_file || '❌ НЕТ'}`);
+          console.log(`     Аудио: ${word.audio_file || '❌ НЕТ'}`);
+        });
+      }
+      console.log('='.repeat(80));
+
       showInfo(t.decks.generatingApkg, {
         description: t.decks.collectingApkg,
       });
 
       // Генерация .apkg файла
+      console.log('📡 Отправка запроса на бэкенд: POST /api/decks/${deck.id}/generate-apkg/');
       const { file_id } = await deckService.generateDeckApkg(deck.id);
+      console.log('✅ Бэкенд вернул file_id:', file_id);
 
       // Скачивание файла
+      console.log('📡 Скаивание файла: GET /api/decks/download/${file_id}/');
       const blob = await deckService.downloadDeck(file_id);
 
       // 🔍 ДИАГНОСТИКА: Проверяем размер файла
       const sizeMB = blob.size / 1024 / 1024;
-      console.log(`📦 Размер .apkg файла: ${sizeMB.toFixed(2)} MB (${blob.size} bytes)`);
+      const sizeKB = blob.size / 1024;
+      console.log('');
+      console.log('📦 РЕЗУЛЬТАТ:');
+      console.log(`  - Размер файла: ${sizeKB.toFixed(2)} KB (${sizeMB.toFixed(2)} MB, ${blob.size} bytes)`);
+      console.log(`  - Тип файла: ${blob.type}`);
       
-      if (sizeMB < 1) {
-        console.warn('⚠️ ВНИМАНИЕ: Размер файла слишком мал! Медиафайлы могут отсутствовать.');
-        console.log('🔍 Проверка колоды:');
-        console.log('  - Название колоды:', deck.name);
-        console.log('  - Количество слов:', deck.words?.length || 0);
+      if (sizeKB < 100) {
+        console.error('');
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: Размер файла слишком мал!');
+        console.error('   Ожидаемый размер для колоды с медиа: минимум 500 KB - 5 MB');
+        console.error(`   Текущий размер: ${sizeKB.toFixed(2)} KB`);
+        console.error('');
+        console.error('🔍 ДИАГНОСТИКА ПРОБЛЕМЫ:');
         
         if (deck.words && deck.words.length > 0) {
-          const wordsWithImage = deck.words.filter(w => w.image_file).length;
-          const wordsWithAudio = deck.words.filter(w => w.audio_file).length;
+          const wordsWithImage = deck.words.filter(w => w.image_file && w.image_file.trim() !== '').length;
+          const wordsWithAudio = deck.words.filter(w => w.audio_file && w.audio_file.trim() !== '').length;
           
-          console.log('  - Слов с изображениями:', wordsWithImage, 'из', deck.words.length);
-          console.log('  - Слов с аудио:', wordsWithAudio, 'из', deck.words.length);
+          console.error(`   - Слов с изображениями во фронтенде: ${wordsWithImage} из ${deck.words.length}`);
+          console.error(`   - Слов с аудио во фронтенде: ${wordsWithAudio} из ${deck.words.length}`);
           
-          if (wordsWithImage === 0 && wordsWithAudio === 0) {
-            console.error('❌ ПРОБЛЕМА: В словах колоды НЕТ медиафайлов!');
-            console.log('💡 Решение: Сгенерируйте медиа для слов перед экспортом .apkg');
+          if (wordsWithImage > 0 || wordsWithAudio > 0) {
+            console.error('');
+            console.error('   ⚠️ Медиа-файлы ЕСТЬ во фронтенде, но НЕТ в .apkg!');
+            console.error('   ❌ ПРОБЛЕМА НА БЭКЕНДЕ: Бэкенд не упаковывает медиа в .apkg файл');
+            console.error('');
+            console.error('   💡 РЕШЕНИЕ:');
+            console.error('      1. Проверьте Django бэкенд: функцию generate_apkg()');
+            console.error('      2. Убедитесь, что медиа-файлы копируются в .apkg архив');
+            console.error('      3. Проверьте пути к медиа-файлам на сервере');
+            console.error('      4. Проверьте логи Django на наличие ошибок');
           } else {
-            // Показываем примеры URL
-            const wordWithMedia = deck.words.find(w => w.image_file || w.audio_file);
-            if (wordWithMedia) {
-              console.log('  - Пример слова с медиа:', wordWithMedia.original_word);
-              console.log('    - image_file:', wordWithMedia.image_file);
-              console.log('    - audio_file:', wordWithMedia.audio_file);
-            }
+            console.error('');
+            console.error('   ⚠️ Медиа-файлов НЕТ во фронтенде');
+            console.error('   💡 Сгенерируйте медиа для слов перед экспортом .apkg');
           }
         }
+        console.error('');
+        console.error('='.repeat(80));
+      } else {
+        console.log('✅ Размер файла в норме - медиа, вероятно, включены');
       }
 
       const url = window.URL.createObjectURL(blob);
@@ -620,6 +790,65 @@ const DeckEditorPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Таблица слов */}
+      <div className="mb-6">
+        <WordsTable
+          words={deck.words}
+          deckId={deck.id}
+          onDeleteWord={handleDeleteWord}
+          onRegenerateImage={handleRegenerateImage}
+          onRegenerateAudio={handleRegenerateAudio}
+          onDeleteImage={handleDeleteImage}
+          onDeleteAudio={handleDeleteAudio}
+          onMoveCardToDeck={handleMoveCardToDeck}
+          onInvertWord={handleInvertWord}
+          onCreateEmptyCard={handleCreateEmptyCard}
+          onWordUpdate={handleWordUpdate}
+          allDecks={allDecks.filter(d => d.id !== deck.id)}
+          targetLang={getLanguageName(deck.target_lang)}
+          sourceLang={getLanguageName(deck.source_lang)}
+        />
+      </div>
+
+      {/* Форма добавления слов */}
+      <div className="mb-6">
+        <SmartWordInput
+          targetLang={deck.target_lang}
+          sourceLang={deck.source_lang}
+          onAddWords={handleAddWords}
+          showChipsInput={true}
+        />
+      </div>
+
+      {/* Превью добавленных слов (показываем только если есть слова в буфере) */}
+      {pendingWords.length > 0 && (
+        <div className="mb-6">
+          <Card className="p-6">
+            <h3 className="mb-4 flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-purple-500" />
+              {t.decks.wordsToAdd || 'Слова для добавления'} ({pendingWords.length})
+            </h3>
+            <div className="grid gap-3">
+              {pendingWords.map((pair, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between rounded-lg border border-purple-200 bg-purple-50/50 p-3 dark:border-purple-800 dark:bg-purple-950/20"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium text-purple-900 dark:text-purple-100">
+                      {pair.word}
+                    </div>
+                    <div className="text-sm text-purple-700 dark:text-purple-300">
+                      {pair.translation}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Настройки медиа + кнопка генерации (показываем только если есть слова в буфере) */}
       {pendingWords.length > 0 && (
         <>
@@ -628,9 +857,13 @@ const DeckEditorPage: React.FC = () => {
               generateImages={generateImages}
               generateAudio={generateAudio}
               imageStyle={imageStyle}
+              imageProvider={imageProvider}
+              audioProvider={audioProvider}
               onGenerateImagesChange={setGenerateImages}
               onGenerateAudioChange={setGenerateAudio}
               onImageStyleChange={setImageStyle}
+              onImageProviderChange={setImageProvider}
+              onAudioProviderChange={setAudioProvider}
               disabled={isGenerating}
             />
           </div>
@@ -667,32 +900,6 @@ const DeckEditorPage: React.FC = () => {
           </div>
         </>
       )}
-
-      {/* Таблица слов */}
-      <div className="mb-6">
-        <WordsTable
-          words={deck.words}
-          deckId={deck.id}
-          onDeleteWord={handleDeleteWord}
-          onRegenerateImage={handleRegenerateImage}
-          onRegenerateAudio={handleRegenerateAudio}
-          onMoveCardToDeck={handleMoveCardToDeck}
-          onWordUpdate={handleWordUpdate}
-          allDecks={allDecks.filter(d => d.id !== deck.id)}
-          targetLang={getLanguageName(deck.target_lang)}
-          sourceLang={getLanguageName(deck.source_lang)}
-        />
-      </div>
-
-      {/* Форма добавления слов */}
-      <div className="mb-6">
-        <SmartWordInput
-          targetLang={deck.target_lang}
-          sourceLang={deck.source_lang}
-          onAddWords={handleAddWords}
-          showChipsInput={true}
-        />
-      </div>
 
       {/* Кнопка экспорта .apkg (внизу, после списка слов) */}
       {deck.words && deck.words.length > 0 && (

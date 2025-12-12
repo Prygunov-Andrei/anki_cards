@@ -29,9 +29,9 @@ export const WordInput: React.FC<WordInputProps> = ({
   const parseWords = (text: string): string[] => {
     if (!text.trim()) return [];
 
-    // Разделяем по запятым или переносам строки
+    // Разделяем по точкам с запятой или переносам строки
     const words = text
-      .split(/[,\n]+/)
+      .split(/[;\n]+/)
       .map((word) => word.trim())
       .filter((word) => word.length > 0);
 
@@ -92,13 +92,13 @@ export const WordInput: React.FC<WordInputProps> = ({
           onChange={handleChange}
           onBlur={handleBlur}
           disabled={disabled}
-          placeholder="Введите слова через запятую или с новой строки&#10;Например:&#10;hello&#10;world&#10;или: hello, world, test"
+          placeholder="Введите слова через точку с запятой или с новой строки&#10;Например:&#10;hello&#10;world&#10;или: hello; world; test"
           className="min-h-[160px] resize-none"
         />
 
         {/* Подсказка */}
         <p className="text-xs text-muted-foreground">
-          💡 Слова можно разделять запятыми или переносом строки
+          💡 Слова можно разделять точкой с запятой или переносом строки
         </p>
       </div>
     </Card>

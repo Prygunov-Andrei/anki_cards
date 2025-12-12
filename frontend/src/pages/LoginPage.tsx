@@ -8,6 +8,8 @@ import { useAuthContext } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import authService from '../services/authService';
 import { showSuccess, showError } from '../utils/toast-helpers';
+
+// Логотипы из папки public (абсолютные пути)
 const logoLight = '/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
 const logoDark = '/8438de77d51aa44238d74565f4aecffecf7eb633.png';
 
@@ -105,25 +107,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-4">
         <Card className="p-8 space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-20 h-20 mx-auto flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-xl">
+            <div className="w-20 h-20 mx-auto flex items-center justify-center">
               <img 
                 src={isDark ? logoDark : logoLight} 
                 alt="ANKI Generator Logo" 
-                className="w-full h-full rounded-xl object-contain shadow-lg"
-                onError={(e) => {
-                  console.error('Logo load error:', e.currentTarget.src);
-                  console.error('Trying fallback...');
-                  // Fallback: try the other logo
-                  const fallbackSrc = isDark ? logoLight : logoDark;
-                  if (e.currentTarget.src !== fallbackSrc) {
-                    e.currentTarget.src = fallbackSrc;
-                  } else {
-                    console.error('Both logos failed to load');
-                  }
-                }}
-                onLoad={() => {
-                  console.log('Logo loaded successfully:', isDark ? logoDark : logoLight);
-                }}
+                className="w-full h-full rounded-xl object-cover shadow-lg"
               />
             </div>
           </div>

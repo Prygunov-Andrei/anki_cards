@@ -159,8 +159,13 @@ class Deck(models.Model):
     """Модель колоды карточек"""
     
     LANGUAGE_CHOICES = [
+        ('ru', 'Русский'),
+        ('en', 'English'),
         ('pt', 'Португальский'),
         ('de', 'Немецкий'),
+        ('es', 'Испанский'),
+        ('fr', 'Французский'),
+        ('it', 'Итальянский'),
     ]
     
     NATIVE_LANGUAGE_CHOICES = [
@@ -168,6 +173,9 @@ class Deck(models.Model):
         ('en', 'English'),
         ('pt', 'Português'),
         ('de', 'Deutsch'),
+        ('es', 'Español'),
+        ('fr', 'Français'),
+        ('it', 'Italiano'),
     ]
     
     user = models.ForeignKey(

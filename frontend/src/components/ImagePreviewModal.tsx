@@ -2,11 +2,14 @@ import React from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from './ui/dialog';
+import { X } from 'lucide-react';
+import { Button } from './ui/button';
 import { getAbsoluteUrl } from '../utils/url-helpers';
+import { displayWord } from '../utils/helpers';
 
 interface ImagePreviewModalProps {
   isOpen: boolean;
@@ -35,9 +38,9 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
       <DialogContent className="max-w-4xl p-0">
         {/* Заголовок */}
         <DialogHeader className="border-b p-4">
-          <DialogTitle className="text-xl">{word}</DialogTitle>
+          <DialogTitle className="text-xl">{displayWord(word)}</DialogTitle>
           <DialogDescription className="sr-only">
-            Предпросмотр изображения для слова {word}
+            Предпросмотр изображения для слова {displayWord(word)}
           </DialogDescription>
           {translation && (
             <p className="mt-1 text-sm text-muted-foreground">
@@ -50,7 +53,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
         <div className="relative flex items-center justify-center bg-gradient-to-br from-cyan-50 to-pink-50 p-8">
           <img
             src={absoluteImageUrl}
-            alt={word}
+            alt={displayWord(word)}
             className="max-h-[70vh] w-full rounded-lg object-contain shadow-lg"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
@@ -58,6 +61,16 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             }}
           />
         </div>
+
+        {/* Кнопка закрытия */}
+        <Button
+          variant="destructive"
+          className="absolute top-4 right-4"
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" />
+          <span className="sr-only">Закрыть</span>
+        </Button>
       </DialogContent>
     </Dialog>
   );

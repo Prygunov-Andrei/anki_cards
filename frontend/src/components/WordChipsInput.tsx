@@ -21,7 +21,7 @@ interface WordChipsInputProps {
 /**
  * Компонент WordChipsInput - ввод слов с тегами (chips)
  * Особенности:
- * - Создание тега по Enter или запятой
+ * - Создание тега по Enter или точке с запятой
  * - Редактирование по двойному клику
  * - Валидация странных символов
  * - iOS 25 стиль
@@ -87,8 +87,8 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
   };
 
   /**
-   * Добавление нового слова (или нескольких слов, разделенных запятой)
-   * Умное разбиение: запятые внутри скобок игнорируются
+   * Добавление нового слова (или нескольких слов, разделенных точкой с запятой)
+   * Умное разбиение: точки с запятой внутри скобок игнорируются
    * Поддержка переносов строк как разделителей
    */
   const addWord = (word: string) => {
@@ -99,7 +99,7 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
     // Сначала разбиваем по переносам строк
     const lines = trimmed.split(/[\n\r]+/).map(line => line.trim()).filter(line => line.length > 0);
     
-    // Затем каждую строку разбиваем по запятым (с учётом скобок)
+    // Затем каждую строку разбиваем по точкам с запятой (с учётом скобок)
     const wordsToAdd: string[] = [];
     
     for (const line of lines) {
@@ -115,8 +115,8 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
         } else if (char === ')' || char === ']' || char === '}') {
           depth--;
           currentWord += char;
-        } else if (char === ',' && depth === 0) {
-          // Запятая вне скобок - это разделитель
+        } else if (char === ';' && depth === 0) {
+          // Точка с запятой вне скобок - это разделитель
           const cleaned = currentWord.trim();
           if (cleaned && !words.includes(cleaned) && !wordsToAdd.includes(cleaned)) {
             wordsToAdd.push(cleaned);
@@ -146,8 +146,8 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (disabled) return;
 
-    // Enter или запятая - добавить слово
-    if (e.key === 'Enter' || e.key === ',') {
+    // Enter или точка с запятой - добавить слово
+    if (e.key === 'Enter' || e.key === ';') {
       e.preventDefault();
       addWord(inputValue);
     }
@@ -173,8 +173,8 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedText = e.clipboardData.getData('text');
     
-    // Если вставленный текст содержит запятые или переносы строк, обрабатываем его специально
-    if (pastedText.includes(',') || pastedText.includes('\n') || pastedText.includes('\r')) {
+    // Если вставленный текст содержит точки с запятой или переносы строк, обрабатываем его специально
+    if (pastedText.includes(';') || pastedText.includes('\n') || pastedText.includes('\r')) {
       e.preventDefault();
       addWord(inputValue + pastedText); // Добавляем к существующему тексту
     }
@@ -278,7 +278,8 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
                     onKeyDown={handleEditKeyDown}
                     onBlur={finishEditing}
                     autoFocus
-                    className="w-20 bg-transparent outline-none"
+                    className="min-w-[80px] max-w-[400px] bg-transparent outline-none"
+                    style={{ width: `${Math.max(80, editValue.length * 8 + 20)}px` }}
                     disabled={disabled}
                   />
                 ) : (

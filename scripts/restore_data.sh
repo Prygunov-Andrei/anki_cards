@@ -40,10 +40,10 @@ echo -e "${BLUE}   Архив: $BACKUP_ARCHIVE${NC}"
 echo ""
 
 # Проверка, запущен ли Docker Compose
-if ! docker-compose ps | grep -q "Up"; then
+if ! docker compose ps | grep -q "Up"; then
     echo -e "${YELLOW}⚠️  Docker Compose контейнеры не запущены${NC}"
     echo -e "${YELLOW}   Запускаю контейнеры...${NC}"
-    docker-compose up -d
+    docker compose up -d
     sleep 5
 fi
 
@@ -93,17 +93,17 @@ fi
 # Применение миграций (на всякий случай)
 echo ""
 echo -e "${BLUE}🔄 Применение миграций...${NC}"
-docker-compose exec -T backend python manage.py migrate --noinput
+docker compose exec -T backend python manage.py migrate --noinput
 
 # Импорт данных
 echo ""
 echo -e "${BLUE}📥 Импорт данных в базу данных...${NC}"
 
 # Копируем data.json в контейнер
-docker cp "$TEMP_DIR/$BACKUP_NAME/data.json" "$(docker-compose ps -q backend):/tmp/data.json"
+docker cp "$TEMP_DIR/$BACKUP_NAME/data.json" "$(docker compose ps -q backend):/tmp/data.json"
 
 # Импортируем данные
-docker-compose exec -T backend python manage.py loaddata /tmp/data.json
+docker compose exec -T backend python manage.py loaddata /tmp/data.json
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Данные успешно импортированы${NC}"
@@ -119,7 +119,7 @@ echo -e "${BLUE}📁 Копирование медиафайлов...${NC}"
 
 if [ -d "$TEMP_DIR/$BACKUP_NAME/media" ] && [ "$(ls -A $TEMP_DIR/$BACKUP_NAME/media 2>/dev/null)" ]; then
     # Копируем медиафайлы в контейнер
-    docker cp "$TEMP_DIR/$BACKUP_NAME/media/." "$(docker-compose ps -q backend):/app/media/"
+    docker cp "$TEMP_DIR/$BACKUP_NAME/media/." "$(docker compose ps -q backend):/app/media/"
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Медиафайлы успешно скопированы${NC}"
@@ -138,7 +138,7 @@ rm -rf "$TEMP_DIR"
 # Сборка статики (на всякий случай)
 echo ""
 echo -e "${BLUE}🎨 Сборка статических файлов...${NC}"
-docker-compose exec -T backend python manage.py collectstatic --noinput
+docker compose exec -T backend python manage.py collectstatic --noinput
 
 echo ""
 echo -e "${GREEN}✨ Восстановление данных завершено!${NC}"

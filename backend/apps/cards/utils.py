@@ -86,6 +86,14 @@ def generate_apkg(
         original_word = word_data.get('original_word', '')
         translation = word_data.get('translation', '')
         
+        # Если это пустая карточка (начинается с '_empty_'), показываем пустую строку
+        # В базе хранится '_empty_{word_id}', но для карточки нужно показать пустую строку
+        display_word = ''
+        if original_word.startswith('_empty_'):
+            display_word = ''
+        else:
+            display_word = original_word
+        
         # Формируем поля для карточки
         audio_field = ''
         if word_data.get('audio_file'):
@@ -101,7 +109,7 @@ def generate_apkg(
         note = Note(
             model=model,
             fields=[
-                original_word,
+                display_word,  # Используем display_word вместо original_word
                 translation,
                 audio_field,
                 image_field
@@ -202,28 +210,28 @@ def generate_apkg(
 
 def parse_words_input(text: str) -> List[str]:
     """
-    Умный парсинг ввода слов: разбивает строку по запятым/переносам,
+    Умный парсинг ввода слов: разбивает строку по точкам с запятой/переносам,
     определяет словосочетания (по заглавной букве), чистит мусор.
     
     Args:
-        text: Строка с вводом слов (через запятую, с переносами строк)
+        text: Строка с вводом слов (через точку с запятой, с переносами строк)
     
     Returns:
         Список слов/словосочетаний (очищенных от лишних символов)
     
     Примеры:
-        "casa, tempo, vida" -> ["casa", "tempo", "vida"]
-        "casa, Carro novo, vida" -> ["casa", "Carro novo", "vida"]
+        "casa; tempo; vida" -> ["casa", "tempo", "vida"]
+        "casa; Carro novo; vida" -> ["casa", "Carro novo", "vida"]
         "casa\ntempo\nvida" -> ["casa", "tempo", "vida"]
     """
     if not text or not text.strip():
         return []
     
-    # Заменяем переносы строк на запятые для единообразной обработки
-    text = text.replace('\n', ',').replace('\r', ',')
+    # Заменяем переносы строк на точку с запятой для единообразной обработки
+    text = text.replace('\n', ';').replace('\r', ';')
     
-    # Разбиваем по запятым
-    parts = text.split(',')
+    # Разбиваем по точкам с запятой
+    parts = text.split(';')
     
     words = []
     
@@ -238,20 +246,9 @@ def parse_words_input(text: str) -> List[str]:
         if not part:
             continue
         
-        # Если слово начинается с заглавной буквы и предыдущее слово тоже с заглавной,
-        # это может быть продолжение словосочетания
-        if part[0].isupper() and words:
-            prev_word = words[-1]
-            # Объединяем только если предыдущее слово тоже с заглавной и короткое (вероятно часть фразы)
-            if prev_word and prev_word[0].isupper() and len(prev_word.split()) == 1:
-                # Объединяем с предыдущим словом
-                words[-1] = f"{prev_word} {part}"
-            else:
-                # Отдельное слово/словосочетание
-                words.append(part)
-        else:
-            # Обычное слово
-            words.append(part)
+        # Добавляем слово как есть (не объединяем автоматически)
+        # Если слова разделены точкой с запятой, они уже правильно разделены
+        words.append(part)
     
     # Очищаем от лишних пробелов и пустых строк
     words = [w.strip() for w in words if w.strip()]

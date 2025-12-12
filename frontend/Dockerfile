@@ -17,7 +17,7 @@ RUN npm run build
 # Stage 2: Production (Nginx)
 FROM nginx:alpine
 
-# Копирование собранных файлов из builder
+# Копирование собранных файлов из builder (Vite настроен на build/)
 COPY --from=builder /app/build /usr/share/nginx/html
 
 # Копирование конфигурации Nginx

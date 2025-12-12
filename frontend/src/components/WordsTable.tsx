@@ -17,6 +17,7 @@ import { Card } from './ui/card';
 import { BookOpen } from 'lucide-react';
 import { getAbsoluteUrl } from '../utils/url-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
+import { displayWord } from '../utils/helpers';
 
 interface WordsTableProps {
   words?: Word[]; // Может быть undefined при загрузке
@@ -24,7 +25,11 @@ interface WordsTableProps {
   onDeleteWord: (wordId: number) => Promise<void>;
   onRegenerateImage?: (wordId: number, word: string, translation: string) => Promise<void>;
   onRegenerateAudio?: (wordId: number, word: string) => Promise<void>;
+  onDeleteImage?: (wordId: number) => Promise<void>;
+  onDeleteAudio?: (wordId: number) => Promise<void>;
   onMoveCardToDeck?: (wordId: number, toDeckId: number, toDeckName: string) => Promise<void>;
+  onInvertWord?: (wordId: number) => Promise<void>;
+  onCreateEmptyCard?: (wordId: number) => Promise<void>;
   onWordUpdate?: (wordId: number, data: { original_word?: string; translation?: string }) => Promise<void>;
   allDecks?: Deck[]; // Список всех колод пользователя
   targetLang: string;
@@ -43,7 +48,11 @@ export const WordsTable: React.FC<WordsTableProps> = ({
   onDeleteWord,
   onRegenerateImage,
   onRegenerateAudio,
+  onDeleteImage,
+  onDeleteAudio,
   onMoveCardToDeck,
+  onInvertWord,
+  onCreateEmptyCard,
   onWordUpdate,
   allDecks,
   targetLang,
@@ -128,10 +137,38 @@ export const WordsTable: React.FC<WordsTableProps> = ({
                     }
                   : undefined
               }
+              onDeleteImage={
+                onDeleteImage
+                  ? async () => {
+                      await onDeleteImage(word.id);
+                    }
+                  : undefined
+              }
+              onDeleteAudio={
+                onDeleteAudio
+                  ? async () => {
+                      await onDeleteAudio(word.id);
+                    }
+                  : undefined
+              }
               onMoveToDeck={
                 onMoveCardToDeck && allDecks
                   ? async (toDeckId: number, toDeckName: string) => {
                       await onMoveCardToDeck(word.id, toDeckId, toDeckName);
+                    }
+                  : undefined
+              }
+              onInvertWord={
+                onInvertWord
+                  ? async () => {
+                      await onInvertWord(word.id);
+                    }
+                  : undefined
+              }
+              onCreateEmptyCard={
+                onCreateEmptyCard
+                  ? async () => {
+                      await onCreateEmptyCard(word.id);
                     }
                   : undefined
               }

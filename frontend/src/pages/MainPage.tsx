@@ -9,6 +9,7 @@ import { GeneratedWordsGrid } from '../components/GeneratedWordsGrid';
 import { InsufficientTokensModal } from '../components/InsufficientTokensModal';
 import { ImageStyleSelector, ImageStyle } from '../components/ImageStyleSelector';
 import { ImageProviderDropdown } from '../components/ImageProviderDropdown';
+import { AudioProviderDropdown } from '../components/AudioProviderDropdown';
 import { GenerationProgress, GenerationStatus } from '../components/GenerationProgress';
 import { GenerationSuccess } from '../components/GenerationSuccess';
 import { useTokenContext } from '../contexts/TokenContext';
@@ -42,6 +43,7 @@ export default function MainPage() {
   const [generateAudio, setGenerateAudio] = useState(true);
   const [imageStyle, setImageStyle] = useState<ImageStyle>('balanced');
   const [imageProvider, setImageProvider] = useState<'auto' | 'openai' | 'gemini' | 'nano-banana'>('auto');
+  const [audioProvider, setAudioProvider] = useState<'auto' | 'openai' | 'gtts'>('auto');
   const [geminiModel, setGeminiModel] = useState<GeminiModel>('gemini-2.5-flash-image');
 
   // Состояния UI
@@ -114,7 +116,7 @@ export default function MainPage() {
       if (addedWords.length > 0) {
         try {
           // Фильтруем слова: пропускаем те, что уже содержат скобки
-          // (формы глаголов, указанные артикли)
+          // (формы глаголов, указанны артикли)
           // И пропускаем словосочетания/предложения (более одного слова)
           const wordsToProcess = addedWords.filter((word) => {
             // Пропускаем слова со скобками
@@ -184,6 +186,7 @@ export default function MainPage() {
 
   /**
    * Автоперевод слов
+   * С механизмом повторных попыток для непереведенных слов
    */
   const handleAutoTranslate = async () => {
     if (words.length === 0) {
@@ -201,13 +204,16 @@ export default function MainPage() {
       return;
     }
 
+    console.log('📤 Отправляем на перевод:', wordsToTranslate);
+    console.log('📊 Длины слов:', wordsToTranslate.map(w => `"${w}": ${w.length} символов`));
+
     setIsTranslating(true);
     showInfo(t.toast.autoTranslating, {
       description: `${t.toast.translatingWords} ${wordsToTranslate.length} ${wordsToTranslate.length === 1 ? t.toast.word : t.toast.words}...`,
     });
 
     try {
-      // Вызываем API для перевода
+      // Первая попытка перевода всех слов
       const translatedWords = await deckService.translateWords({
         words: wordsToTranslate,
         source_language: targetLang,
@@ -216,18 +222,24 @@ export default function MainPage() {
 
       // API возвращает {translations: {...}}, поэтому используем translatedWords.translations
       const translationsDict = translatedWords.translations || {};
+      
+      console.log('📥 Получили переводы:', translationsDict);
+      console.log('📊 Количество переводов:', Object.keys(translationsDict).length);
 
-      // Обновляем переводы
-      const updatedTranslations = translations.map((pair) => {
+      // Обновляем переводы после первой попытки
+      let updatedTranslations = translations.map((pair) => {
         if (!pair.translation.trim()) {
-          // Ищем перевод по плному ключу
+          // Ищем перевод по полному ключу
           let translation = translationsDict[pair.word];
+          
+          console.log(`🔍 Ищем перевод для "${pair.word}":`, translation ? `найдено "${translation}"` : 'не найдено');
           
           // Если не нашли, пробуем найти по ключу без скобок
           // Например: "rennen (rannte / gerant)" -> "rennen"
           if (!translation && pair.word.includes('(')) {
             const wordWithoutParens = pair.word.split('(')[0].trim();
             translation = translationsDict[wordWithoutParens];
+            console.log(`🔍 Попытка без скобок "${wordWithoutParens}":`, translation ? `найдено "${translation}"` : 'не найдено');
           }
           
           if (translation) {
@@ -237,11 +249,84 @@ export default function MainPage() {
         return pair;
       });
 
+      // Проверяем какие слова остались непереведенными
+      const untranslatedWords = updatedTranslations
+        .filter((pair) => !pair.translation.trim())
+        .map((pair) => pair.word);
+
+      // Если есть непереведенные слова, делаем повторную попытку
+      if (untranslatedWords.length > 0) {
+        console.log(`🔄 Повторная попытка перевода ${untranslatedWords.length} слов:`, untranslatedWords);
+        console.log('📊 Длины непереведенных слов:', untranslatedWords.map(w => `"${w}": ${w.length} символов`));
+        
+        try {
+          const retryResult = await deckService.translateWords({
+            words: untranslatedWords,
+            source_language: targetLang,
+            target_language: sourceLang,
+          });
+
+          const retryTranslationsDict = retryResult.translations || {};
+          
+          console.log('📥 Получили переводы при retry:', retryTranslationsDict);
+          console.log('🔑 Ключи в ответе:', Object.keys(retryTranslationsDict));
+
+          // Обновляем переводы после повторной попытки
+          updatedTranslations = updatedTranslations.map((pair) => {
+            if (!pair.translation.trim()) {
+              // Ищем перевод по полному ключу
+              let translation = retryTranslationsDict[pair.word];
+              
+              // Если не нашли, пробуем найти по ключу без скобок
+              if (!translation && pair.word.includes('(')) {
+                const wordWithoutParens = pair.word.split('(')[0].trim();
+                translation = retryTranslationsDict[wordWithoutParens];
+              }
+              
+              // 🆕 НОВАЯ ЛОГИКА: Backend может вернуть объединенные слова через запятую
+              // Например: "Da kann ich mich ganz nach Ihne, richten" 
+              if (!translation) {
+                // Ищем ключи которые содержат наше слово
+                for (const [key, value] of Object.entries(retryTranslationsDict)) {
+                  // Проверяем содержится ли наше слово в ключе
+                  if (key.includes(pair.word)) {
+                    translation = value as string;
+                    console.log(`✅ Найден перевод в составном ключе: "${key}" -> "${translation}"`);
+                    break;
+                  }
+                }
+              }
+              
+              if (translation) {
+                console.log(`✅ Перевод найден при повторной попытке: ${pair.word} -> ${translation}`);
+                return { ...pair, translation };
+              } else {
+                console.warn(`⚠️ Слово не удалось перевести после повторной попытки: ${pair.word}`);
+              }
+            }
+            return pair;
+          });
+        } catch (retryError) {
+          console.error('Error during retry translation:', retryError);
+          // Продолжаем с переводами которые удалось получить при первой попытке
+        }
+      }
+
       setTranslations(updatedTranslations);
 
+      // Подсчитываем переведенные слова для уведомления
+      const translatedCount = wordsToTranslate.length - updatedTranslations.filter((pair) => !pair.translation.trim()).length;
+
       showSuccess(t.toast.wordsTranslated, {
-        description: `${t.toast.translated} ${wordsToTranslate.length} ${wordsToTranslate.length === 1 ? t.toast.word : t.toast.words}`,
+        description: `${t.toast.translated} ${translatedCount} ${translatedCount === 1 ? t.toast.word : t.toast.words}`,
       });
+
+      // Предупреждаем о непереведенных словах
+      const finalUntranslated = updatedTranslations.filter((pair) => !pair.translation.trim());
+      if (finalUntranslated.length > 0) {
+        console.warn(`⚠️ Не удалось перевести ${finalUntranslated.length} слов:`, finalUntranslated.map(p => p.word));
+      }
+
     } catch (error) {
       console.error('Error auto-translating:', error);
       showError(t.toast.couldNotTranslate, {
@@ -303,9 +388,12 @@ export default function MainPage() {
         description: `Создаём новое аудио для "${word}"`,
       });
 
+      const provider = audioProvider === 'auto' ? undefined : audioProvider;
+
       const { audio_url } = await deckService.generateAudio({
         word: pair.word,
         language: targetLang,
+        provider, // Используем выбранный провайдер
       });
 
       // Преобразуем в абсолютный URL и сохраняем в state для предпросмотра
@@ -522,9 +610,12 @@ export default function MainPage() {
               setTimeout(() => reject(new Error('Audio generation timeout')), 45000);
             });
 
+            const provider = audioProvider === 'auto' ? undefined : audioProvider;
+
             const audioPromise = deckService.generateAudio({
               word: pair.word,
               language: targetLang,
+              provider, // Используем выбранный провайдер
             }, controller.signal);
 
             const { audio_url } = await Promise.race([audioPromise, timeoutPromise]);
@@ -652,9 +743,12 @@ export default function MainPage() {
                 setTimeout(() => reject(new Error('Audio generation timeout')), 45000);
               });
 
+              const provider = audioProvider === 'auto' ? undefined : audioProvider;
+
               const audioPromise = deckService.generateAudio({
                 word: pair.word,
                 language: targetLang,
+                provider, // Используем выбранный провайдер
               }, controller.signal);
 
               const { audio_url } = await Promise.race([audioPromise, timeoutPromise]);
@@ -794,37 +888,93 @@ export default function MainPage() {
           // Получаем созданную колоду со словами
           const createdDeck = await deckService.getDeck(deck_id);
           
+          // 🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА: Что бэкенд реально создал?
+          console.log('');
+          console.log('='.repeat(80));
+          console.log('🔍 ДИАГНОСТИКА: ЧТО СОЗДАЛ БЭКЕНД?');
+          console.log('='.repeat(80));
+          console.log('📦 Созданная колода:');
+          console.log('  - ID:', createdDeck.id);
+          console.log('  - Название:', createdDeck.name);
+          console.log('  - Количество слов (words_count):', createdDeck.words_count);
+          console.log('  - Реальное количество слов в массиве:', createdDeck.words?.length || 0);
+          console.log('');
+          console.log('📝 СПИСОК СЛОВ В СОЗДАННОЙ КОЛОДЕ:');
+          
+          if (createdDeck.words && createdDeck.words.length > 0) {
+            createdDeck.words.forEach((word, index) => {
+              console.log(`  ${index + 1}. "${word.original_word}" -> "${word.translation}"`);
+              console.log(`     ID: ${word.id}`);
+              console.log(`     Изображение: ${word.image_file || '❌ НЕТ'}`);
+              console.log(`     Аудио: ${word.audio_file || '❌ НЕТ'}`);
+            });
+          } else {
+            console.error('  ❌ КРИТИЧЕСКАЯ ОШИБКА: СЛОВ НЕТ В КОЛОДЕ!');
+          }
+          
+          console.log('');
+          console.log('📋 СРАВНЕНИЕ С ТЕМ, ЧТО МЫ ОТПРАВЛЯЛИ:');
+          console.log('  - Мы отправили слов:', translations.length);
+          console.log('  - Бэкенд создал слов:', createdDeck.words?.length || 0);
+          console.log('  - Наши слова:', translations.map(t => t.word));
+          console.log('  - Слова в колоде:', createdDeck.words?.map(w => w.original_word) || []);
+          console.log('');
+          console.log('📋 МЕДИА ДЛЯ ПРИВЯЗКИ (что мы хотим привязать):');
+          console.log('  - image_files:', imageFiles);
+          console.log('  - audio_files:', audioFiles);
+          console.log('='.repeat(80));
+          console.log('');
+          
           if (createdDeck.words && createdDeck.words.length > 0) {
             let attachedCount = 0;
+            
+            console.log('🔗 Начинаем привязку медиа...');
             
             // Для каждого слова обновляем медиа
             for (const word of createdDeck.words) {
               const mediaUpdates: { image_file?: string; audio_file?: string } = {};
               
+              console.log(`\n  🔍 Обрабатываем слово: "${word.original_word}"`);
+              
               // Проверяем наличие изображения для этого слова
               if (imageFiles[word.original_word]) {
                 mediaUpdates.image_file = imageFiles[word.original_word];
+                console.log(`    ✅ Найдено изображение: ${mediaUpdates.image_file}`);
+              } else {
+                console.log(`    ❌ Изображение НЕ найдено для ключа: "${word.original_word}"`);
+                console.log(`    📋 Доступные ключи изображений:`, Object.keys(imageFiles));
               }
               
               // Проверяем наличие аудио для этого слова
               if (audioFiles[word.original_word]) {
                 mediaUpdates.audio_file = audioFiles[word.original_word];
+                console.log(`    ✅ Найдено аудио: ${mediaUpdates.audio_file}`);
+              } else {
+                console.log(`    ❌ Аудио НЕ найдено для ключа: "${word.original_word}"`);
+                console.log(`    📋 Доступные ключи аудио:`, Object.keys(audioFiles));
               }
               
               // Обновляем медиа только если есть что обновлять
               if (Object.keys(mediaUpdates).length > 0) {
+                console.log(`    🔄 Отправляем PATCH для привязки медиа...`);
                 const result = await deckService.updateWordMedia(deck_id, word.id, mediaUpdates);
                 attachedCount++;
                 console.log(
-                  `✅ Медиа привязано к слову "${word.original_word}":`,
+                  `    ✅ Медиа привязано к слову "${word.original_word}":`,
                   result.updated_fields
                 );
+              } else {
+                console.log(`    ⚠️ Нет медиа для привязки к этому слову`);
               }
             }
             
             if (attachedCount > 0) {
-              console.log(`🎉 Всего привязано медиа к ${attachedCount} словам в колоде`);
+              console.log(`\n🎉 Всего привязано медиа к ${attachedCount} словам в колоде`);
+            } else {
+              console.error('\n❌ ОШИБКА: Ни одно медиа НЕ было привязано!');
             }
+          } else {
+            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: В колоде НЕТ СЛОВ для привязки медиа!');
           }
         } catch (error) {
           console.error('❌ Ошибка привязки медиа к сохранённой колоде:', error);
@@ -843,7 +993,7 @@ export default function MainPage() {
       if (sizeMB < 1) {
         console.warn('⚠️ ВНИМАНИЕ: Размер файла слишком мал! Медиафайлы могут отсутствовать.');
         console.log('🔍 Проверка медиафайлов:');
-        console.log('  - generatedImages:', Object.keys(generatedImages).length, 'файлов');
+        console.log('  - generatedImages:', Object.keys(generatedImages).length, 'файло��');
         console.log('  - generatedAudio:', Object.keys(generatedAudio).length, 'файлов');
         console.log('  - Примеры URL изображений:', Object.values(generatedImages).slice(0, 2));
         console.log('  - Примеры URL аудио:', Object.values(generatedAudio).slice(0, 2));
@@ -1050,6 +1200,17 @@ export default function MainPage() {
                   <ImageProviderDropdown
                     value={imageProvider}
                     onChange={setImageProvider}
+                    disabled={isGenerating}
+                  />
+                </div>
+              )}
+              
+              {/* Селектор провайдера аудио */}
+              {generateAudio && (
+                <div className="pt-2 space-y-4">
+                  <AudioProviderDropdown
+                    value={audioProvider}
+                    onChange={setAudioProvider}
                     disabled={isGenerating}
                   />
                 </div>

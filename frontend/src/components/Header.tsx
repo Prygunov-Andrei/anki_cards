@@ -19,6 +19,7 @@ import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from './ui/sheet';
 import { VisuallyHidden } from './ui/visually-hidden';
 import { TokenBalanceWidget } from './TokenBalanceWidget';
+// Логотипы из папки public (абсолютные пути)
 const logoLight = '/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
 const logoDark = '/8438de77d51aa44238d74565f4aecffecf7eb633.png';
 

@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.views.decorators.csrf import csrf_exempt
 from PIL import Image
 import os
 
@@ -49,6 +50,7 @@ def register_view(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@csrf_exempt  # Исключаем CSRF для API login (используется Token authentication)
 def login_view(request):
     """Вход пользователя"""
     serializer = UserLoginSerializer(data=request.data)

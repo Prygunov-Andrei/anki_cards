@@ -664,13 +664,13 @@ class TestWordParsing:
     """Тесты для парсинга ввода слов"""
     
     def test_parse_simple_words(self):
-        """Парсинг простых слов через запятую"""
-        result = parse_words_input("casa, tempo, vida")
+        """Парсинг простых слов через точку с запятой"""
+        result = parse_words_input("casa; tempo; vida")
         assert result == ["casa", "tempo", "vida"]
     
     def test_parse_phrases(self):
         """Парсинг словосочетаний (определение по заглавной букве)"""
-        result = parse_words_input("casa, Carro novo, vida")
+        result = parse_words_input("casa; Carro novo; vida")
         assert result == ["casa", "Carro novo", "vida"]
     
     def test_parse_with_newlines(self):
@@ -680,7 +680,7 @@ class TestWordParsing:
     
     def test_parse_mixed_case(self):
         """Парсинг смешанного регистра"""
-        result = parse_words_input("Casa, TEMPO, vida")
+        result = parse_words_input("Casa; TEMPO; vida")
         # Слова с заглавной буквы могут объединяться в словосочетания
         # Проверяем, что все слова присутствуют (возможно объединены)
         all_text = ' '.join(result).lower()
@@ -691,7 +691,7 @@ class TestWordParsing:
     
     def test_parse_with_dots(self):
         """Игнорирование точек в конце слов"""
-        result = parse_words_input("casa., tempo., vida.")
+        result = parse_words_input("casa.; tempo.; vida.")
         assert result == ["casa", "tempo", "vida"]
     
     def test_parse_empty_input(self):
@@ -707,17 +707,17 @@ class TestWordParsing:
     
     def test_parse_with_extra_spaces(self):
         """Обработка лишних пробелов (trim)"""
-        result = parse_words_input("  casa  ,  tempo  ,  vida  ")
+        result = parse_words_input("  casa  ;  tempo  ;  vida  ")
         assert result == ["casa", "tempo", "vida"]
     
     def test_parse_special_characters(self):
         """Обработка специальных символов"""
-        result = parse_words_input("casa, tempo-vida, palavra!")
+        result = parse_words_input("casa; tempo-vida; palavra!")
         assert result == ["casa", "tempo-vida", "palavra!"]
     
     def test_parse_duplicates(self):
         """Удаление дубликатов"""
-        result = parse_words_input("casa, tempo, casa, vida, tempo")
+        result = parse_words_input("casa; tempo; casa; vida; tempo")
         assert result == ["casa", "tempo", "vida"]
 
 

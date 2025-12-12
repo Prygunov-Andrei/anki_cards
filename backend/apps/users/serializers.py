@@ -107,7 +107,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'avatar', 'native_language', 'learning_language',
-            'theme', 'mode', 'preferred_language', 'image_provider', 'gemini_model', 'created_at'
+            'theme', 'mode', 'preferred_language', 'image_provider', 'gemini_model', 'audio_provider', 'created_at'
         ]
         read_only_fields = ['id', 'username', 'created_at']
     

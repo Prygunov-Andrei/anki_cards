@@ -9,8 +9,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from './ui/dropdown-menu';
-import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download } from 'lucide-react';
+import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download, Merge, ArrowLeftRight, FileText } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ru, enUS, de, es, fr, it, ptBR } from 'date-fns/locale';
 import { getAbsoluteUrl } from '../utils/url-helpers';
@@ -21,6 +24,10 @@ interface DeckCardProps {
   onEdit: (deck: Deck) => void;
   onDelete: (deck: Deck) => void;
   onGenerateApkg: (deck: Deck) => void;
+  onMerge?: (sourceDeckId: number, targetDeckId: number) => void;
+  onInvertAll?: (deck: Deck) => void;
+  onCreateEmptyCards?: (deck: Deck) => void;
+  availableDecks?: Deck[];
 }
 
 /**
@@ -31,6 +38,10 @@ export const DeckCard: React.FC<DeckCardProps> = ({
   onEdit,
   onDelete,
   onGenerateApkg,
+  onMerge,
+  onInvertAll,
+  onCreateEmptyCards,
+  availableDecks,
 }) => {
   const t = useTranslation();
   const { locale } = useLanguage();
@@ -111,6 +122,61 @@ export const DeckCard: React.FC<DeckCardProps> = ({
                   <Download className="mr-2 h-4 w-4" />
                   {t.decks.generateApkg}
                 </DropdownMenuItem>
+                
+                {onMerge && availableDecks && availableDecks.length > 0 && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Merge className="mr-2 h-4 w-4" />
+                      {t.decks.mergeWith}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {availableDecks.map((availableDeck) => (
+                        <DropdownMenuItem
+                          key={availableDeck.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onMerge(deck.id, availableDeck.id);
+                          }}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span className="flex-1 truncate">{availableDeck.name}</span>
+                            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                              {availableDeck.words_count} {getWordsText(availableDeck.words_count)}
+                            </span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
+                
+                {onInvertAll && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onInvertAll(deck);
+                    }}
+                  >
+                    <ArrowLeftRight className="mr-2 h-4 w-4" />
+                    {t.words.invertAllWords}
+                  </DropdownMenuItem>
+                )}
+                
+                {onCreateEmptyCards && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onCreateEmptyCards(deck);
+                    }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    {t.words.createEmptyCards}
+                  </DropdownMenuItem>
+                )}
+                
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={(e) => {

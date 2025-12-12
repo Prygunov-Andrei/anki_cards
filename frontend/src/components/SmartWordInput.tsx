@@ -117,6 +117,7 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
 
   /**
    * Автоперевод пустых переводов
+   * С механизмом повторных попыток для непереведенных слов
    */
   const handleAutoTranslate = async () => {
     const wordsToTranslate = translations
@@ -132,6 +133,7 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
 
     setIsTranslating(true);
     try {
+      // Первая попытка перевода всех слов
       const result = await deckService.translateWords({
         words: wordsToTranslate,
         source_language: targetLang,
@@ -140,8 +142,8 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
 
       const translationsDict = result.translations || {};
 
-      // Обновляем переводы
-      const updatedTranslations = translations.map((pair) => {
+      // Обновляем переводы после первой попытки
+      let updatedTranslations = translations.map((pair) => {
         if (!pair.translation.trim()) {
           // Ищем перевод по полному ключу
           let translation = translationsDict[pair.word];
@@ -160,7 +162,59 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
         return pair;
       });
 
+      // Проверяем какие слова остались непереведенными
+      const untranslatedWords = updatedTranslations
+        .filter((pair) => !pair.translation.trim())
+        .map((pair) => pair.word);
+
+      // Если есть непереведенные слова, делаем повторную попытку
+      if (untranslatedWords.length > 0) {
+        console.log(`🔄 Повторная попытка перевода ${untranslatedWords.length} слов:`, untranslatedWords);
+        
+        try {
+          const retryResult = await deckService.translateWords({
+            words: untranslatedWords,
+            source_language: targetLang,
+            target_language: sourceLang,
+          });
+
+          const retryTranslationsDict = retryResult.translations || {};
+
+          // Обновляем переводы после повторной попытки
+          updatedTranslations = updatedTranslations.map((pair) => {
+            if (!pair.translation.trim()) {
+              // Ищем перевод по полному ключу
+              let translation = retryTranslationsDict[pair.word];
+              
+              // Если не нашли, пробуем найти по ключу без скобок
+              if (!translation && pair.word.includes('(')) {
+                const wordWithoutParens = pair.word.split('(')[0].trim();
+                translation = retryTranslationsDict[wordWithoutParens];
+              }
+              
+              if (translation) {
+                console.log(`✅ Перевод найден при повторной попытке: ${pair.word} -> ${translation}`);
+                return { ...pair, translation };
+              } else {
+                console.warn(`⚠️ Слово не удалось перевести после повторной попытки: ${pair.word}`);
+              }
+            }
+            return pair;
+          });
+        } catch (retryError) {
+          console.error('Error during retry translation:', retryError);
+          // Продолжаем с переводами которые удалось получить при первой попытке
+        }
+      }
+
       setTranslations(updatedTranslations);
+
+      // Проверяем сколько слов осталось непереведенными
+      const finalUntranslated = updatedTranslations.filter((pair) => !pair.translation.trim());
+      if (finalUntranslated.length > 0) {
+        console.warn(`⚠️ Не удалось перевести ${finalUntranslated.length} слов:`, finalUntranslated.map(p => p.word));
+      }
+
     } catch (error) {
       console.error('Error auto-translating:', error);
       showError(t.words.couldNotAutoTranslate, {

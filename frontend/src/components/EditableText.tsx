@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Input } from './ui/input';
 import { Edit2 } from 'lucide-react';
+import { displayWord } from '../utils/helpers';
 
 interface EditableTextProps {
   value: string;
@@ -119,7 +120,7 @@ export const EditableText: React.FC<EditableTextProps> = ({
       onClick={() => setIsEditing(true)}
       className={`group inline-flex items-center gap-1.5 text-left transition-colors hover:text-primary ${className}`}
     >
-      <span>{value}</span>
+      <span>{displayWord(value)}</span>
       <Edit2 className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" />
     </button>
   );

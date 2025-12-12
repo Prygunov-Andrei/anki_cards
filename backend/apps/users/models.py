@@ -50,6 +50,11 @@ class User(AbstractUser):
         ('gemini', 'Google Gemini'),
     ]
     
+    AUDIO_PROVIDER_CHOICES = [
+        ('openai', 'OpenAI TTS'),
+        ('gtts', 'Google TTS (gTTS)'),
+    ]
+    
     GEMINI_MODEL_CHOICES = [
         ('gemini-2.5-flash-image', 'Gemini Flash (быстрая, 0.5 токена)'),
         ('nano-banana-pro-preview', 'Nano Banana Pro (новая, 1 токен)'),
@@ -123,6 +128,13 @@ class User(AbstractUser):
         choices=GEMINI_MODEL_CHOICES,
         default='gemini-2.5-flash-image',
         verbose_name='Модель Gemini для генерации изображений'
+    )
+    
+    audio_provider = models.CharField(
+        max_length=20,
+        choices=AUDIO_PROVIDER_CHOICES,
+        default='openai',
+        verbose_name='Провайдер генерации аудио'
     )
     
     created_at = models.DateTimeField(

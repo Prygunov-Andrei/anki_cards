@@ -17,6 +17,7 @@ export interface User {
   mode?: 'simple' | 'advanced';
   image_provider?: 'openai' | 'gemini' | 'nano-banana'; // Провайдер генерации изображений
   gemini_model?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'; // Модель Gemini для генерации изображений (deprecated, используется image_provider)
+  audio_provider?: 'openai' | 'gtts'; // Провайдер генерации аудио
 }
 
 // ========== WORD ==========

@@ -14,7 +14,7 @@ from PIL import Image
 from openai import OpenAI
 from django.conf import settings
 from .prompt_utils import get_user_prompt, format_prompt
-from .default_prompts import get_image_prompt_for_style
+from .default_prompts import get_image_prompt_for_style, get_default_prompt, get_image_prompt_generation_for_style
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def detect_part_of_speech(
     
     Args:
         word: Слово для анализа
-        language: Язык слова (pt или de)
+        language: Язык слова (ru, en, pt, de, es, fr, it)
         user: Пользователь (для получения пользовательского промпта)
     
     Returns:
@@ -152,6 +152,116 @@ def detect_part_of_speech(
         }
 
 
+def generate_image_prompts_batch(
+    words_translations: List[Dict[str, str]],
+    user=None,
+    image_style: str = 'balanced'
+) -> Dict[str, str]:
+    """
+    Первый этап: генерирует промпты для изображений через GPT-4o-mini
+    
+    Args:
+        words_translations: Список словарей [{'word': 'Haus', 'translation': 'дом'}, ...]
+        user: Пользователь (для получения пользовательского промпта)
+        image_style: Стиль генерации (minimalistic, balanced, creative)
+    
+    Returns:
+        Словарь {word: prompt} с готовыми промптами для генерации изображений
+    """
+    if not words_translations:
+        return {}
+    
+    client = get_openai_client()
+    
+    # Получаем промпт для первого этапа в зависимости от стиля
+    prompt_key = f'image_prompt_generation_{image_style}'
+    prompt_template = get_user_prompt(user, prompt_key)
+    if not prompt_template:
+        prompt_template = get_image_prompt_generation_for_style(image_style)
+    
+    # Формируем список слов для обработки
+    words_list_text = "\n".join([
+        f"- {item['translation']}" for item in words_translations
+    ])
+    
+    # Создаем системный промпт на основе шаблона
+    # Убираем плейсхолдер {translation} и заменяем на общую инструкцию
+    system_prompt = prompt_template.replace("{translation}", "указанное слово, словосочетание или фразу")
+    
+    # КРИТИЧЕСКИ ВАЖНО: Добавляем явный запрет на текст в описании
+    system_prompt += "\n\nКРИТИЧЕСКИ ВАЖНО: В описании НЕ должно быть упоминаний о тексте, буквах, цифрах, символах, надписях, знаках, книгах, экранах, плакатах, табличках, интерфейсах. Описывай ТОЛЬКО визуальные объекты, действия и сцены БЕЗ ЛЮБЫХ ФОРМ ТЕКСТА."
+    
+    # Добавляем инструкции для batch обработки в JSON формате
+    system_prompt += "\n\nФормат ответа: ТОЛЬКО JSON без дополнительного текста.\n{\"перевод1\": \"визуальное описание сцены...\", \"перевод2\": \"визуальное описание сцены...\"}"
+    
+    # Определяем формат ответа в зависимости от стиля
+    if image_style == 'minimalistic':
+        format_instruction = "Каждое описание должно быть 1-2 коротких предложения, только перечисление визуальных элементов."
+    elif image_style == 'creative':
+        format_instruction = "Каждое описание должно быть 3-5 предложений, живой образный язык."
+    else:  # balanced
+        format_instruction = "Каждое описание должно быть 2-4 предложения, описательный стиль."
+    
+    user_prompt = f"""Создай визуальные описания сцен для следующих слов:
+
+{words_list_text}
+
+Верни ТОЛЬКО JSON в формате: {{"перевод": "описание сцены"}}
+{format_instruction}
+СТРОГО БЕЗ упоминаний текста, букв, цифр, символов, надписей, знаков, книг, экранов, плакатов.
+Начни сразу с описания сцены."""
+    
+    result_text = None
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            response_format={"type": "json_object"}
+        )
+        
+        result_text = response.choices[0].message.content.strip()
+        result_dict = json.loads(result_text)
+        
+        # Преобразуем результат: ключи - переводы, значения - промпты
+        # Нужно сопоставить переводы со словами
+        prompts_map = {}
+        for item in words_translations:
+            translation = item['translation']
+            word = item.get('word', '')
+            
+            # Ищем промпт по переводу
+            if translation in result_dict:
+                prompts_map[word] = result_dict[translation]
+            else:
+                # Если точного совпадения нет, берем первый доступный или используем fallback
+                logger.warning(f"Промпт для '{translation}' не найден в ответе GPT")
+                prompts_map[word] = f"Визуальная иллюстрация, передающая смысл: {translation}"
+        
+        logger.info(f"Сгенерировано промптов: {len(prompts_map)} из {len(words_translations)}")
+        return prompts_map
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка парсинга JSON при генерации промптов: {str(e)}")
+        if result_text:
+            logger.error(f"Ответ LLM: {result_text}")
+        # Fallback: возвращаем простые промпты
+        return {
+            item.get('word', ''): f"Визуальная иллюстрация, передающая смысл: {item['translation']}"
+            for item in words_translations
+        }
+    except Exception as e:
+        logger.error(f"Ошибка при генерации промптов: {str(e)}")
+        # Fallback: возвращаем простые промпты
+        return {
+            item.get('word', ''): f"Визуальная иллюстрация, передающая смысл: {item['translation']}"
+            for item in words_translations
+        }
+
+
 def generate_image_with_dalle(
     word: str,
     translation: str,
@@ -159,7 +269,8 @@ def generate_image_with_dalle(
     user=None,
     native_language: str = 'русском',
     english_translation: str = None,
-    image_style: str = 'balanced'
+    image_style: str = 'balanced',
+    custom_prompt: str = None
 ) -> Tuple[Path, str]:
     """
     Генерирует изображение для слова через OpenAI DALL-E 3
@@ -167,7 +278,7 @@ def generate_image_with_dalle(
     Args:
         word: Исходное слово
         translation: Перевод слова
-        language: Язык слова (pt или de)
+        language: Язык слова (ru, en, pt, de, es, fr, it)
         user: Пользователь (не используется, оставлен для совместимости)
         native_language: Родной язык пользователя
         english_translation: Английский перевод (опционально)
@@ -178,18 +289,26 @@ def generate_image_with_dalle(
     """
     client = get_openai_client()
     
-    # Используем промпт для выбранного стиля
-    prompt_template = get_image_prompt_for_style(image_style)
-    
-    # Формируем промпт для генерации изображения
-    prompt = format_prompt(
-        prompt_template,
-        word=word,
-        translation=translation,
-        language=language,
-        native_language=native_language,
-        english_translation=english_translation or translation
-    )
+    # Используем готовый промпт (если передан) или генерируем через шаблон
+    if custom_prompt:
+        # Используем промпт от GPT-4o-mini как есть, без добавления запретов
+        # (запреты уже учтены GPT-4o-mini при генерации описания)
+        prompt = custom_prompt
+        logger.info(f"[DALL-E] Слово: '{word}', Перевод: '{translation}'")
+        logger.info(f"[DALL-E] Используется готовый промпт (двухэтапная генерация)")
+    else:
+        # Старый способ: используем промпт для выбранного стиля
+        prompt_template = get_image_prompt_for_style(image_style)
+        
+        # Формируем промпт для генерации изображения
+        prompt = format_prompt(
+            prompt_template,
+            word=word,
+            translation=translation,
+            language=language,
+            native_language=native_language,
+            english_translation=english_translation or translation
+        )
     
     # Логируем промпт для отладки
     logger.info(f"[DALL-E] Слово: '{word}', Перевод: '{translation}'")
@@ -251,7 +370,8 @@ def generate_image_with_gemini(
     native_language: str = 'русском',
     english_translation: str = None,
     image_style: str = 'balanced',
-    model: str = None
+    model: str = None,
+    custom_prompt: str = None
 ) -> Tuple[Path, str]:
     """
     Генерирует изображение для слова через Google Gemini
@@ -259,7 +379,7 @@ def generate_image_with_gemini(
     Args:
         word: Исходное слово
         translation: Перевод слова
-        language: Язык слова (pt или de)
+        language: Язык слова (ru, en, pt, de, es, fr, it)
         user: Пользователь (для получения настройки модели из профиля)
         native_language: Родной язык пользователя
         english_translation: Английский перевод (опционально)
@@ -282,18 +402,26 @@ def generate_image_with_gemini(
         else:
             model = 'gemini-2.5-flash-image'  # По умолчанию быстрая модель
     
-    # Используем промпт для выбранного стиля
-    prompt_template = get_image_prompt_for_style(image_style)
-    
-    # Формируем промпт для генерации изображения
-    prompt = format_prompt(
-        prompt_template,
-        word=word,
-        translation=translation,
-        language=language,
-        native_language=native_language,
-        english_translation=english_translation or translation
-    )
+    # Используем готовый промпт (если передан) или генерируем через шаблон
+    if custom_prompt:
+        # Используем промпт от GPT-4o-mini как есть, без добавления запретов
+        # (запреты уже учтены GPT-4o-mini при генерации описания)
+        prompt = custom_prompt
+        logger.info(f"[Gemini] Слово: '{word}', Перевод: '{translation}', Модель: {model}")
+        logger.info(f"[Gemini] Используется готовый промпт (двухэтапная генерация)")
+    else:
+        # Старый способ: используем промпт для выбранного стиля
+        prompt_template = get_image_prompt_for_style(image_style)
+        
+        # Формируем промпт для генерации изображения
+        prompt = format_prompt(
+            prompt_template,
+            word=word,
+            translation=translation,
+            language=language,
+            native_language=native_language,
+            english_translation=english_translation or translation
+        )
     
     # Логируем промпт для отладки
     logger.info(f"[Gemini] Слово: '{word}', Перевод: '{translation}', Модель: {model}")
@@ -377,15 +505,18 @@ def generate_image(
     english_translation: str = None,
     image_style: str = 'balanced',
     provider: str = 'openai',
-    gemini_model: str = None
+    gemini_model: str = None,
+    use_two_stage: bool = True,
+    custom_prompt: str = None
 ) -> Tuple[Path, str]:
     """
     Универсальная функция для генерации изображения через выбранный провайдер
+    Использует двухэтапный подход: сначала GPT-4o-mini создает промпт, затем генерируется изображение
     
     Args:
         word: Исходное слово
         translation: Перевод слова
-        language: Язык слова (pt или de)
+        language: Язык слова (ru, en, pt, de, es, fr, it)
         user: Пользователь (для определения провайдера и модели из настроек)
         native_language: Родной язык пользователя
         english_translation: Английский перевод (опционально)
@@ -393,6 +524,7 @@ def generate_image(
         provider: Провайдер ('openai' или 'gemini'). Если не указан, берется из user.image_provider
         gemini_model: Модель Gemini ('gemini-2.5-flash-image' или 'nano-banana-pro-preview').
                       Если не указана, берется из user.gemini_model
+        use_two_stage: Использовать двухэтапную генерацию (True) или старый способ (False)
     
     Returns:
         Кортеж (Path к сохраненному изображению, промпт)
@@ -403,7 +535,25 @@ def generate_image(
     else:
         provider = provider or 'openai'
     
-    # Вызываем соответствующую функцию
+    # Двухэтапная генерация: первый этап - создание промпта через GPT-4o-mini
+    if use_two_stage and not custom_prompt:
+        try:
+            logger.info(f"[Two-Stage] Этап 1: Генерация промпта для '{word}' ({translation}), стиль: {image_style}")
+            prompts = generate_image_prompts_batch(
+                words_translations=[{'word': word, 'translation': translation}],
+                user=user,
+                image_style=image_style
+            )
+            if word in prompts:
+                custom_prompt = prompts[word]
+                logger.info(f"[Two-Stage] Промпт создан: {custom_prompt[:100]}...")
+            else:
+                logger.warning(f"[Two-Stage] Промпт для '{word}' не найден, используем fallback")
+        except Exception as e:
+            logger.error(f"[Two-Stage] Ошибка при генерации промпта: {str(e)}, используем fallback")
+            # Продолжаем со старым способом
+    
+    # Второй этап: генерация изображения с готовым промптом
     if provider == 'gemini':
         return generate_image_with_gemini(
             word=word,
@@ -413,7 +563,8 @@ def generate_image(
             native_language=native_language,
             english_translation=english_translation,
             image_style=image_style,
-            model=gemini_model
+            model=gemini_model,
+            custom_prompt=custom_prompt
         )
     else:  # По умолчанию OpenAI
         return generate_image_with_dalle(
@@ -423,11 +574,195 @@ def generate_image(
             user=user,
             native_language=native_language,
             english_translation=english_translation,
-            image_style=image_style
+            image_style=image_style,
+            custom_prompt=custom_prompt
         )
 
 
+def generate_images_batch(
+    words_data: List[Dict[str, str]],
+    user=None,
+    native_language: str = 'русском',
+    image_style: str = 'balanced',
+    provider: str = 'openai',
+    gemini_model: str = None,
+    use_two_stage: bool = True
+) -> Dict[str, Tuple[Path, str]]:
+    """
+    Batch генерация изображений для нескольких слов с двухэтапным подходом
+    
+    Args:
+        words_data: Список словарей [{'word': 'Haus', 'translation': 'дом', 'language': 'de'}, ...]
+        user: Пользователь
+        native_language: Родной язык пользователя
+        image_style: Стиль генерации
+        provider: Провайдер ('openai' или 'gemini')
+        gemini_model: Модель Gemini
+        use_two_stage: Использовать двухэтапную генерацию
+    
+    Returns:
+        Словарь {word: (Path, prompt)} с результатами генерации
+    """
+    results = {}
+    
+    # Первый этап: генерируем промпты для всех слов сразу
+    prompts_map = {}
+    if use_two_stage:
+        try:
+            logger.info(f"[Batch Two-Stage] Этап 1: Генерация промптов для {len(words_data)} слов, стиль: {image_style}")
+            words_translations = [
+                {'word': item['word'], 'translation': item['translation']}
+                for item in words_data
+            ]
+            prompts_map = generate_image_prompts_batch(words_translations, user, image_style)
+            logger.info(f"[Batch Two-Stage] Получено промптов: {len(prompts_map)}")
+        except Exception as e:
+            logger.error(f"[Batch Two-Stage] Ошибка при генерации промптов: {str(e)}, используем fallback")
+    
+    # Второй этап: генерируем изображения для каждого слова
+    for item in words_data:
+        word = item['word']
+        translation = item['translation']
+        language = item.get('language', 'de')
+        
+        custom_prompt = prompts_map.get(word) if use_two_stage and prompts_map else None
+        
+        try:
+            result = generate_image(
+                word=word,
+                translation=translation,
+                language=language,
+                user=user,
+                native_language=native_language,
+                image_style=image_style,
+                provider=provider,
+                gemini_model=gemini_model,
+                use_two_stage=False,  # Промпт уже готов
+                custom_prompt=custom_prompt
+            )
+            results[word] = result
+        except Exception as e:
+            logger.error(f"[Batch] Ошибка при генерации изображения для '{word}': {str(e)}")
+            results[word] = None
+    
+    return results
+
+
+def generate_audio_with_gtts(
+    word: str,
+    language: str,
+    user=None
+) -> Path:
+    """
+    Генерирует аудио для слова через Google TTS (gTTS)
+    
+    Args:
+        word: Исходное слово
+        language: Язык слова (ru, en, pt, de, es, fr, it)
+        user: Пользователь (не используется, оставлен для совместимости)
+    
+    Returns:
+        Path к сохраненному аудиофайлу
+    """
+    try:
+        from gtts import gTTS
+    except ImportError:
+        raise Exception("gTTS не установлен. Установите: pip install gtts")
+    
+    # Маппинг языков для gTTS
+    # Для португальского используем 'pt' с tld='pt' для европейского варианта
+    lang_map = {
+        'ru': 'ru',
+        'en': 'en',
+        'pt': 'pt',  # Португальский (tld определяет диалект)
+        'de': 'de',
+        'es': 'es',
+        'fr': 'fr',
+        'it': 'it',
+    }
+    
+    gtts_lang = lang_map.get(language, language)
+    
+    # Для португальского используем tld='pt' для европейского варианта
+    # Для остальных языков используем tld='com'
+    tld = 'pt' if language == 'pt' else 'com'
+    
+    try:
+        # Создаем объект gTTS
+        tts = gTTS(text=word, lang=gtts_lang, tld=tld, slow=False)
+        
+        # Генерируем уникальное имя файла
+        file_id = str(uuid.uuid4())
+        filename = f"{file_id}.mp3"
+        
+        # Сохраняем аудио
+        media_root = Path(settings.MEDIA_ROOT)
+        audio_dir = media_root / "audio"
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = audio_dir / filename
+        
+        # Сохраняем аудиофайл
+        tts.save(str(file_path))
+        
+        logger.info(f"[gTTS] Сгенерировано аудио для '{word}' (язык: {gtts_lang}, tld: {tld})")
+        
+        return file_path
+        
+    except Exception as e:
+        raise Exception(f"Ошибка при генерации аудио через gTTS: {str(e)}")
+
+
 def generate_audio_with_tts(
+    word: str,
+    language: str,
+    user=None,
+    use_voice_variety: bool = True,
+    provider: str = 'openai'
+) -> Path:
+    """
+    Генерирует аудио для слова через выбранный провайдер (OpenAI TTS или gTTS)
+    
+    Args:
+        word: Исходное слово
+        language: Язык слова (ru, en, pt, de, es, fr, it)
+        user: Пользователь (для получения настроек провайдера)
+        use_voice_variety: Использовать разнообразие голосов (только для OpenAI)
+        provider: Провайдер ('openai' или 'gtts'). Если не указан, берется из user.audio_provider
+    
+    Returns:
+        Path к сохраненному аудиофайлу
+    """
+    # Определяем провайдер
+    if user and hasattr(user, 'audio_provider'):
+        provider = provider or user.audio_provider
+    else:
+        provider = provider or 'openai'
+    
+    # Для португальского по умолчанию используем gTTS
+    if language == 'pt' and provider == 'openai':
+        # Если пользователь не указал явно, используем gTTS для португальского
+        if not hasattr(user, 'audio_provider') or user.audio_provider == 'openai':
+            logger.info(f"[Audio] Для португальского языка используем gTTS (лучшее качество)")
+            provider = 'gtts'
+    
+    # Вызываем соответствующую функцию
+    if provider == 'gtts':
+        return generate_audio_with_gtts(
+            word=word,
+            language=language,
+            user=user
+        )
+    else:  # По умолчанию OpenAI
+        return generate_audio_with_openai_tts(
+            word=word,
+            language=language,
+            user=user,
+            use_voice_variety=use_voice_variety
+        )
+
+
+def generate_audio_with_openai_tts(
     word: str,
     language: str,
     user=None,
@@ -438,8 +773,9 @@ def generate_audio_with_tts(
     
     Args:
         word: Исходное слово
-        language: Язык слова (pt или de)
+        language: Язык слова (ru, en, pt, de, es, fr, it)
         user: Пользователь (для получения пользовательского промпта)
+        use_voice_variety: Использовать разнообразие голосов
     
     Returns:
         Path к сохраненному аудиофайлу
@@ -456,8 +792,13 @@ def generate_audio_with_tts(
     else:
         # Стандартное поведение: голос зависит от языка
         voice_map = {
-            'pt': 'nova',  # Более мягкий голос для португальского
-            'de': 'onyx',  # Более четкий голос для немецкого
+            'ru': 'alloy',  # Универсальный голос для русского
+            'en': 'alloy',  # Универсальный голос для английского
+            'pt': 'nova',   # Мягкий голос для португальского
+            'de': 'onyx',   # Четкий голос для немецкого
+            'es': 'nova',  # Мягкий голос для испанского
+            'fr': 'shimmer', # Женский голос для французского
+            'it': 'fable',  # Универсальный голос для итальянского
         }
         voice = voice_map.get(language, 'alloy')
     
@@ -552,8 +893,8 @@ def analyze_mixed_languages(
     
     Args:
         words_list: Список слов для анализа
-        learning_language: Язык изучения (pt или de)
-        native_language: Родной язык пользователя (ru, en, pt, de)
+        learning_language: Язык изучения (ru, en, pt, de, es, fr, it)
+        native_language: Родной язык пользователя (ru, en, pt, de, es, fr, it)
         user: Пользователь (для получения пользовательского промпта)
     
     Returns:
@@ -614,8 +955,8 @@ def translate_words(
     
     Args:
         words_list: Список слов для перевода
-        learning_language: Язык изучения (pt или de)
-        native_language: Родной язык пользователя (ru, en, pt, de)
+        learning_language: Язык изучения (ru, en, pt, de, es, fr, it)
+        native_language: Родной язык пользователя (ru, en, pt, de, es, fr, it)
         user: Пользователь (для получения пользовательского промпта)
     
     Returns:
@@ -733,8 +1074,8 @@ def generate_deck_name(
     
     Args:
         words_list: Список слов
-        learning_language: Язык изучения (pt или de)
-        native_language: Родной язык пользователя (ru, en, pt, de)
+        learning_language: Язык изучения (ru, en, pt, de, es, fr, it)
+        native_language: Родной язык пользователя (ru, en, pt, de, es, fr, it)
         user: Пользователь (для получения пользовательского промпта)
     
     Returns:
@@ -791,8 +1132,8 @@ def detect_category(
     
     Args:
         words_list: Список слов
-        language: Язык слов (pt или de)
-        native_language: Родной язык пользователя (ru, en, pt, de)
+        language: Язык слов (ru, en, pt, de, es, fr, it)
+        native_language: Родной язык пользователя (ru, en, pt, de, es, fr, it)
         user: Пользователь (для получения пользовательского промпта)
     
     Returns:

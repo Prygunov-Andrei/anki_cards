@@ -41,6 +41,12 @@ ALLOWED_HOSTS += [
     'get-anki.fan.ngrok.app',  # Платный фиксированный домен ngrok
 ]
 
+# Добавляем продакшн домен
+ALLOWED_HOSTS += [
+    'www.get-anki.fun',
+    'get-anki.fun',
+]
+
 
 # Application definition
 
@@ -71,6 +77,17 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Настройки для работы за прокси (Cloudflare, Nginx и т.д.)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Настройки безопасности для работы за HTTPS прокси
+# SECURE_PROXY_SSL_HEADER позволяет Django определять HTTPS через X-Forwarded-Proto
+# Устанавливаем безопасные cookies, так как работаем через HTTPS прокси
+SESSION_COOKIE_SECURE = True  # Cookies только через HTTPS
+CSRF_COOKIE_SECURE = True  # CSRF cookies только через HTTPS
+SESSION_COOKIE_SAMESITE = 'Lax'  # Защита от CSRF атак
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 ROOT_URLCONF = 'config.urls'
 
@@ -166,8 +183,12 @@ AUTH_USER_MODEL = 'users.User'
 # Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
+        # ВАЖНО: TokenAuthentication должна быть ПЕРВОЙ!
+        # SessionAuthentication требует CSRF токен, что ломает API запросы с фронтенда
         'rest_framework.authentication.TokenAuthentication',
+        # SessionAuthentication нужна только для Django Admin и Browsable API
+        # Убираем её из списка, так как она конфликтует с фронтендом
+        # 'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -220,12 +241,30 @@ CORS_ALLOW_HEADERS = [
     "ngrok-skip-browser-warning",  # Для ngrok!
 ]
 
-# CSRF trusted origins (для админки через ngrok)
+# CSRF trusted origins (для админки через ngrok и продакшн домен)
 CSRF_TRUSTED_ORIGINS = [
     'https://get-anki.fan.ngrok.app',
+    'https://www.get-anki.fun',
+    'https://get-anki.fun',
+    'http://www.get-anki.fun',
+    'http://get-anki.fun',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
 ]
+
+# Кэширование для улучшения производительности
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        }
+    }
+}
+
+# Оптимизация базы данных
+DATABASES['default']['CONN_MAX_AGE'] = 600  # Переиспользование соединений до 10 минут
 
 # Internationalization
 LANGUAGE_CODE = 'ru-ru'

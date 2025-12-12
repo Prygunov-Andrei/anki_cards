@@ -4,17 +4,20 @@ import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { ImageStyleSelector, ImageStyle } from './ImageStyleSelector';
 import { ImageProviderDropdown } from './ImageProviderDropdown';
+import { AudioProviderDropdown } from './AudioProviderDropdown';
 import { Image, Volume2 } from 'lucide-react';
 
 interface MediaSettingsProps {
   generateImages: boolean;
   generateAudio: boolean;
   imageStyle: ImageStyle;
-  imageProvider?: 'auto' | 'openai' | 'gemini'; // Опциональный провайдер
+  imageProvider?: 'auto' | 'openai' | 'gemini' | 'nano-banana'; // Опциональный провайдер
+  audioProvider?: 'auto' | 'openai' | 'gtts'; // Опциональный провайдер аудио
   onGenerateImagesChange: (enabled: boolean) => void;
   onGenerateAudioChange: (enabled: boolean) => void;
   onImageStyleChange: (style: ImageStyle) => void;
-  onImageProviderChange?: (provider: 'auto' | 'openai' | 'gemini') => void; // Опциональный callback
+  onImageProviderChange?: (provider: 'auto' | 'openai' | 'gemini' | 'nano-banana') => void; // Опциональный callback
+  onAudioProviderChange?: (provider: 'auto' | 'openai' | 'gtts') => void; // Опциональный callback для аудио
   disabled?: boolean;
 }
 
@@ -28,10 +31,12 @@ export const MediaSettings: React.FC<MediaSettingsProps> = ({
   generateAudio,
   imageStyle,
   imageProvider,
+  audioProvider,
   onGenerateImagesChange,
   onGenerateAudioChange,
   onImageStyleChange,
   onImageProviderChange,
+  onAudioProviderChange,
   disabled = false,
 }) => {
   return (
@@ -103,6 +108,17 @@ export const MediaSettings: React.FC<MediaSettingsProps> = ({
             disabled={disabled}
           />
         </div>
+
+        {/* Провайдер аудио (опционально) */}
+        {generateAudio && audioProvider !== undefined && onAudioProviderChange && (
+          <div className="ml-6 space-y-2">
+            <AudioProviderDropdown
+              value={audioProvider}
+              onChange={onAudioProviderChange}
+              disabled={disabled}
+            />
+          </div>
+        )}
       </div>
     </Card>
   );

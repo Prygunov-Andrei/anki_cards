@@ -6,8 +6,13 @@ class Word(models.Model):
     """Модель слова для изучения"""
     
     LANGUAGE_CHOICES = [
+        ('ru', 'Русский'),
+        ('en', 'English'),
         ('pt', 'Португальский'),
         ('de', 'Немецкий'),
+        ('es', 'Испанский'),
+        ('fr', 'Французский'),
+        ('it', 'Итальянский'),
     ]
     
     user = models.ForeignKey(

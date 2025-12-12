@@ -116,6 +116,8 @@ fi
 PROTECTED_FILES=(
     ".env.production"
     ".env.production.local"
+    "nginx.conf"
+    "Dockerfile"
 )
 BACKUP_PROTECTED="$TEMP_DIR/protected-files-backup"
 mkdir -p "$BACKUP_PROTECTED"
@@ -144,6 +146,16 @@ for file in "${PROTECTED_FILES[@]}"; do
         cp "$BACKUP_PROTECTED/$file" "$FRONTEND_DIR/$file"
     fi
 done
+
+# Применяем патчи для деплоя
+echo ""
+echo -e "${BLUE}🔧 Применение патчей для деплоя...${NC}"
+if [ -f "$PROJECT_ROOT/scripts/apply_deployment_patches.sh" ]; then
+    bash "$PROJECT_ROOT/scripts/apply_deployment_patches.sh"
+else
+    echo -e "${YELLOW}⚠️  Скрипт apply_deployment_patches.sh не найден${NC}"
+    echo -e "${YELLOW}💡 Патчи не применены. Примените их вручную: ./scripts/apply_deployment_patches.sh${NC}"
+fi
 
 # Сохраняем маркер синхронизации
 echo "$LATEST_COMMIT_HASH" > "$SYNC_MARKER"

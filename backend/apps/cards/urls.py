@@ -32,11 +32,16 @@ analysis_urlpatterns = [
 # Deck management endpoints (Этап 7)
 deck_urlpatterns = [
     path('decks/', views.deck_list_create_view, name='deck-list-create'),
+    path('decks/merge/', views.deck_merge_view, name='deck-merge'),
     path('decks/<int:deck_id>/', views.deck_detail_view, name='deck-detail'),
     path('decks/<int:deck_id>/add_words/', views.deck_add_words_view, name='deck-add-words'),
     path('decks/<int:deck_id>/remove_word/', views.deck_remove_word_view, name='deck-remove-word'),
     path('decks/<int:deck_id>/words/<int:word_id>/', views.deck_update_word_view, name='deck-update-word'),
     path('decks/<int:deck_id>/generate/', views.deck_generate_apkg_view, name='deck-generate'),
+    path('decks/<int:deck_id>/invert_all/', views.deck_invert_all_words_view, name='deck-invert-all'),
+    path('decks/<int:deck_id>/invert_word/', views.deck_invert_word_view, name='deck-invert-word'),
+    path('decks/<int:deck_id>/create_empty_cards/', views.deck_create_empty_cards_view, name='deck-create-empty-cards'),
+    path('decks/<int:deck_id>/create_empty_card/', views.deck_create_empty_card_view, name='deck-create-empty-card'),
 ]
 
 # Token endpoints (Этап 9)

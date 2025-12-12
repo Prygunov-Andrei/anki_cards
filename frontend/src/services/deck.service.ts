@@ -196,11 +196,40 @@ class DeckService {
     save_to_decks?: boolean; // Новый параметр
   }): Promise<{ file_id: string; deck_id?: number }> {
     try {
-      // API ожидает words как строку, разделенную запятыми
+      // 🔍 ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ПЕРЕД ОТПРАВКОЙ
+      console.log('');
+      console.log('='.repeat(80));
+      console.log('📤 ОТПРАВКА ДАННЫХ НА БЕКЕНД: /api/cards/generate/');
+      console.log('='.repeat(80));
+      console.log('📋 ВХОДНЫЕ ДАННЫЕ (от MainPage):');
+      console.log('  - deck_name:', data.deck_name);
+      console.log('  - words (массив):', data.words);
+      console.log('  - language:', data.language);
+      console.log('  - save_to_decks:', data.save_to_decks);
+      console.log('  - Количество слов:', data.words.length);
+      console.log('  - Количество переводов:', Object.keys(data.translations).length);
+      console.log('  - Количество изображений:', Object.keys(data.image_files || {}).length);
+      console.log('  - Количество аудио:', Object.keys(data.audio_files || {}).length);
+      
+      // ✅ ИСПРАВЛЕНИЕ: Отправляем words как МАССИВ, а не строку!
+      // Бэкенд Django REST Framework отлично работает с JSON массивами
+      // Старый способ (НЕПРАВИЛЬНЫЙ): words: data.words.join(', ')
       const requestData = {
         ...data,
-        words: data.words.join(', '),
+        words: data.words, // ✅ Отправляем массив как есть!
       };
+
+      console.log('');
+      console.log('🔄 ДАННЫЕ ДЛЯ ОТПРАВКИ (БЕЗ ИЗМЕНЕНИЙ):');
+      console.log('  - deck_name:', requestData.deck_name);
+      console.log('  - words (массив!):', requestData.words);
+      console.log('  - Тип words:', Array.isArray(requestData.words) ? 'Array ✅' : 'String ❌');
+      console.log('');
+      console.log('⚠️ ПРОВЕРКА: Не перепутались ли deck_name и words?');
+      console.log('  - deck_name === words?', requestData.deck_name === requestData.words);
+      console.log('  - deck_name содержит запятые?', requestData.deck_name.includes(','));
+      console.log('='.repeat(80));
+      console.log('');
 
       // Генерация колоды может занимать много времени, особенно с медиа
       const response = await api.post<{ file_id: string; deck_id?: number }>(
@@ -208,6 +237,13 @@ class DeckService {
         requestData,
         { timeout: 300000 } // 5 минут
       );
+
+      console.log('');
+      console.log('✅ ОТВЕТ ОТ БЕКЕНДА:');
+      console.log('  - file_id:', response.data.file_id);
+      console.log('  - deck_id:', response.data.deck_id);
+      console.log('');
+
       return response.data;
     } catch (error) {
       console.error('Error generating cards:', error);
@@ -376,6 +412,7 @@ class DeckService {
     data: {
       word: string;
       language: string;
+      provider?: 'openai' | 'gtts'; // Провайдер генерации аудио
       word_id?: number; // Опциональный ID слова для привязки медиа
     },
     signal?: AbortSignal
@@ -459,7 +496,7 @@ class DeckService {
   }
 
   /**
-   * Копировать карточку в другую колоду (альтернатива переносу, если бекенд не поддерживает move)
+   * Копировать карточку в другую колоду (альтернатива перносу, если бекенд не поддерживает move)
    * @param word - Объект слова с полными данными
    * @param fromDeckId - ID исходной колоды  
    * @param toDeckId - ID целевой колоды
@@ -508,6 +545,174 @@ class DeckService {
       await this.removeWordFromDeck(fromDeckId, word.id);
     } catch (error) {
       console.error('Error copying and moving card:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Объединить колоды
+   * @param params - Параметры объединения
+   * @returns Promise с результатом объединения
+   */
+  async mergeDecks(params: {
+    deck_ids: number[];
+    target_deck_id?: number;
+    new_deck_name?: string;
+    delete_source_decks?: boolean;
+  }): Promise<{
+    message: string;
+    target_deck: Deck;
+    words_count: number;
+    source_decks_count: number;
+    deleted_decks?: Array<{ id: number; name: string }> | null;
+  }> {
+    try {
+      const response = await api.post('/api/cards/decks/merge/', params);
+      return response.data;
+    } catch (error) {
+      console.error('Error merging decks:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Инвертировать все слова в колоде
+   * @param deckId - ID колоды
+   * @returns Promise с результатом инвертирования
+   */
+  async invertAllWords(deckId: number): Promise<{
+    message: string;
+    deck_id: number;
+    deck_name: string;
+    inverted_words_count: number;
+    inverted_words: Array<{
+      id: number;
+      original_word: string;
+      translation: string;
+      language: string;
+      created: boolean;
+    }>;
+    skipped_words?: Array<{
+      id: number;
+      original_word: string;
+      reason: string;
+    }>;
+    errors?: Array<{
+      word_id: number;
+      original_word: string;
+      error: string;
+    }>;
+  }> {
+    try {
+      const response = await api.post(`/api/cards/decks/${deckId}/invert_all/`);
+      return response.data;
+    } catch (error) {
+      console.error('Error inverting all words:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Инвертировать одно слово в колоде
+   * @param deckId - ID колоды
+   * @param wordId - ID слова
+   * @returns Promise с результатом инвертирования
+   */
+  async invertWord(deckId: number, wordId: number): Promise<{
+    message: string;
+    original_word: {
+      id: number;
+      original_word: string;
+      translation: string;
+      language: string;
+    };
+    inverted_word: {
+      id: number;
+      original_word: string;
+      translation: string;
+      language: string;
+      created: boolean;
+      added_to_deck: boolean;
+    };
+  }> {
+    try {
+      const response = await api.post(`/api/cards/decks/${deckId}/invert_word/`, {
+        word_id: wordId
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error inverting word:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Создать пустые карточки для всех слов в колоде
+   * @param deckId - ID колоды
+   * @returns Promise с результатом создания пустых карточек
+   */
+  async createEmptyCards(deckId: number): Promise<{
+    message: string;
+    deck_id: number;
+    deck_name: string;
+    empty_cards_count: number;
+    empty_cards: Array<{
+      id: number;
+      original_word: string;
+      translation: string;
+      language: string;
+      created: boolean;
+    }>;
+    skipped_cards?: Array<{
+      id: number;
+      translation: string;
+      reason: string;
+    }>;
+    errors?: Array<{
+      word_id: number;
+      original_word: string;
+      error: string;
+    }>;
+  }> {
+    try {
+      const response = await api.post(`/api/cards/decks/${deckId}/create_empty_cards/`);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating empty cards:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Создать пустую карточку для одного слова
+   * @param deckId - ID колоды
+   * @param wordId - ID слова
+   * @returns Promise с результатом создания пустой карточки
+   */
+  async createEmptyCard(deckId: number, wordId: number): Promise<{
+    message: string;
+    original_word: {
+      id: number;
+      original_word: string;
+      translation: string;
+      language: string;
+    };
+    empty_card: {
+      id: number;
+      original_word: string;
+      translation: string;
+      language: string;
+      created: boolean;
+      added_to_deck: boolean;
+    };
+  }> {
+    try {
+      const response = await api.post(`/api/cards/decks/${deckId}/create_empty_card/`, {
+        word_id: wordId
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error creating empty card:', error);
       throw error;
     }
   }

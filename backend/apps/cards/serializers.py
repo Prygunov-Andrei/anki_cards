@@ -1,16 +1,28 @@
 from rest_framework import serializers
 from .models import UserPrompt
 
+# Константа для всех поддерживаемых языков
+LANGUAGE_CHOICES = [
+    ('ru', 'Русский'),
+    ('en', 'English'),
+    ('pt', 'Португальский'),
+    ('de', 'Немецкий'),
+    ('es', 'Испанский'),
+    ('fr', 'Французский'),
+    ('it', 'Итальянский'),
+]
+
 
 class CardGenerationSerializer(serializers.Serializer):
     """Сериализатор для генерации карточек"""
     
     words = serializers.CharField(
         required=True,
-        help_text="Слова через запятую"
+        allow_blank=False,
+        help_text="Слова через точку с запятой или запятую. Также поддерживается массив слов (JSON)."
     )
     language = serializers.ChoiceField(
-        choices=[('pt', 'Португальский'), ('de', 'Немецкий')],
+        choices=LANGUAGE_CHOICES,
         required=True
     )
     translations = serializers.DictField(
@@ -56,12 +68,77 @@ class CardGenerationSerializer(serializers.Serializer):
         help_text="Сохранить колоду в 'Мои колоды' для последующего редактирования"
     )
     
+    def to_internal_value(self, data):
+        """
+        Переопределяем для поддержки массива слов
+        """
+        # Если words приходит как массив, преобразуем в строку для CharField
+        if 'words' in data and isinstance(data['words'], list):
+            # Преобразуем массив в строку через точку с запятой
+            data = data.copy()
+            data['words'] = '; '.join(str(w) for w in data['words'] if w)
+        return super().to_internal_value(data)
+    
     def validate_words(self, value):
-        """Валидация списка слов"""
-        words = [w.strip() for w in value.split(',') if w.strip()]
-        if not words:
-            raise serializers.ValidationError("Список слов не может быть пустым")
-        return words
+        """
+        Валидация списка слов
+        Поддерживает:
+        - Строку через точку с запятой: "word1; word2" (предпочтительно)
+        - Строку через запятую: "word1, word2" (для обратной совместимости)
+        - Массив слов: ["word1", "word2"] (преобразуется в строку в to_internal_value)
+        """
+        # Если это уже список (массив), возвращаем как есть
+        if isinstance(value, list):
+            words = [w.strip() for w in value if w and w.strip()]
+            if not words:
+                raise serializers.ValidationError("Список слов не может быть пустым")
+            return words
+        
+        # Если это строка, парсим её
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                raise serializers.ValidationError("Список слов не может быть пустым")
+            
+            # Проверяем, есть ли точка с запятой (приоритетный разделитель)
+            if ';' in value:
+                # Используем parse_words_input для умного парсинга (точка с запятой)
+                from .utils import parse_words_input
+                words = parse_words_input(value)
+            else:
+                # Если нет точки с запятой, пробуем запятую (для обратной совместимости)
+                if ',' in value:
+                    # Разбиваем по запятой, но аккуратно (не разбиваем запятые внутри скобок)
+                    import re
+                    # Простой парсинг: разбиваем по запятым, но учитываем скобки
+                    parts = []
+                    current = ''
+                    depth = 0
+                    for char in value:
+                        if char == '(':
+                            depth += 1
+                            current += char
+                        elif char == ')':
+                            depth -= 1
+                            current += char
+                        elif char == ',' and depth == 0:
+                            if current.strip():
+                                parts.append(current.strip())
+                            current = ''
+                        else:
+                            current += char
+                    if current.strip():
+                        parts.append(current.strip())
+                    words = [p.strip() for p in parts if p.strip()]
+                else:
+                    # Одно слово
+                    words = [value.strip()]
+            
+            if not words:
+                raise serializers.ValidationError("Список слов не может быть пустым")
+            return words
+        
+        raise serializers.ValidationError("Слова должны быть строкой или массивом")
     
     def validate_translations(self, value):
         """Валидация переводов"""
@@ -84,7 +161,7 @@ class ImageGenerationSerializer(serializers.Serializer):
         help_text="Перевод слова"
     )
     language = serializers.ChoiceField(
-        choices=[('pt', 'Португальский'), ('de', 'Немецкий')],
+        choices=LANGUAGE_CHOICES,
         required=True
     )
     image_style = serializers.ChoiceField(
@@ -113,7 +190,7 @@ class ImageGenerationSerializer(serializers.Serializer):
 
 
 class AudioGenerationSerializer(serializers.Serializer):
-    """Сериализатор для генерации аудио через OpenAI"""
+    """Сериализатор для генерации аудио через OpenAI TTS или gTTS"""
     
     word = serializers.CharField(
         required=True,
@@ -121,8 +198,13 @@ class AudioGenerationSerializer(serializers.Serializer):
         help_text="Слово для генерации аудио"
     )
     language = serializers.ChoiceField(
-        choices=[('pt', 'Португальский'), ('de', 'Немецкий')],
+        choices=LANGUAGE_CHOICES,
         required=True
+    )
+    provider = serializers.ChoiceField(
+        choices=[('openai', 'OpenAI TTS'), ('gtts', 'Google TTS (gTTS)')],
+        required=False,
+        help_text="Провайдер для генерации аудио (по умолчанию берется из настроек пользователя)"
     )
     word_id = serializers.IntegerField(
         required=False,
@@ -227,11 +309,11 @@ class WordAnalysisSerializer(serializers.Serializer):
         help_text="Список слов для анализа"
     )
     learning_language = serializers.ChoiceField(
-        choices=[('pt', 'Португальский'), ('de', 'Немецкий')],
+        choices=LANGUAGE_CHOICES,
         required=True
     )
     native_language = serializers.ChoiceField(
-        choices=[('ru', 'Русский'), ('en', 'English'), ('pt', 'Português'), ('de', 'Deutsch')],
+        choices=LANGUAGE_CHOICES,
         required=True
     )
 
@@ -246,11 +328,11 @@ class WordTranslationSerializer(serializers.Serializer):
         help_text="Список слов для перевода"
     )
     learning_language = serializers.ChoiceField(
-        choices=[('pt', 'Португальский'), ('de', 'Немецкий')],
+        choices=LANGUAGE_CHOICES,
         required=True
     )
     native_language = serializers.ChoiceField(
-        choices=[('ru', 'Русский'), ('en', 'English'), ('pt', 'Português'), ('de', 'Deutsch')],
+        choices=LANGUAGE_CHOICES,
         required=True
     )
 
@@ -376,7 +458,7 @@ class DeckWordAddSerializer(serializers.Serializer):
         help_text="Перевод слова (если создается новое)"
     )
     language = serializers.ChoiceField(
-        choices=[('pt', 'Португальский'), ('de', 'Немецкий')],
+        choices=LANGUAGE_CHOICES,
         required=False,
         help_text="Язык слова (если создается новое)"
     )
@@ -417,5 +499,50 @@ class DeckWordRemoveSerializer(serializers.Serializer):
     word_id = serializers.IntegerField(
         required=True,
         help_text="ID слова для удаления"
+    )
+
+
+class DeckMergeSerializer(serializers.Serializer):
+    """Сериализатор для объединения колод"""
+    
+    deck_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=2,
+        required=True,
+        help_text="Список ID колод для объединения (минимум 2 колоды)"
+    )
+    target_deck_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="ID целевой колоды (если не указан, создается новая колода)"
+    )
+    new_deck_name = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        help_text="Название новой колоды (используется только если target_deck_id не указан)"
+    )
+    delete_source_decks = serializers.BooleanField(
+        default=False,
+        required=False,
+        help_text="Удалить исходные колоды после объединения"
+    )
+
+
+class DeckInvertWordSerializer(serializers.Serializer):
+    """Сериализатор для инвертирования одного слова в колоде"""
+    
+    word_id = serializers.IntegerField(
+        required=True,
+        help_text="ID слова для инвертирования"
+    )
+
+
+class DeckCreateEmptyCardSerializer(serializers.Serializer):
+    """Сериализатор для создания пустой карточки для одного слова"""
+    
+    word_id = serializers.IntegerField(
+        required=True,
+        help_text="ID слова для создания пустой карточки"
     )
 

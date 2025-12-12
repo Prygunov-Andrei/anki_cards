@@ -32,11 +32,15 @@ from .serializers import (
     DeckCreateSerializer,
     DeckUpdateSerializer,
     DeckWordAddSerializer,
-    DeckWordRemoveSerializer
+    DeckWordRemoveSerializer,
+    DeckMergeSerializer,
+    DeckInvertWordSerializer,
+    DeckCreateEmptyCardSerializer
 )
 from .utils import generate_apkg, parse_words_input
 from .llm_utils import (
     generate_image,
+    generate_images_batch,
     generate_audio_with_tts,
     detect_word_language,
     analyze_mixed_languages,
@@ -471,32 +475,46 @@ def generate_audio_view(request):
     
     word = serializer.validated_data['word']
     language = serializer.validated_data['language']
+    provider = serializer.validated_data.get('provider')  # Опционально, если не указан - берется из user.audio_provider
     
-    # Проверяем баланс токенов
-    balance = check_balance(request.user)
-    if balance < AUDIO_GENERATION_COST:
-        return Response({
-            'error': f'Недостаточно токенов. Требуется: {AUDIO_GENERATION_COST}, доступно: {balance}'
-        }, status=status.HTTP_402_PAYMENT_REQUIRED)
+    # Определяем провайдер
+    if not provider:
+        provider = request.user.audio_provider if hasattr(request.user, 'audio_provider') else 'openai'
+    
+    # Для португальского по умолчанию используем gTTS
+    if language == 'pt' and provider == 'openai':
+        if not hasattr(request.user, 'audio_provider') or request.user.audio_provider == 'openai':
+            logger.info(f"[Audio] Для португальского языка используем gTTS (лучшее качество)")
+            provider = 'gtts'
+    
+    # Проверяем баланс токенов (только для OpenAI, gTTS бесплатный)
+    if provider == 'openai':
+        balance = check_balance(request.user)
+        if balance < AUDIO_GENERATION_COST:
+            return Response({
+                'error': f'Недостаточно токенов. Требуется: {AUDIO_GENERATION_COST}, доступно: {balance}'
+            }, status=status.HTTP_402_PAYMENT_REQUIRED)
     
     try:
-        # Списываем токены перед генерацией
-        token, success = spend_tokens(
-            request.user,
-            AUDIO_GENERATION_COST,
-            description=f"Генерация аудио для слова '{word}'"
-        )
+        # Списываем токены перед генерацией (только для OpenAI)
+        if provider == 'openai':
+            token, success = spend_tokens(
+                request.user,
+                AUDIO_GENERATION_COST,
+                description=f"Генерация аудио для слова '{word}' (OpenAI TTS)"
+            )
+            
+            if not success:
+                return Response({
+                    'error': 'Недостаточно токенов для генерации аудио'
+                }, status=status.HTTP_402_PAYMENT_REQUIRED)
         
-        if not success:
-            return Response({
-                'error': 'Недостаточно токенов для генерации аудио'
-            }, status=status.HTTP_402_PAYMENT_REQUIRED)
-        
-        # Генерируем аудио с использованием промпта пользователя
+        # Генерируем аудио с использованием выбранного провайдера
         audio_path = generate_audio_with_tts(
             word=word,
             language=language,
-            user=request.user
+            user=request.user,
+            provider=provider
         )
         
         # Получаем относительный путь для URL
@@ -531,12 +549,13 @@ def generate_audio_view(request):
         }, status=status.HTTP_400_BAD_REQUEST)
     
     except Exception as e:
-        # При ошибке возвращаем токены
-        refund_tokens(
-            request.user,
-            AUDIO_GENERATION_COST,
-            description=f"Возврат токенов за ошибку генерации аудио для слова '{word}'"
-        )
+        # При ошибке возвращаем токены (только для OpenAI)
+        if provider == 'openai':
+            refund_tokens(
+                request.user,
+                AUDIO_GENERATION_COST,
+                description=f"Возврат токенов за ошибку генерации аудио для слова '{word}'"
+            )
         return Response({
             'error': f'Ошибка при генерации аудио: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -1149,6 +1168,104 @@ def deck_update_word_view(request, deck_id, word_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def deck_merge_view(request):
+    """
+    Объединение нескольких колод в одну
+    
+    Параметры:
+    - deck_ids: список ID колод для объединения (минимум 2)
+    - target_deck_id: ID целевой колоды (опционально, если не указан - создается новая)
+    - new_deck_name: название новой колоды (используется только если target_deck_id не указан)
+    - delete_source_decks: удалить исходные колоды после объединения (по умолчанию False)
+    """
+    serializer = DeckMergeSerializer(data=request.data)
+    
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    deck_ids = serializer.validated_data['deck_ids']
+    target_deck_id = serializer.validated_data.get('target_deck_id')
+    new_deck_name = serializer.validated_data.get('new_deck_name', 'Объединенная колода')
+    delete_source_decks = serializer.validated_data.get('delete_source_decks', False)
+    
+    # Проверяем, что все колоды принадлежат пользователю
+    decks = Deck.objects.filter(id__in=deck_ids, user=request.user)
+    
+    if decks.count() != len(deck_ids):
+        return Response({
+            'error': 'Некоторые колоды не найдены или не принадлежат вам'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    # Проверяем, что колоды не дублируются
+    if len(set(deck_ids)) != len(deck_ids):
+        return Response({
+            'error': 'В списке есть дублирующиеся ID колод'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Собираем все слова из всех колод
+    all_words = set()
+    for deck in decks:
+        all_words.update(deck.words.all())
+    
+    if not all_words:
+        return Response({
+            'error': 'Все указанные колоды пусты'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Определяем целевую колоду
+    if target_deck_id:
+        # Используем существующую колоду
+        target_deck = get_object_or_404(Deck, id=target_deck_id, user=request.user)
+        
+        # Проверяем, что целевая колода не в списке исходных (если не удаляем исходные)
+        if not delete_source_decks and target_deck_id in deck_ids:
+            return Response({
+                'error': 'Целевая колода не может быть в списке исходных колод, если исходные колоды не удаляются'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        # Создаем новую колоду
+        # Определяем язык из первой колоды (предполагаем, что все колоды одного языка)
+        first_deck = decks.first()
+        target_deck = Deck.objects.create(
+            user=request.user,
+            name=new_deck_name,
+            target_lang=first_deck.target_lang,
+            source_lang=first_deck.source_lang
+        )
+        logger.info(f"Создана новая колода для объединения: {target_deck.name} (ID: {target_deck.id})")
+    
+    # Добавляем все слова в целевую колоду
+    target_deck.words.add(*all_words)
+    
+    # Удаляем исходные колоды, если нужно
+    deleted_decks = []
+    if delete_source_decks:
+        # Не удаляем целевую колоду, если она была в списке
+        decks_to_delete = decks.exclude(id=target_deck.id)
+        for deck in decks_to_delete:
+            deleted_decks.append({
+                'id': deck.id,
+                'name': deck.name
+            })
+            deck.delete()
+        logger.info(f"Удалено исходных колод: {len(deleted_decks)}")
+    
+    # Обновляем целевую колоду
+    target_deck.save()
+    
+    result_serializer = DeckDetailSerializer(target_deck)
+    
+    return Response({
+        'message': f'Колоды успешно объединены в "{target_deck.name}"',
+        'target_deck': result_serializer.data,
+        'words_count': len(all_words),
+        'source_decks_count': len(deck_ids),
+        'deleted_decks': deleted_decks if delete_source_decks else None
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def deck_generate_apkg_view(request, deck_id):
     """
     Генерация .apkg файла из колоды
@@ -1391,4 +1508,392 @@ def add_tokens_view(request):
     except Exception as e:
         return Response({
             'error': f'Ошибка при начислении токенов: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def deck_invert_all_words_view(request, deck_id):
+    """
+    Инвертирование всех слов в колоде
+    
+    Создает инвертированные версии всех слов колоды:
+    - original_word и translation меняются местами
+    - language меняется на source_lang колоды
+    - Медиафайлы остаются теми же
+    - Инвертированные слова добавляются в ту же колоду
+    """
+    deck = get_object_or_404(
+        Deck.objects.select_related('user').prefetch_related('words'),
+        id=deck_id,
+        user=request.user
+    )
+    
+    words = deck.words.all()
+    if not words.exists():
+        return Response({
+            'error': 'Колода пуста'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    inverted_words = []
+    skipped_words = []
+    errors = []
+    
+    for word in words:
+        try:
+            # Создаем инвертированное слово
+            # original_word становится translation, translation становится original_word
+            # language становится source_lang колоды
+            inverted_original = word.translation
+            inverted_translation = word.original_word
+            inverted_language = deck.source_lang
+            
+            # Используем update_or_create для обновления, если слово уже существует
+            inverted_word, created = Word.objects.update_or_create(
+                user=request.user,
+                original_word=inverted_original,
+                language=inverted_language,
+                defaults={
+                    'translation': inverted_translation,
+                    'audio_file': word.audio_file,  # Используем те же медиафайлы
+                    'image_file': word.image_file,
+                }
+            )
+            
+            # Добавляем инвертированное слово в колоду, если его там еще нет
+            if inverted_word not in deck.words.all():
+                deck.words.add(inverted_word)
+                inverted_words.append({
+                    'id': inverted_word.id,
+                    'original_word': inverted_word.original_word,
+                    'translation': inverted_word.translation,
+                    'language': inverted_word.language,
+                    'created': created
+                })
+            else:
+                skipped_words.append({
+                    'id': inverted_word.id,
+                    'original_word': inverted_word.original_word,
+                    'reason': 'Уже в колоде'
+                })
+                
+        except Exception as e:
+            errors.append({
+                'word_id': word.id,
+                'original_word': word.original_word,
+                'error': str(e)
+            })
+            logger.error(f"Ошибка при инвертировании слова {word.id}: {str(e)}")
+    
+    logger.info(
+        f"Инвертирование всех слов колоды {deck_id}: "
+        f"создано {len(inverted_words)}, пропущено {len(skipped_words)}, ошибок {len(errors)}"
+    )
+    
+    return Response({
+        'message': f'Инвертировано {len(inverted_words)} слов',
+        'deck_id': deck_id,
+        'deck_name': deck.name,
+        'inverted_words_count': len(inverted_words),
+        'inverted_words': inverted_words,
+        'skipped_words': skipped_words if skipped_words else None,
+        'errors': errors if errors else None
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def deck_invert_word_view(request, deck_id):
+    """
+    Инвертирование одного слова в колоде
+    
+    Создает инвертированную версию указанного слова:
+    - original_word и translation меняются местами
+    - language меняется на source_lang колоды
+    - Медиафайлы остаются теми же
+    - Инвертированное слово добавляется в колоду
+    """
+    deck = get_object_or_404(
+        Deck.objects.select_related('user').prefetch_related('words'),
+        id=deck_id,
+        user=request.user
+    )
+    
+    serializer = DeckInvertWordSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    word_id = serializer.validated_data['word_id']
+    
+    # Проверяем, что слово принадлежит колоде
+    try:
+        word = deck.words.get(id=word_id)
+    except Word.DoesNotExist:
+        return Response({
+            'error': f'Слово с ID {word_id} не найдено в колоде'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    try:
+        # Создаем инвертированное слово
+        inverted_original = word.translation
+        inverted_translation = word.original_word
+        inverted_language = deck.source_lang
+        
+        # Используем update_or_create для обновления, если слово уже существует
+        inverted_word, created = Word.objects.update_or_create(
+            user=request.user,
+            original_word=inverted_original,
+            language=inverted_language,
+            defaults={
+                'translation': inverted_translation,
+                'audio_file': word.audio_file,  # Используем те же медиафайлы
+                'image_file': word.image_file,
+            }
+        )
+        
+        # Добавляем инвертированное слово в колоду, если его там еще нет
+        was_in_deck = inverted_word in deck.words.all()
+        if not was_in_deck:
+            deck.words.add(inverted_word)
+        
+        logger.info(
+            f"Инвертирование слова {word_id} в колоде {deck_id}: "
+            f"создано новое слово {inverted_word.id} (created={created}, was_in_deck={was_in_deck})"
+        )
+        
+        return Response({
+            'message': 'Слово успешно инвертировано',
+            'original_word': {
+                'id': word.id,
+                'original_word': word.original_word,
+                'translation': word.translation,
+                'language': word.language
+            },
+            'inverted_word': {
+                'id': inverted_word.id,
+                'original_word': inverted_word.original_word,
+                'translation': inverted_word.translation,
+                'language': inverted_word.language,
+                'created': created,
+                'added_to_deck': not was_in_deck
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Ошибка при инвертировании слова {word_id}: {str(e)}")
+        return Response({
+            'error': f'Ошибка при инвертировании слова: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def deck_create_empty_cards_view(request, deck_id):
+    """
+    Создание пустых карточек для всех слов в колоде
+    
+    Создает пустые карточки (original_word='') для всех слов колоды:
+    - original_word = '' (пусто)
+    - translation = '<слово на изучаемом языке> // <перевод>'
+    - language = target_lang колоды (изучаемый язык)
+    - Медиафайлы остаются теми же
+    - Пустые карточки добавляются в ту же колоду
+    """
+    deck = get_object_or_404(
+        Deck.objects.select_related('user').prefetch_related('words'),
+        id=deck_id,
+        user=request.user
+    )
+    
+    words = deck.words.all()
+    if not words.exists():
+        return Response({
+            'error': 'Колода пуста'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    empty_cards = []
+    skipped_cards = []
+    errors = []
+    
+    for word in words:
+        try:
+            # Создаем пустую карточку
+            # original_word = '_empty_{word_id}' (уникальный идентификатор для пустой карточки)
+            # translation = '<слово на изучаемом языке> // <перевод>'
+            # language = target_lang колоды (изучаемый язык)
+            # Используем уникальный идентификатор, чтобы избежать нарушения unique_together
+            empty_original = f"_empty_{word.id}"
+            empty_translation = f"{word.original_word} // {word.translation}"
+            empty_language = deck.target_lang
+            
+            # Ищем существующую пустую карточку для этого слова
+            # Используем уникальный original_word на основе word.id
+            empty_card = Word.objects.filter(
+                user=request.user,
+                original_word=empty_original,
+                language=empty_language
+            ).first()
+            
+            if empty_card:
+                # Обновляем медиафайлы и translation, если карточка уже существует
+                empty_card.translation = empty_translation
+                empty_card.audio_file = word.audio_file
+                empty_card.image_file = word.image_file
+                empty_card.save()
+                created = False
+            else:
+                # Создаем новую пустую карточку
+                empty_card = Word.objects.create(
+                    user=request.user,
+                    original_word=empty_original,
+                    translation=empty_translation,
+                    language=empty_language,
+                    audio_file=word.audio_file,
+                    image_file=word.image_file
+                )
+                created = True
+            
+            # Добавляем пустую карточку в колоду, если её там еще нет
+            if empty_card not in deck.words.all():
+                deck.words.add(empty_card)
+                empty_cards.append({
+                    'id': empty_card.id,
+                    'original_word': empty_card.original_word,
+                    'translation': empty_card.translation,
+                    'language': empty_card.language,
+                    'created': created
+                })
+            else:
+                skipped_cards.append({
+                    'id': empty_card.id,
+                    'translation': empty_card.translation,
+                    'reason': 'Уже в колоде'
+                })
+                
+        except Exception as e:
+            errors.append({
+                'word_id': word.id,
+                'original_word': word.original_word,
+                'error': str(e)
+            })
+            logger.error(f"Ошибка при создании пустой карточки для слова {word.id}: {str(e)}")
+    
+    logger.info(
+        f"Создание пустых карточек для колоды {deck_id}: "
+        f"создано {len(empty_cards)}, пропущено {len(skipped_cards)}, ошибок {len(errors)}"
+    )
+    
+    return Response({
+        'message': f'Создано {len(empty_cards)} пустых карточек',
+        'deck_id': deck_id,
+        'deck_name': deck.name,
+        'empty_cards_count': len(empty_cards),
+        'empty_cards': empty_cards,
+        'skipped_cards': skipped_cards if skipped_cards else None,
+        'errors': errors if errors else None
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def deck_create_empty_card_view(request, deck_id):
+    """
+    Создание пустой карточки для одного слова в колоде
+    
+    Создает пустую карточку (original_word='') для указанного слова:
+    - original_word = '' (пусто)
+    - translation = '<слово на изучаемом языке> // <перевод>'
+    - language = target_lang колоды (изучаемый язык)
+    - Медиафайлы остаются теми же
+    - Пустая карточка добавляется в колоду
+    """
+    deck = get_object_or_404(
+        Deck.objects.select_related('user').prefetch_related('words'),
+        id=deck_id,
+        user=request.user
+    )
+    
+    serializer = DeckCreateEmptyCardSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    word_id = serializer.validated_data['word_id']
+    
+    # Проверяем, что слово принадлежит колоде
+    try:
+        word = deck.words.get(id=word_id)
+    except Word.DoesNotExist:
+        return Response({
+            'error': f'Слово с ID {word_id} не найдено в колоде'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    try:
+        # Создаем пустую карточку
+        # original_word = '_empty_{word_id}' (уникальный идентификатор для пустой карточки)
+        # translation = '<слово на изучаемом языке> // <перевод>'
+        # language = target_lang колоды (изучаемый язык)
+        # Используем уникальный идентификатор, чтобы избежать нарушения unique_together
+        empty_original = f"_empty_{word.id}"
+        empty_translation = f"{word.original_word} // {word.translation}"
+        empty_language = deck.target_lang
+        
+        # Ищем существующую пустую карточку для этого слова
+        # Используем уникальный original_word на основе word.id
+        empty_card = Word.objects.filter(
+            user=request.user,
+            original_word=empty_original,
+            language=empty_language
+        ).first()
+        
+        if empty_card:
+            # Обновляем медиафайлы и translation, если карточка уже существует
+            empty_card.translation = empty_translation
+            empty_card.audio_file = word.audio_file
+            empty_card.image_file = word.image_file
+            empty_card.save()
+            created = False
+        else:
+            # Создаем новую пустую карточку
+            empty_card = Word.objects.create(
+                user=request.user,
+                original_word=empty_original,
+                translation=empty_translation,
+                language=empty_language,
+                audio_file=word.audio_file,
+                image_file=word.image_file
+            )
+            created = True
+        
+        # Добавляем пустую карточку в колоду, если её там еще нет
+        was_in_deck = empty_card in deck.words.all()
+        if not was_in_deck:
+            deck.words.add(empty_card)
+        
+        logger.info(
+            f"Создание пустой карточки для слова {word_id} в колоде {deck_id}: "
+            f"создана карточка {empty_card.id} (created={created}, was_in_deck={was_in_deck})"
+        )
+        
+        return Response({
+            'message': 'Пустая карточка успешно создана',
+            'original_word': {
+                'id': word.id,
+                'original_word': word.original_word,
+                'translation': word.translation,
+                'language': word.language
+            },
+            'empty_card': {
+                'id': empty_card.id,
+                'original_word': empty_card.original_word,
+                'translation': empty_card.translation,
+                'language': empty_card.language,
+                'created': created,
+                'added_to_deck': not was_in_deck
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Ошибка при создании пустой карточки для слова {word_id}: {str(e)}")
+        return Response({
+            'error': f'Ошибка при создании пустой карточки: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
