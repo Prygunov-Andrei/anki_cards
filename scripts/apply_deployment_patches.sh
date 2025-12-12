@@ -153,7 +153,105 @@ fi
 
 echo -e "${GREEN}✅ Логотипы исправлены${NC}"
 
-# 6. Сохранение копий файлов для деплоя в патчах (для будущих синхронизаций)
+# 6. КРИТИЧНО: Убираем захардкоженные ngrok URL (заменяем на переменные окружения)
+echo -e "${BLUE}🌐 Исправление API URL (убираем ngrok)...${NC}"
+
+NGROK_URL="https://get-anki.fan.ngrok.app"
+ENV_URL_PATTERN='import.meta.env.VITE_API_BASE_URL?.startsWith('\''/'\'') ? '\'''\'' : (import.meta.env.VITE_API_BASE_URL || '\'''\'')'
+
+# Исправляем services/api.ts
+if [ -f "$FRONTEND_DIR/src/services/api.ts" ]; then
+    if grep -q "$NGROK_URL" "$FRONTEND_DIR/src/services/api.ts"; then
+        echo -e "${BLUE}   Исправляю services/api.ts...${NC}"
+        sed -i.bak "s|const BASE_URL = '$NGROK_URL';|const BASE_URL = $ENV_URL_PATTERN;|g" "$FRONTEND_DIR/src/services/api.ts"
+        # Также исправляем комментарий
+        sed -i.bak "s|Базовый URL для API через туннель (ngrok - постоянный домен)|Базовый URL для API (из переменной окружения)|g" "$FRONTEND_DIR/src/services/api.ts"
+        rm -f "$FRONTEND_DIR/src/services/api.ts.bak"
+        echo -e "${GREEN}   ✅ services/api.ts исправлен${NC}"
+    else
+        echo -e "${GREEN}   ✅ services/api.ts уже исправлен${NC}"
+    fi
+fi
+
+# Исправляем utils/url-helpers.ts
+if [ -f "$FRONTEND_DIR/src/utils/url-helpers.ts" ]; then
+    if grep -q "$NGROK_URL" "$FRONTEND_DIR/src/utils/url-helpers.ts"; then
+        echo -e "${BLUE}   Исправляю utils/url-helpers.ts...${NC}"
+        sed -i.bak "s|const API_BASE_URL = '$NGROK_URL';|const API_BASE_URL = $ENV_URL_PATTERN;|g" "$FRONTEND_DIR/src/utils/url-helpers.ts"
+        sed -i.bak "s|Base URL backend API (через ngrok - постоянный домен)|Base URL backend API (из переменной окружения)|g" "$FRONTEND_DIR/src/utils/url-helpers.ts"
+        rm -f "$FRONTEND_DIR/src/utils/url-helpers.ts.bak"
+        echo -e "${GREEN}   ✅ utils/url-helpers.ts исправлен${NC}"
+    else
+        echo -e "${GREEN}   ✅ utils/url-helpers.ts уже исправлен${NC}"
+    fi
+fi
+
+# Исправляем contexts/ThemeContext.tsx (API URL)
+if [ -f "$FRONTEND_DIR/src/contexts/ThemeContext.tsx" ]; then
+    if grep -q "${NGROK_URL}/api" "$FRONTEND_DIR/src/contexts/ThemeContext.tsx"; then
+        echo -e "${BLUE}   Исправляю API URL в ThemeContext.tsx...${NC}"
+        sed -i.bak "s|const API_BASE_URL = '${NGROK_URL}/api';|const API_BASE_URL = $ENV_URL_PATTERN;|g" "$FRONTEND_DIR/src/contexts/ThemeContext.tsx"
+        rm -f "$FRONTEND_DIR/src/contexts/ThemeContext.tsx.bak"
+        echo -e "${GREEN}   ✅ API URL в ThemeContext.tsx исправлен${NC}"
+    else
+        echo -e "${GREEN}   ✅ API URL в ThemeContext.tsx уже исправлен${NC}"
+    fi
+fi
+
+# Исправляем lib/config.ts (убираем fallback на ngrok)
+if [ -f "$FRONTEND_DIR/src/lib/config.ts" ]; then
+    if grep -q "$NGROK_URL" "$FRONTEND_DIR/src/lib/config.ts"; then
+        echo -e "${BLUE}   Исправляю lib/config.ts...${NC}"
+        # Заменяем fallback на ngrok на пустую строку
+        sed -i.bak "s|return '$NGROK_URL';|return '';|g" "$FRONTEND_DIR/src/lib/config.ts"
+        rm -f "$FRONTEND_DIR/src/lib/config.ts.bak"
+        echo -e "${GREEN}   ✅ lib/config.ts исправлен${NC}"
+    else
+        echo -e "${GREEN}   ✅ lib/config.ts уже исправлен${NC}"
+    fi
+fi
+
+echo -e "${GREEN}✅ API URL исправлены${NC}"
+
+# 7. Создание .env.development для разработки (с ngrok URL)
+echo -e "${BLUE}📝 Создание .env.development...${NC}"
+cat > "$FRONTEND_DIR/.env.development" << 'ENVDEV'
+# Development environment variables
+# Используется при npm run dev
+
+# API URL для разработки через ngrok
+VITE_API_BASE_URL=https://get-anki.fan.ngrok.app
+ENVDEV
+echo -e "${GREEN}✅ .env.development создан${NC}"
+
+# 8. КРИТИЧНО: Добавление недостающих зависимостей в package.json
+echo -e "${BLUE}📦 Проверка зависимостей в package.json...${NC}"
+if [ -f "$FRONTEND_DIR/package.json" ]; then
+    # Проверяем наличие @tailwindcss/postcss (требуется для postcss.config.js)
+    if ! grep -q "@tailwindcss/postcss" "$FRONTEND_DIR/package.json"; then
+        echo -e "${YELLOW}   Добавляю @tailwindcss/postcss в devDependencies...${NC}"
+        # Используем node для безопасного добавления зависимости
+        if command -v node &> /dev/null; then
+            node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('$FRONTEND_DIR/package.json', 'utf8'));
+if (!pkg.devDependencies) pkg.devDependencies = {};
+pkg.devDependencies['@tailwindcss/postcss'] = '^4.1.8';
+pkg.devDependencies['autoprefixer'] = '^10.4.21';
+pkg.devDependencies['tailwindcss'] = '^4.1.8';
+fs.writeFileSync('$FRONTEND_DIR/package.json', JSON.stringify(pkg, null, 2));
+"
+            echo -e "${GREEN}   ✅ Зависимости добавлены${NC}"
+        else
+            echo -e "${YELLOW}   ⚠️ Node.js не найден, добавьте зависимости вручную:${NC}"
+            echo -e "${YELLOW}      npm install -D @tailwindcss/postcss autoprefixer tailwindcss${NC}"
+        fi
+    else
+        echo -e "${GREEN}   ✅ Зависимости уже установлены${NC}"
+    fi
+fi
+
+# 9. Сохранение копий файлов для деплоя в патчах (для будущих синхронизаций)
 echo -e "${BLUE}💾 Сохранение патчей для будущих синхронизаций...${NC}"
 if [ -f "$FRONTEND_DIR/nginx.conf" ]; then
     cp "$FRONTEND_DIR/nginx.conf" "$PATCHES_DIR/nginx.conf"

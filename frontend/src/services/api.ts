@@ -1,9 +1,11 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
 /**
- * Базовый URL для API через туннель (ngrok - постоянный домен)
+ * Базовый URL для API
+ * В продакшене: пустая строка (запросы на тот же домен)
+ * В разработке: ngrok URL из .env.development
  */
-const BASE_URL = 'https://get-anki.fan.ngrok.app';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL?.startsWith('/') ? '' : (import.meta.env.VITE_API_BASE_URL || '');
 
 /**
  * Создание экземпляра Axios с настройками

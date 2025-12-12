@@ -25,7 +25,8 @@ interface ThemeProviderProps {
   children: ReactNode;
 }
 
-const API_BASE_URL = 'https://get-anki.fan.ngrok.app/api';
+// API URL из переменной окружения или пустая строка для продакшена
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.startsWith('/') ? '' : (import.meta.env.VITE_API_BASE_URL || '');
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const authContext = useAuthContext();

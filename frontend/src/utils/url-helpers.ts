@@ -1,8 +1,9 @@
 /**
- * Base URL backend API (через ngrok - постоянный домен)
+ * Base URL backend API
+ * В продакшене: пустая строка (запросы на тот же домен)
+ * В разработке: ngrok URL из .env.development
  */
-
-const API_BASE_URL = 'https://get-anki.fan.ngrok.app';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.startsWith('/') ? '' : (import.meta.env.VITE_API_BASE_URL || '');
 
 /**
  * Преобразует относительный URL в абсолютный

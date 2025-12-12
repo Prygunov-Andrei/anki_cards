@@ -372,7 +372,8 @@ def generate_image_view(request):
     gemini_model = serializer.validated_data.get('gemini_model')  # Опционально, если не указан - берется из user.gemini_model
     
     # Определяем провайдер и модель для расчета стоимости
-    if not provider:
+    # 'auto' или None означает "использовать настройки пользователя"
+    if not provider or provider == 'auto':
         provider = request.user.image_provider if hasattr(request.user, 'image_provider') else 'openai'
     
     if provider == 'gemini' and not gemini_model:

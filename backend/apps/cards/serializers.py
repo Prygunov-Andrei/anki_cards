@@ -160,6 +160,10 @@ class ImageGenerationSerializer(serializers.Serializer):
         max_length=200,
         help_text="Перевод слова"
     )
+    word_id = serializers.IntegerField(
+        required=False,
+        help_text="ID слова (опционально, для обновления существующего слова)"
+    )
     language = serializers.ChoiceField(
         choices=LANGUAGE_CHOICES,
         required=True
@@ -171,9 +175,9 @@ class ImageGenerationSerializer(serializers.Serializer):
         help_text="Стиль генерации изображения"
     )
     provider = serializers.ChoiceField(
-        choices=[('openai', 'OpenAI DALL-E 3'), ('gemini', 'Google Gemini')],
+        choices=[('auto', 'Авто (из настроек)'), ('openai', 'OpenAI DALL-E 3'), ('gemini', 'Google Gemini')],
         required=False,
-        help_text="Провайдер для генерации изображения (по умолчанию берется из настроек пользователя)"
+        help_text="Провайдер для генерации изображения (auto = из настроек пользователя)"
     )
     gemini_model = serializers.ChoiceField(
         choices=[
@@ -182,10 +186,6 @@ class ImageGenerationSerializer(serializers.Serializer):
         ],
         required=False,
         help_text="Модель Gemini для генерации (по умолчанию берется из настроек пользователя)"
-    )
-    word_id = serializers.IntegerField(
-        required=False,
-        help_text="ID слова для автоматической привязки медиа (опционально)"
     )
 
 
