@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.words',
     'apps.cards',
+    'apps.anki_sync',
 ]
 
 MIDDLEWARE = [

@@ -321,6 +321,18 @@ def generate_cards_view(request):
         
         logger.info(f"Колода успешно сгенерирована: {deck_name}, файл: {file_id}, карточек: {generated_deck.cards_count}")
         
+        # Автоматически импортируем колоду в базу синхронизации Anki
+        try:
+            from apps.anki_sync.utils import import_apkg_to_anki_collection
+            import_result = import_apkg_to_anki_collection(
+                user=request.user,
+                apkg_path=output_path
+            )
+            logger.info(f"Колода импортирована в базу синхронизации: {import_result}")
+        except Exception as e:
+            # Не прерываем выполнение, если импорт не удался
+            logger.warning(f"Не удалось импортировать колоду в базу синхронизации: {str(e)}")
+        
         # Если нужно сохранить в "Мои колоды"
         deck_id = None
         if save_to_decks:
@@ -1424,6 +1436,18 @@ def deck_generate_apkg_view(request, deck_id):
             file_path=str(output_path),
             cards_count=len(words_data)
         )
+        
+        # Автоматически импортируем колоду в базу синхронизации Anki
+        try:
+            from apps.anki_sync.utils import import_apkg_to_anki_collection
+            import_result = import_apkg_to_anki_collection(
+                user=request.user,
+                apkg_path=output_path
+            )
+            logger.info(f"Колода импортирована в базу синхронизации: {import_result}")
+        except Exception as e:
+            # Не прерываем выполнение, если импорт не удался
+            logger.warning(f"Не удалось импортировать колоду в базу синхронизации: {str(e)}")
         
         return Response({
             'file_id': str(generated_deck.id),

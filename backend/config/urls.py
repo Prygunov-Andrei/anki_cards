@@ -20,6 +20,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
 from apps.cards.urls import media_urlpatterns, prompt_urlpatterns, analysis_urlpatterns, deck_urlpatterns, token_urlpatterns
+from apps.anki_sync.urls import urlpatterns as anki_sync_urlpatterns
 
 
 # Health check endpoint
@@ -41,6 +42,8 @@ urlpatterns = [
     path('api/cards/', include((analysis_urlpatterns, 'analysis'), namespace='analysis')),
     path('api/cards/', include((deck_urlpatterns, 'decks'), namespace='decks')),
     path('api/', include((token_urlpatterns, 'tokens'), namespace='tokens')),
+    # Anki sync endpoints (должны быть на корневом уровне, т.к. Anki ожидает /sync/)
+    path('', include('apps.anki_sync.urls')),
     # API root для проверки
     path('api/', include('rest_framework.urls')),
 ]
