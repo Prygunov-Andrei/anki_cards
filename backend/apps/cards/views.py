@@ -202,11 +202,28 @@ def generate_cards_view(request):
                 word_data['audio_file'] = str(normalized_audio_path)
                 if str(normalized_audio_path) not in media_files:
                     media_files.append(str(normalized_audio_path))
-                logger.info(f"✅ Добавлено аудио для '{word}': {normalized_audio_path}")
+                
+                # Сохраняем аудио в модель Word (относительный путь от MEDIA_ROOT)
+                relative_audio_path = str(normalized_audio_path.relative_to(Path(settings.MEDIA_ROOT)))
+                word_obj.audio_file = relative_audio_path
+                word_obj.save(update_fields=['audio_file'])
+                
+                logger.info(f"✅ Добавлено аудио для '{word}': {normalized_audio_path} (сохранено в БД: {relative_audio_path})")
             else:
                 logger.error(f"❌ Файл аудио не существует: {normalized_audio_path} (исходный путь: {audio_path})")
         else:
-            logger.warning(f"⚠️ Аудио не найдено для '{word}'. Доступные ключи: {list(audio_files.keys())}")
+            # Если новое аудио не предоставлено, используем существующее из БД (если есть)
+            if word_obj.audio_file:
+                existing_audio_path = Path(settings.MEDIA_ROOT) / word_obj.audio_file.name
+                if existing_audio_path.exists():
+                    word_data['audio_file'] = str(existing_audio_path)
+                    if str(existing_audio_path) not in media_files:
+                        media_files.append(str(existing_audio_path))
+                    logger.info(f"✅ Использовано существующее аудио для '{word}': {existing_audio_path}")
+                else:
+                    logger.warning(f"⚠️ Существующее аудио не найдено: {existing_audio_path}")
+            else:
+                logger.warning(f"⚠️ Аудио не найдено для '{word}'. Доступные ключи: {list(audio_files.keys())}")
         
         # Добавляем изображение, если есть
         image_path = None
@@ -246,11 +263,28 @@ def generate_cards_view(request):
                 word_data['image_file'] = str(normalized_image_path)
                 if str(normalized_image_path) not in media_files:
                     media_files.append(str(normalized_image_path))
-                logger.info(f"✅ Добавлено изображение для '{word}': {normalized_image_path}")
+                
+                # Сохраняем изображение в модель Word (относительный путь от MEDIA_ROOT)
+                relative_image_path = str(normalized_image_path.relative_to(Path(settings.MEDIA_ROOT)))
+                word_obj.image_file = relative_image_path
+                word_obj.save(update_fields=['image_file'])
+                
+                logger.info(f"✅ Добавлено изображение для '{word}': {normalized_image_path} (сохранено в БД: {relative_image_path})")
             else:
                 logger.error(f"❌ Файл изображения не существует: {normalized_image_path} (исходный путь: {image_path})")
         else:
-            logger.warning(f"⚠️ Изображение не найдено для '{word}'. Доступные ключи: {list(image_files.keys())}")
+            # Если новое изображение не предоставлено, используем существующее из БД (если есть)
+            if word_obj.image_file:
+                existing_image_path = Path(settings.MEDIA_ROOT) / word_obj.image_file.name
+                if existing_image_path.exists():
+                    word_data['image_file'] = str(existing_image_path)
+                    if str(existing_image_path) not in media_files:
+                        media_files.append(str(existing_image_path))
+                    logger.info(f"✅ Использовано существующее изображение для '{word}': {existing_image_path}")
+                else:
+                    logger.warning(f"⚠️ Существующее изображение не найдено: {existing_image_path}")
+            else:
+                logger.warning(f"⚠️ Изображение не найдено для '{word}'. Доступные ключи: {list(image_files.keys())}")
         
         words_data.append(word_data)
     
@@ -1301,7 +1335,7 @@ def deck_generate_apkg_view(request, deck_id):
             }
             
             if word.audio_file:
-                # Получаем имя файла из URL или пути
+                # Получаем путь к файлу (может быть относительным или абсолютным)
                 audio_name = word.audio_file.name
                 
                 # Если это URL, извлекаем имя файла
@@ -1316,7 +1350,11 @@ def deck_generate_apkg_view(request, deck_id):
                         audio_name = 'audio/' + audio_name.split('/')[-1]
                 
                 # Формируем полный путь к файлу
-                audio_path = Path(settings.MEDIA_ROOT) / audio_name
+                # Если путь уже абсолютный, используем его, иначе добавляем MEDIA_ROOT
+                if Path(audio_name).is_absolute():
+                    audio_path = Path(audio_name)
+                else:
+                    audio_path = Path(settings.MEDIA_ROOT) / audio_name
                 
                 if audio_path.exists():
                     word_data['audio_file'] = str(audio_path)
@@ -1326,7 +1364,7 @@ def deck_generate_apkg_view(request, deck_id):
                     logger.warning(f"  🔊 Слово '{word.original_word}': аудио не найдено: {audio_path} ❌")
             
             if word.image_file:
-                # Получаем имя файла из URL или пути
+                # Получаем путь к файлу (может быть относительным или абсолютным)
                 image_name = word.image_file.name
                 
                 # Если это URL, извлекаем имя файла
@@ -1341,7 +1379,11 @@ def deck_generate_apkg_view(request, deck_id):
                         image_name = 'images/' + image_name.split('/')[-1]
                 
                 # Формируем полный путь к файлу
-                image_path = Path(settings.MEDIA_ROOT) / image_name
+                # Если путь уже абсолютный, используем его, иначе добавляем MEDIA_ROOT
+                if Path(image_name).is_absolute():
+                    image_path = Path(image_name)
+                else:
+                    image_path = Path(settings.MEDIA_ROOT) / image_name
                 
                 if image_path.exists():
                     word_data['image_file'] = str(image_path)
