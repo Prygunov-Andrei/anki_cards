@@ -875,13 +875,30 @@ def translate_words_view(request):
             user=request.user
         )
         
+        # Проверяем, что результат не пустой
+        if not result:
+            logger.warning(f"Функция translate_words вернула пустой результат для {len(words_list)} слов")
+            return Response({
+                'error': 'Не удалось получить переводы. Возможно, превышен лимит API или произошла ошибка.',
+                'translations': {}
+            }, status=status.HTTP_200_OK)
+        
         return Response({
             'translations': result
         }, status=status.HTTP_200_OK)
         
-    except Exception as e:
+    except ValueError as e:
+        # Ошибки валидации (квота, API ключ и т.д.)
+        logger.error(f"Ошибка валидации при переводе: {str(e)}")
         return Response({
-            'error': f'Ошибка при переводе слов: {str(e)}'
+            'error': str(e),
+            'translations': {}
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при переводе слов: {str(e)}", exc_info=True)
+        return Response({
+            'error': f'Ошибка при переводе слов: {str(e)}',
+            'translations': {}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

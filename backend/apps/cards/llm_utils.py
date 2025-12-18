@@ -1000,10 +1000,20 @@ def translate_words(
     except json.JSONDecodeError as e:
         logger.error(f"Ошибка парсинга JSON при переводе слов: {str(e)}")
         logger.error(f"Ответ LLM: {result_text}")
-        return {}
+        raise ValueError(f"Ошибка парсинга ответа от OpenAI: {str(e)}")
     except Exception as e:
-        logger.error(f"Ошибка при переводе слов: {str(e)}")
-        return {}
+        error_msg = str(e)
+        logger.error(f"Ошибка при переводе слов: {error_msg}")
+        
+        # Проверяем тип ошибки
+        if "429" in error_msg or "insufficient_quota" in error_msg.lower():
+            raise ValueError("Превышен лимит квоты OpenAI API. Пожалуйста, проверьте баланс и настройки биллинга.")
+        elif "401" in error_msg or "invalid_api_key" in error_msg.lower():
+            raise ValueError("Неверный API ключ OpenAI. Пожалуйста, проверьте настройки.")
+        elif "rate_limit" in error_msg.lower():
+            raise ValueError("Превышен лимит запросов. Пожалуйста, подождите немного и попробуйте снова.")
+        else:
+            raise ValueError(f"Ошибка при переводе слов: {error_msg}")
 
 
 def process_german_word(word: str, user=None) -> str:
