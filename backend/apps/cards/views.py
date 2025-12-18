@@ -142,25 +142,37 @@ def generate_cards_view(request):
     logger.info(f"Request data image_files: {request.data.get('image_files', 'NOT FOUND')}")
     
     for word in words_list:
+        # Получаем перевод с учетом возможных различий в пунктуации
+        translation = translations.get(word, '')
+        if not translation:
+            # Пробуем найти перевод по нормализованному ключу (без пунктуации в конце)
+            word_normalized = word.strip().rstrip('.,!?;:')
+            for key, trans in translations.items():
+                key_normalized = key.strip().rstrip('.,!?;:')
+                if key_normalized == word_normalized:
+                    translation = trans
+                    logger.info(f"🔍 Найден перевод для '{word}' по ключу '{key}': {translation[:50]}...")
+                    break
+        
         # Получаем или создаем слово в БД
         word_obj, created = Word.objects.get_or_create(
             user=request.user,
             original_word=word,
             language=language,
             defaults={
-                'translation': translations.get(word, ''),
+                'translation': translation,
             }
         )
         
         # Обновляем перевод, если слово уже существовало
-        if not created and word_obj.translation != translations.get(word, ''):
-            word_obj.translation = translations.get(word, '')
-            word_obj.save()
+        if not created and word_obj.translation != translation:
+            word_obj.translation = translation
+            word_obj.save(update_fields=['translation'])
         
         # Подготавливаем данные для карточки
         word_data = {
             'original_word': word,
-            'translation': translations.get(word, ''),
+            'translation': translation,
         }
         
         # Добавляем аудио, если есть
@@ -169,10 +181,13 @@ def generate_cards_view(request):
         if word in audio_files:
             audio_path = audio_files[word]
         else:
-            # Пробуем найти по ключу без учета регистра или с пробелами
+            # Пробуем найти по ключу с учетом возможных различий в пунктуации
+            word_normalized = word.strip().rstrip('.,!?;:')
             for key, path in audio_files.items():
-                if key.strip() == word.strip():
+                key_normalized = key.strip().rstrip('.,!?;:')
+                if key_normalized == word_normalized or key.strip() == word.strip():
                     audio_path = path
+                    logger.info(f"🔍 Найдено аудио для '{word}' по ключу '{key}'")
                     break
         
         if audio_path:
@@ -230,10 +245,13 @@ def generate_cards_view(request):
         if word in image_files:
             image_path = image_files[word]
         else:
-            # Пробуем найти по ключу без учета регистра или с пробелами
+            # Пробуем найти по ключу с учетом возможных различий в пунктуации
+            word_normalized = word.strip().rstrip('.,!?;:')
             for key, path in image_files.items():
-                if key.strip() == word.strip():
+                key_normalized = key.strip().rstrip('.,!?;:')
+                if key_normalized == word_normalized or key.strip() == word.strip():
                     image_path = path
+                    logger.info(f"🔍 Найдено изображение для '{word}' по ключу '{key}'")
                     break
         
         if image_path:
