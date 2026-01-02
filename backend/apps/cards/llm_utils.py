@@ -180,8 +180,11 @@ def generate_image_prompts_batch(
         prompt_template = get_image_prompt_generation_for_style(image_style)
     
     # Формируем список слов для обработки
+    # ВАЖНО: Используем 'word' (само слово), а не 'translation' (перевод)
+    # Для инвертированных слов 'word' = само слово на изучении, 'translation' = исходное слово
+    # Формат: "слово (перевод)" - чтобы LLM понимал контекст без смешивания языков в инструкциях
     words_list_text = "\n".join([
-        f"- {item['translation']}" for item in words_translations
+        f"- {item['word']} ({item.get('translation', '')})" for item in words_translations
     ])
     
     # Создаем системный промпт на основе шаблона
@@ -192,7 +195,8 @@ def generate_image_prompts_batch(
     system_prompt += "\n\nКРИТИЧЕСКИ ВАЖНО: В описании НЕ должно быть упоминаний о тексте, буквах, цифрах, символах, надписях, знаках, книгах, экранах, плакатах, табличках, интерфейсах. Описывай ТОЛЬКО визуальные объекты, действия и сцены БЕЗ ЛЮБЫХ ФОРМ ТЕКСТА."
     
     # Добавляем инструкции для batch обработки в JSON формате
-    system_prompt += "\n\nФормат ответа: ТОЛЬКО JSON без дополнительного текста.\n{\"перевод1\": \"визуальное описание сцены...\", \"перевод2\": \"визуальное описание сцены...\"}"
+    # ВАЖНО: Ключи в JSON должны быть самими словами (word), а не переводами
+    system_prompt += "\n\nФормат ответа: ТОЛЬКО JSON без дополнительного текста.\n{\"слово1\": \"визуальное описание сцены...\", \"слово2\": \"визуальное описание сцены...\"}"
     
     # Определяем формат ответа в зависимости от стиля
     if image_style == 'minimalistic':
@@ -202,11 +206,12 @@ def generate_image_prompts_batch(
     else:  # balanced
         format_instruction = "Каждое описание должно быть 2-4 предложения, описательный стиль."
     
-    user_prompt = f"""Создай визуальные описания сцен для следующих слов:
+    user_prompt = f"""Создай визуальные описания сцен для следующих слов (формат: слово (перевод)):
 
 {words_list_text}
 
-Верни ТОЛЬКО JSON в формате: {{"перевод": "описание сцены"}}
+Верни ТОЛЬКО JSON в формате: {{"слово": "описание сцены"}}
+ВАЖНО: В JSON используй только само слово (без перевода в скобках) в качестве ключа.
 {format_instruction}
 СТРОГО БЕЗ упоминаний текста, букв, цифр, символов, надписей, знаков, книг, экранов, плакатов.
 Начни сразу с описания сцены."""
@@ -226,20 +231,29 @@ def generate_image_prompts_batch(
         result_text = response.choices[0].message.content.strip()
         result_dict = json.loads(result_text)
         
-        # Преобразуем результат: ключи - переводы, значения - промпты
-        # Нужно сопоставить переводы со словами
+        # Преобразуем результат: ключи - слова (word), значения - промпты
+        # ВАЖНО: Используем 'word' (само слово), а не 'translation' (перевод)
         prompts_map = {}
         for item in words_translations:
-            translation = item['translation']
             word = item.get('word', '')
+            translation = item.get('translation', '')
             
-            # Ищем промпт по переводу
-            if translation in result_dict:
-                prompts_map[word] = result_dict[translation]
+            # Ищем промпт по слову (word), так как в JSON ключи - это слова
+            if word in result_dict:
+                prompts_map[word] = result_dict[word]
             else:
-                # Если точного совпадения нет, берем первый доступный или используем fallback
-                logger.warning(f"Промпт для '{translation}' не найден в ответе GPT")
-                prompts_map[word] = f"Визуальная иллюстрация, передающая смысл: {translation}"
+                # Если точного совпадения нет, пробуем найти по любому ключу или используем fallback
+                # Ищем по слову в разных вариантах (с учетом регистра, пробелов и т.д.)
+                found = False
+                for key in result_dict.keys():
+                    if key.lower().strip() == word.lower().strip():
+                        prompts_map[word] = result_dict[key]
+                        found = True
+                        break
+                
+                if not found:
+                    logger.warning(f"Промпт для слова '{word}' не найден в ответе GPT")
+                    prompts_map[word] = f"Визуальная иллюстрация, передающая смысл: {word}"
         
         logger.info(f"Сгенерировано промптов: {len(prompts_map)} из {len(words_translations)}")
         return prompts_map
@@ -250,14 +264,14 @@ def generate_image_prompts_batch(
             logger.error(f"Ответ LLM: {result_text}")
         # Fallback: возвращаем простые промпты
         return {
-            item.get('word', ''): f"Визуальная иллюстрация, передающая смысл: {item['translation']}"
+            item.get('word', ''): f"Визуальная иллюстрация, передающая смысл: {item.get('word', '')}"
             for item in words_translations
         }
     except Exception as e:
         logger.error(f"Ошибка при генерации промптов: {str(e)}")
         # Fallback: возвращаем простые промпты
         return {
-            item.get('word', ''): f"Визуальная иллюстрация, передающая смысл: {item['translation']}"
+            item.get('word', ''): f"Визуальная иллюстрация, передающая смысл: {item.get('word', '')}"
             for item in words_translations
         }
 
@@ -360,6 +374,111 @@ def generate_image_with_dalle(
         
     except Exception as e:
         raise Exception(f"Ошибка при генерации изображения через DALL-E 3: {str(e)}")
+
+
+def edit_image_with_gemini(
+    source_image_path: Path,
+    mixin: str,
+    user=None,
+    model: str = 'nano-banana-pro-preview'
+) -> Tuple[Path, str]:
+    """
+    Редактирует изображение, добавляя элементы по описанию пользователя (миксин).
+    Использует nano-banana-pro-preview для image-to-image генерации.
+    
+    Args:
+        source_image_path: Путь к исходному изображению
+        mixin: Текст от пользователя - что добавить/изменить (1-3 слова)
+        user: Пользователь (для логирования)
+        model: Модель Gemini (по умолчанию nano-banana-pro-preview)
+    
+    Returns:
+        Кортеж (Path к новому изображению, промпт)
+    """
+    if not GEMINI_AVAILABLE:
+        raise ValueError("google-generativeai не установлен. Установите: pip install google-generativeai")
+    
+    if not source_image_path.exists():
+        raise ValueError(f"Исходное изображение не найдено: {source_image_path}")
+    
+    genai_client = get_gemini_client()
+    
+    # Формируем простой промпт для редактирования
+    prompt = f"Edit this image: {mixin}"
+    
+    logger.info(f"[Gemini Edit] Редактирование изображения: {source_image_path.name}")
+    logger.info(f"[Gemini Edit] Миксин: '{mixin}', Модель: {model}")
+    
+    try:
+        # Загружаем исходное изображение
+        source_image = Image.open(source_image_path)
+        if source_image.mode != 'RGB':
+            source_image = source_image.convert('RGB')
+        
+        # Конвертируем изображение в bytes для Gemini
+        img_byte_arr = io.BytesIO()
+        source_image.save(img_byte_arr, format='JPEG', quality=95)
+        img_byte_arr.seek(0)
+        
+        # Используем nano-banana-pro-preview для image-to-image
+        genai_model = genai.GenerativeModel(model)
+        
+        # Создаем Part с изображением
+        image_part = {
+            'mime_type': 'image/jpeg',
+            'data': img_byte_arr.getvalue()
+        }
+        
+        # Генерируем редактированное изображение
+        response = genai_model.generate_content(
+            [image_part, prompt],
+            generation_config={
+                'temperature': 0.7,
+            }
+        )
+        
+        # Извлекаем изображение из ответа
+        if not response.candidates or not response.candidates[0].content.parts:
+            raise Exception("Gemini не вернул изображение")
+        
+        image_data = None
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'inline_data') and part.inline_data:
+                image_data = part.inline_data.data
+                logger.info(f"[Gemini Edit] Изображение получено: {len(image_data)} байт")
+                break
+        
+        if not image_data:
+            raise Exception("Не удалось извлечь изображение из ответа Gemini")
+        
+        # Валидация изображения
+        result_image = Image.open(io.BytesIO(image_data))
+        result_image.verify()
+        
+        # Переоткрываем для сохранения
+        result_image = Image.open(io.BytesIO(image_data))
+        
+        if result_image.mode != 'RGB':
+            result_image = result_image.convert('RGB')
+        
+        # Генерируем уникальное имя файла
+        file_id = str(uuid.uuid4())
+        filename = f"{file_id}.jpg"
+        
+        # Сохраняем изображение
+        media_root = Path(settings.MEDIA_ROOT)
+        images_dir = media_root / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = images_dir / filename
+        result_image.save(file_path, "JPEG", quality=95)
+        
+        logger.info(f"[Gemini Edit] Результат сохранен: {file_path}")
+        
+        return file_path, prompt
+        
+    except Exception as e:
+        raise Exception(f"Ошибка при редактировании изображения через Gemini: {str(e)}")
 
 
 def generate_image_with_gemini(

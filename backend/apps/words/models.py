@@ -15,6 +15,12 @@ class Word(models.Model):
         ('it', 'Итальянский'),
     ]
     
+    CARD_TYPE_CHOICES = [
+        ('normal', 'Обычная карточка'),
+        ('inverted', 'Инвертированная карточка'),
+        ('empty', 'Пустая карточка'),
+    ]
+    
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -33,6 +39,13 @@ class Word(models.Model):
         max_length=2,
         choices=LANGUAGE_CHOICES,
         verbose_name='Язык'
+    )
+    card_type = models.CharField(
+        max_length=10,
+        choices=CARD_TYPE_CHOICES,
+        default='normal',
+        verbose_name='Тип карточки',
+        help_text='Тип карточки: обычная, инвертированная или пустая'
     )
     audio_file = models.FileField(
         upload_to='audio/',

@@ -1,4 +1,5 @@
-import { ru, TranslationKeys } from './ru';
+import { ru } from './ru';
+import type { TranslationKeys } from './ru';
 import { en } from './en';
 import { pt } from './pt';
 import { de } from './de';
@@ -32,4 +33,4 @@ export const translations: Record<string, TranslationKeys> = {
 
 export type SupportedLocale = keyof typeof translations;
 
-export { TranslationKeys } from './ru';
+export type { TranslationKeys } from './ru';

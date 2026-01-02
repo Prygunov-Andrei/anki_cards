@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Word, Deck } from '../types';
 import { Button } from './ui/button';
 import { WordCard } from './WordCard';
-import { Loader2 } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { Loader2, Filter } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,7 @@ interface WordsTableProps {
   onDeleteWord: (wordId: number) => Promise<void>;
   onRegenerateImage?: (wordId: number, word: string, translation: string) => Promise<void>;
   onRegenerateAudio?: (wordId: number, word: string) => Promise<void>;
+  onEditImage?: (wordId: number, mixin: string) => Promise<void>;
   onDeleteImage?: (wordId: number) => Promise<void>;
   onDeleteAudio?: (wordId: number) => Promise<void>;
   onMoveCardToDeck?: (wordId: number, toDeckId: number, toDeckName: string) => Promise<void>;
@@ -48,6 +50,7 @@ export const WordsTable: React.FC<WordsTableProps> = ({
   onDeleteWord,
   onRegenerateImage,
   onRegenerateAudio,
+  onEditImage,
   onDeleteImage,
   onDeleteAudio,
   onMoveCardToDeck,
@@ -62,6 +65,7 @@ export const WordsTable: React.FC<WordsTableProps> = ({
   const [deletingWordId, setDeletingWordId] = useState<number | null>(null);
   const [wordToDelete, setWordToDelete] = useState<Word | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [cardTypeFilter, setCardTypeFilter] = useState<'all' | 'normal' | 'inverted' | 'empty'>('all');
   const t = useTranslation();
 
   /**
@@ -71,6 +75,15 @@ export const WordsTable: React.FC<WordsTableProps> = ({
     setWordToDelete(word);
     setIsDeleteDialogOpen(true);
   };
+
+  /**
+   * Фильтрация слов по типу карточки
+   */
+  const filteredWords = useMemo(() => {
+    if (!words) return [];
+    if (cardTypeFilter === 'all') return words;
+    return words.filter((word) => word.card_type === cardTypeFilter);
+  }, [words, cardTypeFilter]);
 
   /**
    * Удалить слово
@@ -107,9 +120,56 @@ export const WordsTable: React.FC<WordsTableProps> = ({
 
   return (
     <>
+      {/* Фильтры по типам карточек */}
+      {words && words.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Filter className="h-4 w-4" />
+            <span>{t.common.filter}:</span>
+          </div>
+          <Button
+            variant={cardTypeFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCardTypeFilter('all')}
+            className="h-8"
+          >
+            {t.words.filterAll}
+          </Button>
+          <Button
+            variant={cardTypeFilter === 'normal' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCardTypeFilter('normal')}
+            className="h-8"
+          >
+            {t.words.filterNormal}
+          </Button>
+          <Button
+            variant={cardTypeFilter === 'inverted' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCardTypeFilter('inverted')}
+            className="h-8"
+          >
+            {t.words.filterInverted}
+          </Button>
+          <Button
+            variant={cardTypeFilter === 'empty' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCardTypeFilter('empty')}
+            className="h-8"
+          >
+            {t.words.filterEmpty}
+          </Button>
+          {cardTypeFilter !== 'all' && (
+            <Badge variant="secondary" className="ml-auto">
+              {filteredWords.length} {t.words.wordCountMany}
+            </Badge>
+          )}
+        </div>
+      )}
+
       {/* Сетка карточек слов */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {words.map((word) => {
+        {filteredWords.map((word) => {
           // Fallback для совместимости: backend может возвращать 'word' вместо 'original_word'
           const wordText = word.original_word || (word as any).word || '???';
           const imageUrl = word.image_file ? getAbsoluteUrl(word.image_file) : undefined;
@@ -122,6 +182,7 @@ export const WordsTable: React.FC<WordsTableProps> = ({
               translation={word.translation}
               imageUrl={imageUrl}
               audioUrl={audioUrl}
+              cardType={word.card_type}
               onDelete={() => openDeleteDialog(word)}
               onRegenerateImage={
                 onRegenerateImage
@@ -134,6 +195,13 @@ export const WordsTable: React.FC<WordsTableProps> = ({
                 onRegenerateAudio
                   ? async () => {
                       await onRegenerateAudio(word.id, wordText);
+                    }
+                  : undefined
+              }
+              onEditImage={
+                onEditImage
+                  ? async (mixin: string) => {
+                      await onEditImage(word.id, mixin);
                     }
                   : undefined
               }

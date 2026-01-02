@@ -81,6 +81,17 @@ export const DeckCard: React.FC<DeckCardProps> = ({
     // Для других языков
     return count === 1 ? t.decks.word : t.decks.words;
   };
+  
+  // Плюрализация карточек
+  const getCardsText = (count: number) => {
+    if (locale === 'ru') {
+      if (count === 1) return t.decks.card;
+      if (count >= 2 && count <= 4) return t.decks.cardsTwo;
+      return t.decks.cards;
+    }
+    // Для других языков
+    return count === 1 ? t.decks.card : t.decks.cards;
+  };
 
   return (
     <Card className="group relative overflow-hidden transition-all hover:shadow-lg dark:hover:shadow-cyan-500/10">
@@ -195,18 +206,42 @@ export const DeckCard: React.FC<DeckCardProps> = ({
 
           {/* Метаинформация */}
           <div className="space-y-2">
-            {/* Количество слов */}
+            {/* Количество слов и карточек */}
             <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
               <BookOpen className="mr-2 h-4 w-4 text-cyan-500" />
               <span>
-                {deck.words_count} {getWordsText(deck.words_count)}
+                {deck.unique_words_count !== undefined && deck.unique_words_count !== deck.words_count ? (
+                  <>
+                    {deck.unique_words_count} {getWordsText(deck.unique_words_count)} ({deck.words_count} {getCardsText(deck.words_count)})
+                  </>
+                ) : (
+                  <>
+                    {deck.words_count} {getWordsText(deck.words_count)}
+                  </>
+                )}
               </span>
             </div>
 
-            {/* Дата обновления */}
-            <div className="flex items-center text-sm text-gray-500 dark:text-gray-500">
-              <Calendar className="mr-2 h-4 w-4" />
-              <span>{t.decks.updated} {getRelativeTime(deck.updated_at)}</span>
+            {/* Дата создания и обновления */}
+            <div className="space-y-1">
+              {/* Дата создания */}
+              <div className="flex items-center text-sm text-gray-500 dark:text-gray-500">
+                <Calendar className="mr-2 h-4 w-4" />
+                <span>{t.decks.created} {getRelativeTime(deck.created_at)}</span>
+              </div>
+              {/* Дата обновления (показываем только если отличается от создания более чем на 1 секунду) */}
+              {(() => {
+                const createdTime = new Date(deck.created_at).getTime();
+                const updatedTime = new Date(deck.updated_at).getTime();
+                const diffSeconds = Math.abs(updatedTime - createdTime) / 1000;
+                // Показываем дату обновления, если разница больше 1 секунды
+                return diffSeconds > 1;
+              })() && (
+                <div className="flex items-center text-sm text-gray-500 dark:text-gray-500">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  <span>{t.decks.updated} {getRelativeTime(deck.updated_at)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

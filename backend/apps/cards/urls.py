@@ -9,6 +9,7 @@ urlpatterns = [
 # Media endpoints
 media_urlpatterns = [
     path('generate-image/', views.generate_image_view, name='generate-image'),
+    path('edit-image/', views.edit_image_view, name='edit-image'),
     path('generate-audio/', views.generate_audio_view, name='generate-audio'),
     path('upload-image/', views.upload_image_view, name='upload-image'),
     path('upload-audio/', views.upload_audio_view, name='upload-audio'),

@@ -4,8 +4,9 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { AudioPlayer } from './AudioPlayer';
 import { ImagePreviewModal } from './ImagePreviewModal';
+import { ImageEditModal } from './ImageEditModal';
 import { EditableText } from './EditableText';
-import { Trash2, RefreshCw, ImageIcon, MoreVertical, ArrowRight, Volume2, ArrowLeftRight, FileText } from 'lucide-react';
+import { Trash2, RefreshCw, ImageIcon, MoreVertical, ArrowRight, Volume2, ArrowLeftRight, FileText, Wand2, BookOpen } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,9 +26,11 @@ interface WordCardProps {
   audioUrl?: string;
   wordId?: number;
   deckId?: number;
+  cardType?: 'normal' | 'inverted' | 'empty';
   onDelete?: () => void;
   onRegenerateImage?: () => Promise<void>;
   onRegenerateAudio?: () => Promise<void>;
+  onEditImage?: (mixin: string) => Promise<void>;
   onDeleteImage?: () => Promise<void>;
   onDeleteAudio?: () => Promise<void>;
   onMoveToDeck?: (deckId: number, deckName: string) => Promise<void>;
@@ -51,9 +54,11 @@ export const WordCard: React.FC<WordCardProps> = ({
   audioUrl,
   wordId,
   deckId,
+  cardType = 'normal',
   onDelete,
   onRegenerateImage,
   onRegenerateAudio,
+  onEditImage,
   onDeleteImage,
   onDeleteAudio,
   onMoveToDeck,
@@ -73,6 +78,7 @@ export const WordCard: React.FC<WordCardProps> = ({
   } | null>(null);
   const [regeneratingImage, setRegeneratingImage] = useState(false);
   const [regeneratingAudio, setRegeneratingAudio] = useState(false);
+  const [editImageModalOpen, setEditImageModalOpen] = useState(false);
 
   // Фильтруем список колод - используем availableDecks если передан, иначе allDecks (все колоды минус текущую будут показаны)
   const decksToShow = availableDecks || allDecks;
@@ -112,9 +118,60 @@ export const WordCard: React.FC<WordCardProps> = ({
     }
   };
 
+  /**
+   * Редактирование изображения через миксин
+   */
+  const handleEditImage = async (mixin: string) => {
+    if (!onEditImage) return;
+    setRegeneratingImage(true);
+    try {
+      await onEditImage(mixin);
+    } finally {
+      setRegeneratingImage(false);
+    }
+  };
+
+  // Определяем стиль бейджа в зависимости от типа карточки
+  const getCardTypeBadge = () => {
+    if (cardType === 'inverted') {
+      return {
+        icon: ArrowLeftRight,
+        label: t.words.cardTypeInverted,
+        className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+      };
+    }
+    if (cardType === 'empty') {
+      return {
+        icon: FileText,
+        label: t.words.cardTypeEmpty,
+        className: 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20',
+      };
+    }
+    return {
+      icon: BookOpen,
+      label: t.words.cardTypeNormal,
+      className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    };
+  };
+
+  const badgeInfo = getCardTypeBadge();
+  const BadgeIcon = badgeInfo.icon;
+
   return (
     <>
       <Card className="overflow-hidden hover:shadow-lg transition-shadow relative">
+        {/* Бейдж типа карточки - левый верхний угол (только для инвертированных и пустых) */}
+        {cardType && (cardType === 'inverted' || cardType === 'empty') && (
+          <Badge
+            variant="outline"
+            className={`absolute top-2 left-2 z-10 text-lg px-6 py-3 flex items-center gap-3 ${badgeInfo.className}`}
+            title={badgeInfo.label}
+          >
+            <BadgeIcon className="h-6 w-6" />
+            <span className="hidden sm:inline font-semibold">{badgeInfo.label}</span>
+          </Badge>
+        )}
+        
         {/* Меню карточки - ВСЕГДА видимое */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -167,6 +224,20 @@ export const WordCard: React.FC<WordCardProps> = ({
               </DropdownMenuSub>
             )}
 
+            {/* Изменить картинку (через миксин) */}
+            {onEditImage && imageUrl && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditImageModalOpen(true);
+                }}
+                disabled={disabled || regeneratingImage}
+              >
+                <Wand2 className="mr-2 h-4 w-4" />
+                {t.words.editImage}
+              </DropdownMenuItem>
+            )}
+
             {/* Удалить → */}
             {(onDelete || onDeleteImage || onDeleteAudio) && (
               <DropdownMenuSub>
@@ -185,7 +256,7 @@ export const WordCard: React.FC<WordCardProps> = ({
                       className="text-destructive focus:text-destructive"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
-                      {t.words.deleteWord}
+                      {t.words.word}
                     </DropdownMenuItem>
                   )}
                   {onDeleteImage && imageUrl && (
@@ -377,6 +448,14 @@ export const WordCard: React.FC<WordCardProps> = ({
           translation={previewImage.translation}
         />
       )}
+
+      {/* Модальное окно редактирования изображения */}
+      <ImageEditModal
+        isOpen={editImageModalOpen}
+        onClose={() => setEditImageModalOpen(false)}
+        onSubmit={handleEditImage}
+        word={word}
+      />
     </>
   );
 };

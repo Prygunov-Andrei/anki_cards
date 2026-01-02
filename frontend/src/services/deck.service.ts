@@ -435,6 +435,37 @@ class DeckService {
   }
 
   /**
+   * Редактирование изображения через миксин
+   * Использует nano-banana-pro для image-to-image генерации
+   * @param data - Данные для редактирования
+   * @param signal - AbortSignal для отмены запроса
+   * @returns Promise с URL нового изображения
+   */
+  async editImage(
+    data: {
+      word_id: number;
+      mixin: string; // Что добавить/изменить на изображении (1-3 слова)
+    },
+    signal?: AbortSignal
+  ): Promise<{ image_url: string; mixin: string; word_id: number }> {
+    try {
+      // AI-редактирование изображений может занимать 60-120 секунд
+      const response = await api.post<{ image_url: string; mixin: string; word_id: number }>(
+        '/api/media/edit-image/',
+        data,
+        { 
+          timeout: 180000, // 3 минуты
+          signal, // Поддержка отмены запроса
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error editing image:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Обновление медиа для слова в колоде
    * @param deckId - ID колоды
    * @param wordId - ID слова

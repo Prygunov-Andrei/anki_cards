@@ -14,6 +14,7 @@ class WordSerializer(serializers.ModelSerializer):
             'language',
             'audio_file',
             'image_file',
+            'card_type',
             'created_at',
             'updated_at',
         ]

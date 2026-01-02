@@ -67,9 +67,62 @@ export const InvertWordsConfirmModal: React.FC<InvertWordsConfirmModalProps> = (
                 </span>
                 {deck && deck.words_count && (
                   <span className="block font-semibold text-gray-900 dark:text-gray-100">
-                    {t.decks.currentSize || 'Текущий размер'}: {deck.words_count} {deck.words_count === 1 ? t.decks.word : t.decks.words}
-                    <br />
-                    {t.decks.afterInvert || 'После инвертирования'}: {deck.words_count * 2} {t.decks.words}
+                    {(() => {
+                      // Подсчитываем количество обычных карточек, которые будут инвертированы
+                      // Важно: учитываем только те обычные слова, у которых еще нет инвертированной версии в колоде
+                      const words = deck.words || [];
+                      
+                      let normalWordsToInvert = 0;
+                      
+                      if (words.length > 0 && deck.source_lang && deck.target_lang) {
+                        // Фильтруем обычные слова
+                        const normalWords = words.filter((w: any) => w.card_type === 'normal' || !w.card_type);
+                        
+                        // Для каждого обычного слова проверяем, есть ли уже его инвертированная версия
+                        normalWordsToInvert = normalWords.filter((normalWord: any) => {
+                          // Инвертированная версия = слово, где:
+                          // - original_word == translation обычного слова
+                          // - translation == original_word обычного слова
+                          // - language == source_lang колоды
+                          const invertedOriginal = normalWord.translation;
+                          const invertedTranslation = normalWord.original_word;
+                          
+                          // Проверяем, есть ли такое слово в колоде
+                          const hasInvertedVersion = words.some((w: any) => 
+                            w.original_word === invertedOriginal &&
+                            w.translation === invertedTranslation &&
+                            w.language === deck.source_lang
+                          );
+                          
+                          return !hasInvertedVersion; // Инвертируем только если инвертированной версии нет
+                        }).length;
+                      } else if (words.length > 0) {
+                        // Если нет source_lang/target_lang, просто считаем все обычные слова
+                        normalWordsToInvert = words.filter((w: any) => w.card_type === 'normal' || !w.card_type).length;
+                      } else {
+                        // Если слов нет в массиве, предполагаем что все слова обычные
+                        normalWordsToInvert = deck.words_count;
+                      }
+                      
+                      const currentSize = deck.words_count;
+                      const afterInvert = currentSize + normalWordsToInvert; // Текущий размер + новые инвертированные
+                      
+                      return (
+                        <>
+                          {t.decks.currentSize || 'Текущий размер'}: {currentSize} {currentSize === 1 ? t.decks.word : t.decks.words}
+                          <br />
+                          {t.decks.afterInvert || 'После инвертирования'}: {afterInvert} {t.decks.words}
+                          {words.length > 0 && normalWordsToInvert < currentSize && (
+                            <>
+                              <br />
+                              <span className="text-sm text-muted-foreground">
+                                ({normalWordsToInvert} {t.words.filterNormal.toLowerCase()} {normalWordsToInvert === 1 ? t.words.wordCount : t.words.wordCountMany} {normalWordsToInvert === 1 ? 'будет' : 'будут'} инвертировано)
+                              </span>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                   </span>
                 )}
               </>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
@@ -166,13 +166,14 @@ export default function MainPage() {
     }
     
     // Создаем или обновляем массив переводов
-    const updatedTranslations = processedWords.map((word) => {
-      // Ищем существующий перевод
-      const existing = translations.find((t) => t.word === word);
-      return existing || { word, translation: '' };
+    // ВАЖНО: Используем функциональную форму setTranslations для корректной работы с асинхронными операциями
+    setTranslations(prevTranslations => {
+      return processedWords.map((word) => {
+        // Ищем существующий перевод в предыдущем состоянии
+        const existing = prevTranslations.find((t) => t.word === word);
+        return existing || { word, translation: '' };
+      });
     });
-    
-    setTranslations(updatedTranslations);
   };
 
   /**
@@ -194,10 +195,16 @@ export default function MainPage() {
       return;
     }
 
+    // Логирование для отладки
+    console.log('🔍 [AutoTranslate] words:', words);
+    console.log('🔍 [AutoTranslate] translations:', translations);
+
     // Находим слова без перевода
     const wordsToTranslate = translations
       .filter((pair) => !pair.translation.trim())
       .map((pair) => pair.word);
+
+    console.log('🔍 [AutoTranslate] wordsToTranslate:', wordsToTranslate);
 
     if (wordsToTranslate.length === 0) {
       showInfo(t.toast.allTranslationsFilled);
@@ -213,6 +220,9 @@ export default function MainPage() {
     });
 
     try {
+      // Собираем все переводы из обеих попыток в один объект
+      let allTranslationsDict: Record<string, string> = {};
+      
       // Первая попытка перевода всех слов
       const translatedWords = await deckService.translateWords({
         words: wordsToTranslate,
@@ -226,33 +236,20 @@ export default function MainPage() {
       console.log('📥 Получили переводы:', translationsDict);
       console.log('📊 Количество переводов:', Object.keys(translationsDict).length);
 
-      // Обновляем переводы после первой попытки
-      let updatedTranslations = translations.map((pair) => {
-        if (!pair.translation.trim()) {
-          // Ищем перевод по полному ключу
-          let translation = translationsDict[pair.word];
-          
-          console.log(`🔍 Ищем перевод для "${pair.word}":`, translation ? `найдено "${translation}"` : 'не найдено');
-          
-          // Если не нашли, пробуем найти по ключу без скобок
-          // Например: "rennen (rannte / gerant)" -> "rennen"
-          if (!translation && pair.word.includes('(')) {
-            const wordWithoutParens = pair.word.split('(')[0].trim();
-            translation = translationsDict[wordWithoutParens];
-            console.log(`🔍 Попытка без скобок "${wordWithoutParens}":`, translation ? `найдено "${translation}"` : 'не найдено');
-          }
-          
-          if (translation) {
-            return { ...pair, translation };
-          }
-        }
-        return pair;
-      });
+      // Добавляем переводы первой попытки
+      allTranslationsDict = { ...allTranslationsDict, ...translationsDict };
 
       // Проверяем какие слова остались непереведенными
-      const untranslatedWords = updatedTranslations
-        .filter((pair) => !pair.translation.trim())
-        .map((pair) => pair.word);
+      const untranslatedWords = wordsToTranslate.filter((word) => {
+        // Ищем перевод по полному ключу
+        if (allTranslationsDict[word]) return false;
+        // Пробуем найти по ключу без скобок
+        if (word.includes('(')) {
+          const wordWithoutParens = word.split('(')[0].trim();
+          if (allTranslationsDict[wordWithoutParens]) return false;
+        }
+        return true;
+      });
 
       // Если есть непереведенные слова, делаем повторную попытку
       if (untranslatedWords.length > 0) {
@@ -271,60 +268,72 @@ export default function MainPage() {
           console.log('📥 Получили переводы при retry:', retryTranslationsDict);
           console.log('🔑 Ключи в ответе:', Object.keys(retryTranslationsDict));
 
-          // Обновляем переводы после повторной попытки
-          updatedTranslations = updatedTranslations.map((pair) => {
-            if (!pair.translation.trim()) {
-              // Ищем перевод по полному ключу
-              let translation = retryTranslationsDict[pair.word];
-              
-              // Если не нашли, пробуем найти по ключу без скобок
-              if (!translation && pair.word.includes('(')) {
-                const wordWithoutParens = pair.word.split('(')[0].trim();
-                translation = retryTranslationsDict[wordWithoutParens];
-              }
-              
-              // 🆕 НОВАЯ ЛОГИКА: Backend может вернуть объединенные слова через запятую
-              // Например: "Da kann ich mich ganz nach Ihne, richten" 
-              if (!translation) {
-                // Ищем ключи которые содержат наше слово
-                for (const [key, value] of Object.entries(retryTranslationsDict)) {
-                  // Проверяем содержится ли наше слово в ключе
-                  if (key.includes(pair.word)) {
-                    translation = value as string;
-                    console.log(`✅ Найден перевод в составном ключе: "${key}" -> "${translation}"`);
-                    break;
-                  }
-                }
-              }
-              
-              if (translation) {
-                console.log(`✅ Перевод найден при повторной попытке: ${pair.word} -> ${translation}`);
-                return { ...pair, translation };
-              } else {
-                console.warn(`⚠️ Слово не удалось перевести после повторной попытки: ${pair.word}`);
-              }
-            }
-            return pair;
-          });
+          // Добавляем переводы повторной попытки
+          allTranslationsDict = { ...allTranslationsDict, ...retryTranslationsDict };
         } catch (retryError) {
           console.error('Error during retry translation:', retryError);
           // Продолжаем с переводами которые удалось получить при первой попытке
         }
       }
 
-      setTranslations(updatedTranslations);
+      console.log('📊 Все собранные переводы:', allTranslationsDict);
+
+      // Функция поиска перевода для слова
+      const findTranslation = (word: string): string | null => {
+        // Ищем перевод по полному ключу
+        if (allTranslationsDict[word]) {
+          return allTranslationsDict[word];
+        }
+        
+        // Пробуем найти по ключу без скобок
+        if (word.includes('(')) {
+          const wordWithoutParens = word.split('(')[0].trim();
+          if (allTranslationsDict[wordWithoutParens]) {
+            return allTranslationsDict[wordWithoutParens];
+          }
+        }
+        
+        // Ищем ключи которые содержат наше слово (для составных ключей)
+        for (const [key, value] of Object.entries(allTranslationsDict)) {
+          if (key.includes(word)) {
+            console.log(`✅ Найден перевод в составном ключе: "${key}" -> "${value}"`);
+            return value;
+          }
+        }
+        
+        return null;
+      };
+
+      // ВАЖНО: Используем функциональную форму setTranslations для работы с актуальным состоянием
+      setTranslations(prevTranslations => {
+        console.log('🔄 [setTranslations] prevTranslations:', prevTranslations);
+        
+        return prevTranslations.map((pair) => {
+          if (!pair.translation.trim()) {
+            const translation = findTranslation(pair.word);
+            
+            if (translation) {
+              console.log(`✅ Перевод применен: ${pair.word} -> ${translation}`);
+              return { ...pair, translation };
+            } else {
+              console.warn(`⚠️ Перевод не найден для: ${pair.word}`);
+            }
+          }
+          return pair;
+        });
+      });
 
       // Подсчитываем переведенные слова для уведомления
-      const translatedCount = wordsToTranslate.length - updatedTranslations.filter((pair) => !pair.translation.trim()).length;
+      const translatedCount = Object.keys(allTranslationsDict).length;
 
       showSuccess(t.toast.wordsTranslated, {
         description: `${t.toast.translated} ${translatedCount} ${translatedCount === 1 ? t.toast.word : t.toast.words}`,
       });
 
       // Предупреждаем о непереведенных словах
-      const finalUntranslated = updatedTranslations.filter((pair) => !pair.translation.trim());
-      if (finalUntranslated.length > 0) {
-        console.warn(`⚠️ Не удалось перевести ${finalUntranslated.length} слов:`, finalUntranslated.map(p => p.word));
+      const stillUntranslated = wordsToTranslate.filter(word => !findTranslation(word));
+      if (stillUntranslated.length > 0) {
+        console.warn(`⚠️ Не удалось перевести ${stillUntranslated.length} слов:`, stillUntranslated);
       }
 
     } catch (error) {
@@ -840,14 +849,14 @@ export default function MainPage() {
       const audioFiles: Record<string, string> = {};
       
       for (const [word, url] of Object.entries(generatedImages)) {
-        const relativePath = getRelativePath(url);
+        const relativePath = getRelativePath(url as string);
         if (relativePath) {
           imageFiles[word] = relativePath;
         }
       }
       
       for (const [word, url] of Object.entries(generatedAudio)) {
-        const relativePath = getRelativePath(url);
+        const relativePath = getRelativePath(url as string);
         if (relativePath) {
           audioFiles[word] = relativePath;
         }

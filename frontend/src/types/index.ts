@@ -29,6 +29,7 @@ export interface Word {
   language: string;
   audio_file: string | null;
   image_file: string | null;
+  card_type?: 'normal' | 'inverted' | 'empty';
 }
 
 // ========== DECK ==========
@@ -40,7 +41,8 @@ export interface Deck {
   target_lang?: string; // Может быть undefined при загрузке
   source_lang?: string; // Может быть undefined при загрузке
   words?: Word[]; // Может быть undefined при загрузке
-  words_count: number;
+  words_count: number; // Общее количество карточек
+  unique_words_count?: number; // Количество уникальных слов (normal + inverted, без empty)
   created_at: string;
   updated_at: string;
 }

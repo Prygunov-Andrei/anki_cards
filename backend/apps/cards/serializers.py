@@ -212,6 +212,20 @@ class AudioGenerationSerializer(serializers.Serializer):
     )
 
 
+class ImageEditSerializer(serializers.Serializer):
+    """Сериализатор для редактирования изображения через миксин"""
+    
+    word_id = serializers.IntegerField(
+        required=True,
+        help_text="ID слова, изображение которого нужно отредактировать"
+    )
+    mixin = serializers.CharField(
+        required=True,
+        max_length=100,
+        help_text="Что добавить/изменить на изображении (1-3 слова, например: 'добавь коня')"
+    )
+
+
 class ImageUploadSerializer(serializers.Serializer):
     """Сериализатор для загрузки изображения"""
     
@@ -356,6 +370,7 @@ class WordSerializer(serializers.Serializer):
     original_word = serializers.CharField(read_only=True)
     translation = serializers.CharField(read_only=True)
     language = serializers.CharField(read_only=True)
+    card_type = serializers.CharField(read_only=True)
     image_file = serializers.SerializerMethodField()
     audio_file = serializers.SerializerMethodField()
     
@@ -376,6 +391,7 @@ class DeckSerializer(serializers.ModelSerializer):
     """Сериализатор для колоды (список)"""
     
     words_count = serializers.IntegerField(read_only=True)
+    unique_words_count = serializers.SerializerMethodField()
     user = serializers.StringRelatedField(read_only=True)
     
     class Meta:
@@ -383,9 +399,16 @@ class DeckSerializer(serializers.ModelSerializer):
         model = Deck
         fields = [
             'id', 'name', 'cover', 'target_lang', 'source_lang',
-            'words_count', 'user', 'created_at', 'updated_at'
+            'words_count', 'unique_words_count', 'user', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_unique_words_count(self, obj):
+        """Подсчитывает количество уникальных слов для изучения (только normal, исключая inverted и empty)"""
+        # Считаем только карточки типа 'normal' - это и есть слова на изучении
+        # Инвертированные карточки - это те же слова, но в обратном направлении
+        # Пустые карточки - это не слова для изучения
+        return obj.words.filter(card_type='normal').count()
 
 
 class DeckDetailSerializer(serializers.ModelSerializer):

@@ -6,8 +6,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from './ui/dialog';
-import { X } from 'lucide-react';
-import { Button } from './ui/button';
 import { getAbsoluteUrl } from '../utils/url-helpers';
 import { displayWord } from '../utils/helpers';
 
@@ -61,16 +59,6 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             }}
           />
         </div>
-
-        {/* Кнопка закрытия */}
-        <Button
-          variant="destructive"
-          className="absolute top-4 right-4"
-          onClick={onClose}
-        >
-          <X className="h-4 w-4" />
-          <span className="sr-only">Закрыть</span>
-        </Button>
       </DialogContent>
     </Dialog>
   );

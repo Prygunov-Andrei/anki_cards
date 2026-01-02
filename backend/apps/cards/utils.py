@@ -74,6 +74,9 @@ def generate_apkg(
     
     Returns:
         Path к созданному .apkg файлу
+    
+    Note:
+        Слова автоматически перемешиваются в случайном порядке перед добавлением в колоду.
     """
     # Создаем модель карточек
     model = create_card_model()
@@ -81,16 +84,35 @@ def generate_apkg(
     # Создаем колоду
     deck = create_deck(deck_name)
     
+    # Перемешиваем слова в случайном порядке перед добавлением в колоду
+    shuffled_words = words_data.copy()  # Создаем копию, чтобы не изменять исходный список
+    random.shuffle(shuffled_words)
+    logger.info(f"🔀 Слова перемешаны в случайном порядке для колоды '{deck_name}'")
+    
+    # Отделяем пустые карточки и ставим их в конец
+    empty_cards = []
+    non_empty_cards = []
+    for word_data in shuffled_words:
+        card_type = word_data.get('card_type', 'normal')
+        if card_type == 'empty':
+            empty_cards.append(word_data)
+        else:
+            non_empty_cards.append(word_data)
+    
+    # Формируем финальный список: сначала непустые карточки, затем пустые
+    final_words_order = non_empty_cards + empty_cards
+    logger.info(f"📋 Порядок карточек: {len(non_empty_cards)} обычных + {len(empty_cards)} пустых (в конце)")
+    
     # Добавляем записи для каждого слова
-    for word_data in words_data:
+    for word_data in final_words_order:
         original_word = word_data.get('original_word', '')
         translation = word_data.get('translation', '')
         
-        # Если это пустая карточка (начинается с '_empty_'), показываем пустую строку
-        # В базе хранится '_empty_{word_id}', но для карточки нужно показать пустую строку
-        display_word = ''
-        if original_word.startswith('_empty_'):
-            display_word = ''
+        # Определяем display_word в зависимости от типа карточки
+        # Для пустых карточек показываем пустую строку, для остальных - original_word
+        card_type = word_data.get('card_type', 'normal')
+        if card_type == 'empty':
+            display_word = ''  # Пустые карточки показывают пустую строку
         else:
             display_word = original_word
         
@@ -117,7 +139,7 @@ def generate_apkg(
         )
         deck.add_note(note)
     
-    # Собираем все медиафайлы из words_data
+    # Собираем все медиафайлы из финального списка слов (с пустыми карточками в конце)
     all_media_files = []
     seen_files = set()  # Для отслеживания уже добавленных файлов
     
@@ -125,7 +147,7 @@ def generate_apkg(
     from django.conf import settings
     media_root = Path(settings.MEDIA_ROOT)
     
-    for word_data in words_data:
+    for word_data in final_words_order:
         # Обработка аудио
         if word_data.get('audio_file'):
             audio_path = Path(word_data['audio_file'])

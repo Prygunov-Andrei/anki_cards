@@ -289,9 +289,18 @@ export default function DecksPage() {
   /**
    * Открыть модальное окно подтверждения инвертирования слов
    */
-  const openInvertWordsModal = (deck: Deck) => {
-    setSelectedDeckForInvert(deck);
-    setIsInvertWordsModalOpen(true);
+  const openInvertWordsModal = async (deck: Deck) => {
+    try {
+      // Загружаем полную информацию о колоде, чтобы получить слова с типами
+      const fullDeck = await deckService.getDeck(deck.id);
+      setSelectedDeckForInvert(fullDeck);
+      setIsInvertWordsModalOpen(true);
+    } catch (error) {
+      console.error('Error loading deck details:', error);
+      // Если не удалось загрузить, используем базовую информацию
+      setSelectedDeckForInvert(deck);
+      setIsInvertWordsModalOpen(true);
+    }
   };
 
   /**

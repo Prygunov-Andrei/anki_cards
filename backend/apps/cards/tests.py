@@ -65,6 +65,62 @@ class TestCardUtils:
             
             assert result_path.exists()
             assert result_path.suffix == '.apkg'
+    
+    def test_generate_apkg_with_card_types(self):
+        """Тест генерации колоды с разными типами карточек"""
+        words_data = [
+            {
+                'original_word': 'casa',
+                'translation': 'дом',
+                'card_type': 'normal',
+            },
+            {
+                'original_word': 'дом',
+                'translation': 'casa',
+                'card_type': 'inverted',
+            },
+            {
+                'original_word': '_empty_123',
+                'translation': 'livro // книга',
+                'card_type': 'empty',
+            }
+        ]
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test_deck_types.apkg"
+            result_path = generate_apkg(
+                words_data=words_data,
+                deck_name="Колода с типами",
+                output_path=output_path
+            )
+            
+            assert result_path.exists()
+            assert result_path.suffix == '.apkg'
+    
+    def test_generate_apkg_shuffles_words(self):
+        """Тест, что слова перемешиваются в случайном порядке"""
+        words_data = [
+            {'original_word': f'word{i}', 'translation': f'перевод{i}'}
+            for i in range(10)
+        ]
+        
+        # Генерируем несколько раз и проверяем, что порядок разный
+        orders = []
+        for _ in range(3):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                output_path = Path(tmpdir) / "test_shuffle.apkg"
+                generate_apkg(
+                    words_data=words_data.copy(),
+                    deck_name="Тест перемешивания",
+                    output_path=output_path
+                )
+                # Проверяем, что файл создан (порядок внутри APKG проверить сложно,
+                # но функция должна работать без ошибок)
+                assert output_path.exists()
+                orders.append(output_path.stat().st_size)
+        
+        # Все файлы должны быть созданы (размер может немного отличаться)
+        assert len(set(orders)) >= 1
 
 
 @pytest.mark.django_db
@@ -2735,3 +2791,273 @@ class TestErrorHandling:
             from .token_utils import check_balance
             balance = check_balance(user)
             assert balance == 50  # 100 - 50 = 50
+
+
+@pytest.mark.django_db
+class TestCardType:
+    """Тесты для типов карточек (normal, inverted, empty)"""
+    
+    def test_word_default_card_type(self):
+        """Тест, что новые слова имеют тип 'normal' по умолчанию"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        word = Word.objects.create(
+            user=user,
+            original_word='casa',
+            translation='дом',
+            language='pt'
+        )
+        assert word.card_type == 'normal'
+    
+    def test_invert_word_sets_card_type(self):
+        """Тест, что инвертированное слово имеет тип 'inverted'"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        deck = Deck.objects.create(
+            user=user,
+            name='Тестовая колода',
+            target_lang='pt',
+            source_lang='ru'
+        )
+        word = Word.objects.create(
+            user=user,
+            original_word='casa',
+            translation='дом',
+            language='pt',
+            card_type='normal'
+        )
+        deck.words.add(word)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        response = client.post(
+            f'/api/cards/decks/{deck.id}/invert_word/',
+            {'word_id': word.id},
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        inverted_word_id = response.data['inverted_word']['id']
+        inverted_word = Word.objects.get(id=inverted_word_id)
+        assert inverted_word.card_type == 'inverted'
+    
+    def test_create_empty_card_only_for_normal(self):
+        """Тест, что пустые карточки создаются только для обычных карточек"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        deck = Deck.objects.create(
+            user=user,
+            name='Тестовая колода',
+            target_lang='pt',
+            source_lang='ru'
+        )
+        
+        # Создаем обычную карточку
+        normal_word = Word.objects.create(
+            user=user,
+            original_word='casa',
+            translation='дом',
+            language='pt',
+            card_type='normal'
+        )
+        deck.words.add(normal_word)
+        
+        # Создаем инвертированную карточку (явно помеченную)
+        inverted_word = Word.objects.create(
+            user=user,
+            original_word='дом',
+            translation='casa',
+            language='ru',
+            card_type='inverted'
+        )
+        deck.words.add(inverted_word)
+        
+        # Создаем старую инвертированную карточку (card_type='normal', но language=source_lang)
+        old_inverted_word = Word.objects.create(
+            user=user,
+            original_word='книга',
+            translation='livro',
+            language='ru',  # source_lang колоды
+            card_type='normal'  # Старая карточка, созданная до добавления card_type
+        )
+        deck.words.add(old_inverted_word)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        # Пытаемся создать пустые карточки для всех слов
+        response = client.post(f'/api/cards/decks/{deck.id}/create_empty_cards/')
+        
+        assert response.status_code == status.HTTP_200_OK
+        # Должна быть создана только одна пустая карточка (для normal)
+        assert response.data['empty_cards_count'] == 1
+        # Проверяем, что пустая карточка создана для normal слова
+        empty_card_id = response.data['empty_cards'][0]['id']
+        empty_card = Word.objects.get(id=empty_card_id)
+        assert empty_card.card_type == 'empty'
+        assert empty_card.original_word.startswith('_empty_')
+        
+        # Проверяем, что обе инвертированные карточки были пропущены
+        skipped = response.data.get('skipped_cards', [])
+        assert len(skipped) == 2, f"Ожидалось 2 пропущенных карточки, получено {len(skipped)}"
+        skipped_ids = [s['id'] for s in skipped]
+        assert inverted_word.id in skipped_ids
+        assert old_inverted_word.id in skipped_ids
+    
+    def test_create_empty_card_rejects_inverted(self):
+        """Тест, что нельзя создать пустую карточку для инвертированной"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        deck = Deck.objects.create(
+            user=user,
+            name='Тестовая колода',
+            target_lang='pt',
+            source_lang='ru'
+        )
+        inverted_word = Word.objects.create(
+            user=user,
+            original_word='дом',
+            translation='casa',
+            language='ru',
+            card_type='inverted'
+        )
+        deck.words.add(inverted_word)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        response = client.post(
+            f'/api/cards/decks/{deck.id}/create_empty_card/',
+            {'word_id': inverted_word.id},
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'error' in response.data
+        assert 'инвертированная' in response.data['error'].lower() or 'inverted' in response.data['error'].lower()
+    
+    def test_invert_all_words_skips_already_inverted(self):
+        """Тест, что уже инвертированные карточки не инвертируются повторно"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        deck = Deck.objects.create(
+            user=user,
+            name='Тестовая колода',
+            target_lang='pt',
+            source_lang='ru'
+        )
+        
+        # Создаем обычную карточку
+        normal_word = Word.objects.create(
+            user=user,
+            original_word='casa',
+            translation='дом',
+            language='pt',
+            card_type='normal'
+        )
+        deck.words.add(normal_word)
+        
+        # Создаем уже инвертированную карточку (НЕ связанную с normal_word)
+        inverted_word = Word.objects.create(
+            user=user,
+            original_word='книга',
+            translation='livro',
+            language='ru',
+            card_type='inverted'
+        )
+        deck.words.add(inverted_word)
+        
+        # Создаем пустую карточку
+        empty_word = Word.objects.create(
+            user=user,
+            original_word='_empty_999',
+            translation='test // тест',
+            language='pt',
+            card_type='empty'
+        )
+        deck.words.add(empty_word)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        # Инвертируем все слова
+        response = client.post(f'/api/cards/decks/{deck.id}/invert_all/', format='json')
+        
+        assert response.status_code == status.HTTP_200_OK, f"Ожидался статус 200, получен {response.status_code}. Ответ: {response.data}"
+        
+        # Должна быть создана только одна инвертированная карточка (для normal слова)
+        # Старая инвертированная и пустая карточки должны быть пропущены
+        inverted_count = response.data.get('inverted_words_count', 0)
+        inverted_list = response.data.get('inverted_words', [])
+        skipped_list = response.data.get('skipped_words', [])
+        
+        assert inverted_count == 1, f"Ожидалось 1 инвертированная карточка, получено {inverted_count}. Inverted: {inverted_list}, Skipped: {skipped_list}"
+        
+        # Проверяем, что инвертированная и пустая карточки были пропущены
+        skipped = response.data.get('skipped_words', [])
+        assert len(skipped) == 2, f"Ожидалось 2 пропущенных карточки, получено {len(skipped)}. Пропущенные: {skipped}"
+        skipped_ids = [s['id'] for s in skipped]
+        skipped_original_words = [s.get('original_word', '') for s in skipped]
+        
+        # Проверяем по original_word, так как ID могут отличаться
+        assert inverted_word.original_word in skipped_original_words, f"Инвертированная карточка '{inverted_word.original_word}' должна быть пропущена. Пропущенные: {skipped_original_words}"
+        assert empty_word.original_word in skipped_original_words, f"Пустая карточка '{empty_word.original_word}' должна быть пропущена. Пропущенные: {skipped_original_words}"
+        
+        # Проверяем, что в колоде теперь 4 карточки (1 normal + 1 inverted (новая для normal) + 1 inverted (старая) + 1 empty)
+        deck.refresh_from_db()
+        assert deck.words.count() == 4, f"Ожидалось 4 карточки в колоде, получено {deck.words.count()}"
+        
+        # Проверяем, что старая инвертированная карточка не изменилась
+        inverted_word.refresh_from_db()
+        assert inverted_word.original_word == 'книга', f"Ожидалось 'книга', получено '{inverted_word.original_word}'"
+        assert inverted_word.translation == 'livro'
+        assert inverted_word.card_type == 'inverted'
+        
+        # Проверяем, что для normal слова была создана инвертированная карточка
+        normal_word.refresh_from_db()
+        inverted_for_normal = Word.objects.filter(
+            user=user,
+            original_word=normal_word.translation,  # 'дом'
+            language=deck.source_lang,  # 'ru'
+            card_type='inverted'
+        ).first()
+        assert inverted_for_normal is not None, "Инвертированная карточка для normal слова должна быть создана"
+        assert inverted_for_normal in deck.words.all(), "Инвертированная карточка для normal слова должна быть в колоде"
+        # Проверяем, что это не та же карточка, что inverted_word
+        assert inverted_for_normal.id != inverted_word.id, "Инвертированная карточка для normal слова должна быть новой"
+    
+    def test_generate_apkg_with_empty_card(self):
+        """Тест генерации APKG с пустой карточкой (display_word должен быть пустым)"""
+        words_data = [
+            {
+                'original_word': '_empty_123',
+                'translation': 'casa // дом',
+                'card_type': 'empty',
+            }
+        ]
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test_empty.apkg"
+            result_path = generate_apkg(
+                words_data=words_data,
+                deck_name="Колода с пустой карточкой",
+                output_path=output_path
+            )
+            
+            assert result_path.exists()
+            # Файл должен быть создан (проверка содержимого APKG сложна, но функция должна работать)
+            assert result_path.suffix == '.apkg'

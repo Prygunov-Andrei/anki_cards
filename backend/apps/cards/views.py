@@ -19,6 +19,7 @@ from .models import GeneratedDeck, UserPrompt, Deck
 from .serializers import (
     CardGenerationSerializer,
     ImageGenerationSerializer,
+    ImageEditSerializer,
     AudioGenerationSerializer,
     ImageUploadSerializer,
     AudioUploadSerializer,
@@ -42,6 +43,7 @@ from .llm_utils import (
     generate_image,
     generate_images_batch,
     generate_audio_with_tts,
+    edit_image_with_gemini,
     detect_word_language,
     analyze_mixed_languages,
     translate_words,
@@ -431,9 +433,24 @@ def generate_image_view(request):
     word = serializer.validated_data['word']
     translation = serializer.validated_data['translation']
     language = serializer.validated_data['language']
+    word_id = serializer.validated_data.get('word_id')
     image_style = serializer.validated_data.get('image_style', 'balanced')
     provider = serializer.validated_data.get('provider')  # Опционально, если не указан - берется из user.image_provider
     gemini_model = serializer.validated_data.get('gemini_model')  # Опционально, если не указан - берется из user.gemini_model
+    
+    # ВАЖНО: Для инвертированных слов используем translation как word для генерации
+    # Потому что для инвертированного слова: original_word = перевод исходного слова, translation = исходное слово
+    # А для генерации изображения нужно отправлять исходное слово (как для обычных слов)
+    if word_id:
+        try:
+            word_obj = Word.objects.get(id=word_id, user=request.user)
+            if word_obj.card_type == 'inverted':
+                # Для инвертированного слова используем translation (исходное слово) вместо original_word
+                word = word_obj.translation
+                translation = word_obj.original_word
+                logger.info(f"🔄 Инвертированное слово: используем translation '{word}' вместо original_word '{word_obj.original_word}' для генерации изображения")
+        except Word.DoesNotExist:
+            pass  # Если слово не найдено, используем переданные значения
     
     # Определяем провайдер и модель для расчета стоимости
     # 'auto' или None означает "использовать настройки пользователя"
@@ -524,6 +541,121 @@ def generate_image_view(request):
         )
         return Response({
             'error': f'Ошибка при генерации изображения: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def edit_image_view(request):
+    """
+    Редактирование изображения слова через миксин.
+    Использует nano-banana-pro-preview для image-to-image генерации.
+    
+    Принимает:
+    - word_id: ID слова с существующим изображением
+    - mixin: текст (1-3 слова) что добавить/изменить, например "добавь коня и всадника"
+    
+    Возвращает новое изображение, заменяя старое.
+    """
+    serializer = ImageEditSerializer(data=request.data)
+    
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    word_id = serializer.validated_data['word_id']
+    mixin = serializer.validated_data['mixin']
+    
+    # Получаем слово пользователя
+    try:
+        word_obj = Word.objects.get(id=word_id, user=request.user)
+    except Word.DoesNotExist:
+        return Response({
+            'error': f'Слово с ID={word_id} не найдено'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    # Проверяем наличие изображения
+    if not word_obj.image_file:
+        return Response({
+            'error': 'У этого слова нет изображения для редактирования. Сначала сгенерируйте изображение.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Получаем путь к изображению
+    source_image_path = Path(settings.MEDIA_ROOT) / word_obj.image_file.name
+    
+    if not source_image_path.exists():
+        return Response({
+            'error': f'Файл изображения не найден: {word_obj.image_file.name}'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    # Стоимость редактирования = стоимость генерации nano-banana-pro (1 токен = 2 единицы)
+    EDIT_COST = 1.0
+    cost_in_units = int(EDIT_COST * 2)
+    
+    # Проверяем баланс токенов
+    balance = check_balance(request.user)
+    if balance < cost_in_units:
+        balance_display = balance / 2.0
+        return Response({
+            'error': f'Недостаточно токенов. Требуется: {EDIT_COST}, доступно: {balance_display}'
+        }, status=status.HTTP_402_PAYMENT_REQUIRED)
+    
+    try:
+        # Списываем токены
+        token, success = spend_tokens(
+            request.user,
+            cost_in_units,
+            description=f"Редактирование изображения для слова '{word_obj.original_word}' (миксин: '{mixin}')"
+        )
+        
+        if not success:
+            return Response({
+                'error': f'Недостаточно токенов для редактирования. Требуется: {EDIT_COST}'
+            }, status=status.HTTP_402_PAYMENT_REQUIRED)
+        
+        # Редактируем изображение через Gemini nano-banana-pro
+        new_image_path, prompt = edit_image_with_gemini(
+            source_image_path=source_image_path,
+            mixin=mixin,
+            user=request.user,
+            model='nano-banana-pro-preview'
+        )
+        
+        # Получаем относительный путь для URL
+        media_root = Path(settings.MEDIA_ROOT)
+        relative_path = new_image_path.relative_to(media_root)
+        image_url = f"{settings.MEDIA_URL}{relative_path}"
+        
+        # Получаем ID файла из имени
+        image_id = new_image_path.stem
+        
+        # Обновляем изображение в слове
+        word_obj.image_file.name = str(relative_path)
+        word_obj.save()
+        logger.info(f"Изображение слова ID={word_id} обновлено через миксин: '{mixin}'")
+        
+        return Response({
+            'image_url': image_url,
+            'image_id': image_id,
+            'file_path': str(new_image_path),
+            'prompt': prompt,
+            'mixin': mixin,
+            'word_id': word_id
+        }, status=status.HTTP_200_OK)
+    
+    except ValueError as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    except Exception as e:
+        # При ошибке возвращаем токены
+        refund_tokens(
+            request.user,
+            cost_in_units,
+            description=f"Возврат токенов за ошибку редактирования изображения для слова '{word_obj.original_word}'"
+        )
+        return Response({
+            'error': f'Ошибка при редактировании изображения: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1084,6 +1216,10 @@ def deck_add_words_view(request, deck_id):
                 deck.words.add(word)
                 added_words.append(word.id)
     
+    # Обновляем updated_at колоды после добавления слов
+    if added_words:
+        deck.save()
+    
     if errors:
         return Response({
             'added_words': added_words,
@@ -1318,6 +1454,8 @@ def deck_merge_view(request):
     
     # Добавляем все слова в целевую колоду
     target_deck.words.add(*all_words)
+    # Обновляем updated_at колоды после добавления слов
+    target_deck.save()
     
     # Удаляем исходные колоды, если нужно
     deleted_decks = []
@@ -1379,6 +1517,7 @@ def deck_generate_apkg_view(request, deck_id):
             word_data = {
                 'original_word': word.original_word,
                 'translation': word.translation,
+                'card_type': word.card_type,  # Передаем тип карточки
             }
             
             if word.audio_file:
@@ -1643,13 +1782,41 @@ def deck_invert_all_words_view(request, deck_id):
     
     for word in words:
         try:
-            # Создаем инвертированное слово
-            # original_word становится translation, translation становится original_word
-            # language становится source_lang колоды
+            # Пропускаем уже инвертированные и пустые карточки
+            if word.card_type == 'inverted' or word.card_type == 'empty':
+                skipped_words.append({
+                    'id': word.id,
+                    'original_word': word.original_word,
+                    'reason': f'Пропущено: уже {word.get_card_type_display().lower()} карточка'
+                })
+                continue
+            
+            # Проверяем, есть ли уже инвертированная версия этого слова в колоде
+            # Инвертированная версия = слово, где:
+            # - original_word == translation обычного слова
+            # - translation == original_word обычного слова
+            # - language == source_lang колоды
             inverted_original = word.translation
             inverted_translation = word.original_word
             inverted_language = deck.source_lang
             
+            # Проверяем, есть ли уже такое слово в колоде
+            existing_inverted = deck.words.filter(
+                original_word=inverted_original,
+                language=inverted_language,
+                translation=inverted_translation
+            ).first()
+            
+            if existing_inverted:
+                # Инвертированная версия уже существует в колоде - пропускаем
+                skipped_words.append({
+                    'id': word.id,
+                    'original_word': word.original_word,
+                    'reason': f'Пропущено: инвертированная версия уже существует в колоде'
+                })
+                continue
+            
+            # Создаем инвертированное слово
             # Используем update_or_create для обновления, если слово уже существует
             inverted_word, created = Word.objects.update_or_create(
                 user=request.user,
@@ -1657,6 +1824,7 @@ def deck_invert_all_words_view(request, deck_id):
                 language=inverted_language,
                 defaults={
                     'translation': inverted_translation,
+                    'card_type': 'inverted',  # Помечаем как инвертированную карточку
                     'audio_file': word.audio_file,  # Используем те же медиафайлы
                     'image_file': word.image_file,
                 }
@@ -1686,6 +1854,10 @@ def deck_invert_all_words_view(request, deck_id):
                 'error': str(e)
             })
             logger.error(f"Ошибка при инвертировании слова {word.id}: {str(e)}")
+    
+    # Обновляем updated_at колоды после добавления инвертированных слов
+    if inverted_words or skipped_words:
+        deck.save()
     
     logger.info(
         f"Инвертирование всех слов колоды {deck_id}: "
@@ -1736,6 +1908,17 @@ def deck_invert_word_view(request, deck_id):
         }, status=status.HTTP_404_NOT_FOUND)
     
     try:
+        # Проверяем, что слово не является уже инвертированным или пустым
+        if word.card_type == 'inverted':
+            return Response({
+                'error': 'Нельзя инвертировать уже инвертированную карточку.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if word.card_type == 'empty':
+            return Response({
+                'error': 'Нельзя инвертировать пустую карточку.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         # Создаем инвертированное слово
         inverted_original = word.translation
         inverted_translation = word.original_word
@@ -1748,6 +1931,7 @@ def deck_invert_word_view(request, deck_id):
             language=inverted_language,
             defaults={
                 'translation': inverted_translation,
+                'card_type': 'inverted',  # Помечаем как инвертированную карточку
                 'audio_file': word.audio_file,  # Используем те же медиафайлы
                 'image_file': word.image_file,
             }
@@ -1757,6 +1941,8 @@ def deck_invert_word_view(request, deck_id):
         was_in_deck = inverted_word in deck.words.all()
         if not was_in_deck:
             deck.words.add(inverted_word)
+            # Обновляем updated_at колоды после добавления слова
+            deck.save()
         
         logger.info(
             f"Инвертирование слова {word_id} в колоде {deck_id}: "
@@ -1819,6 +2005,23 @@ def deck_create_empty_cards_view(request, deck_id):
     
     for word in words:
         try:
+            # Пропускаем инвертированные и пустые карточки - создаем пустые только для обычных
+            # Проверяем по card_type и дополнительно по логике (language == source_lang означает инвертированную)
+            is_inverted = (
+                word.card_type == 'inverted' or 
+                (word.card_type == 'normal' and word.language == deck.source_lang)
+            )
+            is_empty = word.card_type == 'empty' or word.original_word.startswith('_empty_')
+            
+            if is_inverted or is_empty:
+                reason = 'инвертированная' if is_inverted else 'пустая'
+                skipped_cards.append({
+                    'id': word.id,
+                    'original_word': word.original_word,
+                    'reason': f'Пропущено: {reason} карточка (card_type: {word.card_type}, language: {word.language})'
+                })
+                continue
+            
             # Создаем пустую карточку
             # original_word = '_empty_{word_id}' (уникальный идентификатор для пустой карточки)
             # translation = '<слово на изучаемом языке> // <перевод>'
@@ -1839,6 +2042,7 @@ def deck_create_empty_cards_view(request, deck_id):
             if empty_card:
                 # Обновляем медиафайлы и translation, если карточка уже существует
                 empty_card.translation = empty_translation
+                empty_card.card_type = 'empty'  # Убеждаемся, что тип правильный
                 empty_card.audio_file = word.audio_file
                 empty_card.image_file = word.image_file
                 empty_card.save()
@@ -1850,6 +2054,7 @@ def deck_create_empty_cards_view(request, deck_id):
                     original_word=empty_original,
                     translation=empty_translation,
                     language=empty_language,
+                    card_type='empty',  # Помечаем как пустую карточку
                     audio_file=word.audio_file,
                     image_file=word.image_file
                 )
@@ -1879,6 +2084,10 @@ def deck_create_empty_cards_view(request, deck_id):
                 'error': str(e)
             })
             logger.error(f"Ошибка при создании пустой карточки для слова {word.id}: {str(e)}")
+    
+    # Обновляем updated_at колоды после добавления пустых карточек
+    if empty_cards or skipped_cards:
+        deck.save()
     
     logger.info(
         f"Создание пустых карточек для колоды {deck_id}: "
@@ -1930,6 +2139,20 @@ def deck_create_empty_card_view(request, deck_id):
         }, status=status.HTTP_404_NOT_FOUND)
     
     try:
+        # Пропускаем инвертированные и пустые карточки - создаем пустые только для обычных
+        # Проверяем по card_type и дополнительно по логике (language == source_lang означает инвертированную)
+        is_inverted = (
+            word.card_type == 'inverted' or 
+            (word.card_type == 'normal' and word.language == deck.source_lang)
+        )
+        is_empty = word.card_type == 'empty' or word.original_word.startswith('_empty_')
+        
+        if is_inverted or is_empty:
+            reason = 'инвертированная' if is_inverted else 'пустая'
+            return Response({
+                'error': f'Нельзя создать пустую карточку для {reason} карточки. Пустые карточки создаются только для обычных карточек.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         # Создаем пустую карточку
         # original_word = '_empty_{word_id}' (уникальный идентификатор для пустой карточки)
         # translation = '<слово на изучаемом языке> // <перевод>'
@@ -1950,6 +2173,7 @@ def deck_create_empty_card_view(request, deck_id):
         if empty_card:
             # Обновляем медиафайлы и translation, если карточка уже существует
             empty_card.translation = empty_translation
+            empty_card.card_type = 'empty'  # Убеждаемся, что тип правильный
             empty_card.audio_file = word.audio_file
             empty_card.image_file = word.image_file
             empty_card.save()
@@ -1961,6 +2185,7 @@ def deck_create_empty_card_view(request, deck_id):
                 original_word=empty_original,
                 translation=empty_translation,
                 language=empty_language,
+                card_type='empty',  # Помечаем как пустую карточку
                 audio_file=word.audio_file,
                 image_file=word.image_file
             )
@@ -1970,6 +2195,8 @@ def deck_create_empty_card_view(request, deck_id):
         was_in_deck = empty_card in deck.words.all()
         if not was_in_deck:
             deck.words.add(empty_card)
+            # Обновляем updated_at колоды после добавления карточки
+            deck.save()
         
         logger.info(
             f"Создание пустой карточки для слова {word_id} в колоде {deck_id}: "

@@ -411,6 +411,36 @@ const DeckEditorPage: React.FC = () => {
   };
 
   /**
+   * Редактирование изображения через миксин
+   */
+  const handleEditImage = async (wordId: number, mixin: string) => {
+    if (!deck) return;
+
+    try {
+      showInfo(t.words.editImage, {
+        description: `${t.words.editImageHint}: "${mixin}"`,
+      });
+
+      await deckService.editImage({
+        word_id: wordId,
+        mixin,
+      });
+
+      // Перезагружаем колоду с обновлёнными данными
+      await loadDeck();
+
+      showSuccess(t.decks.imageUpdated, {
+        description: t.decks.ready,
+      });
+    } catch (error) {
+      console.error(`Error editing image with mixin "${mixin}":`, error);
+      showError(t.decks.couldNotCreateImage, {
+        description: t.toast.tryAgain,
+      });
+    }
+  };
+
+  /**
    * Удаление изображения у слова
    */
   const handleDeleteImage = async (wordId: number) => {
@@ -798,6 +828,7 @@ const DeckEditorPage: React.FC = () => {
           onDeleteWord={handleDeleteWord}
           onRegenerateImage={handleRegenerateImage}
           onRegenerateAudio={handleRegenerateAudio}
+          onEditImage={handleEditImage}
           onDeleteImage={handleDeleteImage}
           onDeleteAudio={handleDeleteAudio}
           onMoveCardToDeck={handleMoveCardToDeck}
