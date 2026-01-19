@@ -78,7 +78,8 @@ POSTGRES_PASSWORD=strong_password_here
 # Django
 SECRET_KEY=your-very-secret-key-here-generate-with-openssl
 DEBUG=False
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+# ВАЖНО: backend - для внутренних запросов Docker network
+ALLOWED_HOSTS=backend,localhost,127.0.0.1,yourdomain.com,www.yourdomain.com
 
 # OpenAI (ОБЯЗАТЕЛЬНО для генерации медиа)
 OPENAI_API_KEY=sk-proj-...
