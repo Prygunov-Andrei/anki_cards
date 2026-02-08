@@ -6,11 +6,12 @@ import { de } from './de';
 import { es } from './es';
 import { fr } from './fr';
 import { it } from './it';
+import { tr } from './tr';
 
 /**
- * Поддерживаемые языки интерфейса - все 7 языков
+ * Поддерживаемые языки интерфейса - все 8 языков
  * 
- * ✅ Полностью поддерживаются бэкендом и фронтендом
+ * Полностью поддерживаются бэкендом и фронтендом
  * 
  * Поддерживаемые языки:
  * - ru (Русский)
@@ -20,6 +21,7 @@ import { it } from './it';
  * - es (Español)
  * - fr (Français)
  * - it (Italiano)
+ * - tr (Türkçe)
  */
 export const translations: Record<string, TranslationKeys> = {
   ru,
@@ -29,6 +31,7 @@ export const translations: Record<string, TranslationKeys> = {
   es,
   fr,
   it,
+  tr,
 };
 
 export type SupportedLocale = keyof typeof translations;

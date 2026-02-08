@@ -1,13 +1,25 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
 /**
- * Базовый URL для API
- * В продакшене: пустая строка (запросы на тот же домен)
- * В разработке: localhost:8000 или ngrok URL из .env.development
+ * Базовый URL для API.
+ * В продакшене: пустая строка (запросы на тот же домен через /api).
+ * В разработке: VITE_API_BASE_URL из .env.development или http://localhost:8000.
  */
-const BASE_URL = import.meta.env.VITE_API_BASE_URL?.startsWith('/') 
-  ? '' 
-  : (import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8000' : ''));
+const getBaseUrl = (): string => {
+  const envUrl = import.meta.env?.VITE_API_BASE_URL;
+  if (envUrl && envUrl.startsWith('/')) {
+    return '';
+  }
+  if (envUrl) {
+    return envUrl.replace(/\/$/, '');
+  }
+  if (import.meta.env?.DEV) {
+    return 'http://localhost:8000';
+  }
+  return '';
+};
+
+const BASE_URL = getBaseUrl();
 
 /**
  * Создание экземпляра Axios с настройками
@@ -18,10 +30,8 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    // ngrok требует этот заголовок для обхода предупреждения
-    'ngrok-skip-browser-warning': 'true', // Для совместимости с туннелями
   },
-  withCredentials: false, // Отключаем credentials для CORS
+  withCredentials: false,
 });
 
 /**
@@ -29,19 +39,8 @@ const apiClient: AxiosInstance = axios.create({
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // Улучшенное логирование (не показываем undefined для GET)
-    const method = config.method?.toUpperCase();
-    const hasData = config.data && Object.keys(config.data).length > 0;
-    
-    if (hasData) {
-      console.log(`[API] ${method} ${config.url}`, config.data);
-    } else {
-      console.log(`[API] ${method} ${config.url}`);
-    }
-    
     const token = localStorage.getItem('authToken');
     if (token) {
-      // Django REST Framework использует формат "Token <token>"
       config.headers.Authorization = `Token ${token}`;
     }
     return config;
@@ -56,69 +55,46 @@ apiClient.interceptors.request.use(
  * Interceptor для обработки ответов
  */
 apiClient.interceptors.response.use(
-  (response) => {
-    console.log(`[API] Response ${response.status}:`, response.data);
-    return response;
-  },
+  (response) => response,
   (error: AxiosError) => {
-    console.error('[API] Response error:', {
-      message: error.message,
-      code: error.code,
-      status: error.response?.status,
-      data: error.response?.data,
-      config: {
-        url: error.config?.url,
-        method: error.config?.method,
-        baseURL: error.config?.baseURL,
-      }
-    });
-    
-    // Network Error - показываем понятное сообщение
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-      console.error('⚠️ NETWORK ERROR: Не удалось подключиться к backend серверу');
-      console.error('📍 Проверьте:');
-      console.error('   1. Backend сервер запущен (Django)');
-      console.error('   2. Туннель активен (Cloudflare/ngrok)');
-      console.error(`   3. URL корректный: ${BASE_URL}`);
-      console.error('   4. Нет блокировки CORS');
+      console.error('Не удалось подключиться к backend. Проверьте, что сервер запущен:', BASE_URL || 'текущий домен');
     }
-    
-    // Если токен истек или невалиден - очищаем хранилище
     if (error.response?.status === 401) {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Очищаем невалидный токен из localStorage.
+      // НЕ делаем window.location.href — это вызывает жёсткую перезагрузку
+      // и цикл редиректов при фоновых polling-запросах (notifications).
+      // Вместо этого диспатчим custom event, который useAuth слушает
+      // и обновляет React state → ProtectedRoute делает мягкий редирект.
+      const requestUrl = error.config?.url || '';
+      const isLoginRequest = requestUrl.includes('/login') || requestUrl.includes('/register');
+      if (!isLoginRequest) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        window.dispatchEvent(new CustomEvent('auth:token-expired'));
+      }
     }
     return Promise.reject(error);
   }
 );
 
-/**
- * Интерфейс для ошибок API
- */
 export interface ApiError {
   message: string;
   status?: number;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
-/**
- * Обработчик ошибок API
- */
-export const handleApiError = (error: any): ApiError => {
+export const handleApiError = (error: unknown): ApiError => {
   if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<any>;
-    
-    // Network Error - проблема с подключением
+    const axiosError = error as AxiosError<Record<string, unknown>>;
+
     if (axiosError.code === 'ERR_NETWORK' || axiosError.message === 'Network Error') {
       return {
-        message: 'Не удалось подключиться к серверу. Проверьте, что backend запущен и туннель активен.',
+        message: 'Не удалось подключиться к серверу. Проверьте, что backend запущен.',
         status: 0,
         data: { code: 'NETWORK_ERROR' },
       };
     }
-    
-    // Timeout
     if (axiosError.code === 'ECONNABORTED') {
       return {
         message: 'Превышено время ожидания ответа от сервера',
@@ -126,8 +102,6 @@ export const handleApiError = (error: any): ApiError => {
         data: { code: 'TIMEOUT' },
       };
     }
-    
-    // CORS Error
     if (axiosError.message.includes('CORS')) {
       return {
         message: 'Ошибка CORS. Backend должен разрешить запросы от этого домена.',
@@ -135,23 +109,21 @@ export const handleApiError = (error: any): ApiError => {
         data: { code: 'CORS_ERROR' },
       };
     }
-    
-    // Извлекаем сообщение об ошибке из разных возможных полей
-    const errorMessage = 
-      axiosError.response?.data?.detail ||
-      axiosError.response?.data?.message || 
-      axiosError.response?.data?.error || 
-      axiosError.message || 
+    const responseData = axiosError.response?.data;
+    const errorMessage =
+      (typeof responseData?.detail === 'string' ? responseData.detail : undefined) ||
+      (typeof responseData?.message === 'string' ? responseData.message : undefined) ||
+      (typeof responseData?.error === 'string' ? responseData.error : undefined) ||
+      axiosError.message ||
       'Произошла ошибка';
-    
     return {
       message: errorMessage,
       status: axiosError.response?.status,
-      data: axiosError.response?.data,
+      data: axiosError.response?.data as Record<string, unknown> | undefined,
     };
   }
   return {
-    message: error.message || 'Неизвестная ошибка',
+    message: error instanceof Error ? error.message : 'Неизвестная ошибка',
   };
 };
 

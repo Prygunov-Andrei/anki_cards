@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { translations, TranslationKeys, SupportedLocale } from '../locales';
 import { useAuthContext } from './AuthContext';
 
@@ -28,14 +28,16 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     }
   }, [user?.native_language]);
 
-  const setLocale = (newLocale: SupportedLocale) => {
+  const setLocale = useCallback((newLocale: SupportedLocale) => {
     setLocaleState(newLocale);
-  };
+  }, []);
 
   const t = translations[locale] || translations.ru;
 
+  const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
+
   return (
-    <LanguageContext.Provider value={{ locale, setLocale, t }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );

@@ -25,8 +25,16 @@ interface ThemeProviderProps {
   children: ReactNode;
 }
 
-// API URL из переменной окружения или пустая строка для продакшена
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.startsWith('/') ? '' : (import.meta.env.VITE_API_BASE_URL || '');
+// API URL: из .env или в dev http://localhost:8000
+const getApiBaseUrl = (): string => {
+  const envUrl = import.meta.env?.VITE_API_BASE_URL;
+  if (envUrl?.startsWith('/')) return '';
+  if (envUrl) return envUrl.replace(/\/$/, '');
+  if (import.meta.env?.DEV) return 'http://localhost:8000';
+  return '';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const authContext = useAuthContext();
@@ -91,7 +99,6 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
           {
             headers: {
               Authorization: `Token ${token}`,
-              'ngrok-skip-browser-warning': 'true',
             },
           }
         );

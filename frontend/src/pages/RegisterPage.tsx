@@ -9,9 +9,10 @@ import { useTheme } from '../contexts/ThemeContext';
 import authService from '../services/authService';
 import { showSuccess, showError } from '../utils/toast-helpers';
 import { LanguageSelector } from '../components/LanguageSelector';
-// Логотипы из папки public (абсолютные пути)
-const logoLight = '/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
-const logoDark = '/8438de77d51aa44238d74565f4aecffecf7eb633.png';
+
+// Импортируем логотипы для светлой и темной темы
+import logoLight from 'figma:asset/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
+import logoDark from 'figma:asset/8438de77d51aa44238d74565f4aecffecf7eb633.png';
 
 /**
  * Страница регистрации (всегда на английском языке)
@@ -88,11 +89,11 @@ export default function RegisterPage() {
       login(response.token, response.user);
       showSuccess('Registration successful');
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Register error:', error);
       
       // Обработка специфичных ошибок
-      const errorMessage = error.message || 'Registration error';
+      const errorMessage = error instanceof Error ? error.message : 'Registration error';
       if (errorMessage.includes('username')) {
         setErrors({ username: 'Username is already taken' });
         showError('Username is already taken');

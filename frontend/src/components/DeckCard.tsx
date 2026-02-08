@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Deck } from '../types';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -13,7 +13,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from './ui/dropdown-menu';
-import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download, Merge, ArrowLeftRight, FileText } from 'lucide-react';
+import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download, Merge, ArrowLeftRight, FileText, GraduationCap } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ru, enUS, de, es, fr, it, ptBR } from 'date-fns/locale';
 import { getAbsoluteUrl } from '../utils/url-helpers';
@@ -45,6 +45,7 @@ export const DeckCard: React.FC<DeckCardProps> = ({
 }) => {
   const t = useTranslation();
   const { locale } = useLanguage();
+  const navigate = useNavigate();
   
   // Мапинг языков на локали date-fns
   const dateLocales = {
@@ -117,6 +118,15 @@ export const DeckCard: React.FC<DeckCardProps> = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  navigate(`/training/start?deck_id=${deck.id}`);
+                }}>
+                  <GraduationCap className="mr-2 h-4 w-4" />
+                  {t.trainingDashboard.train}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();

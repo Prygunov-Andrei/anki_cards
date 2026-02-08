@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTokenContext } from '../contexts/TokenContext';
 import { useTranslation } from '../contexts/LanguageContext';
 import { getUserAvatarUrl } from '../utils/url-helpers';
-import { Menu, X, User, LogOut, UserCircle, Plus, Layers, Sun, Moon } from 'lucide-react';
+import { Menu, X, User, LogOut, UserCircle, Plus, Layers, BookOpen, FolderTree, GraduationCap, Sun, Moon, Bell, TrendingDown } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,9 +19,10 @@ import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from './ui/sheet';
 import { VisuallyHidden } from './ui/visually-hidden';
 import { TokenBalanceWidget } from './TokenBalanceWidget';
-// Логотипы из папки public (абсолютные пути)
-const logoLight = '/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
-const logoDark = '/8438de77d51aa44238d74565f4aecffecf7eb633.png';
+
+// Импортируем логотипы для светлой и темной темы
+import logoLight from 'figma:asset/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
+import logoDark from 'figma:asset/8438de77d51aa44238d74565f4aecffecf7eb633.png';
 
 /**
  * Компонент Header - шапка приложения с навигацией
@@ -41,7 +42,11 @@ export const Header: React.FC = () => {
   };
 
   const navLinks = [
+    { to: '/training', label: t.header.training, icon: GraduationCap },
+    { to: '/words', label: t.header.words, icon: BookOpen },
+    { to: '/categories', label: t.header.categories, icon: FolderTree },
     { to: '/decks', label: t.header.decks, icon: Layers },
+    { to: '/forgetting-curve', label: t.header.forgettingCurve, icon: TrendingDown },
   ];
 
   const isActive = (path: string) => {
@@ -79,10 +84,11 @@ export const Header: React.FC = () => {
       img.src = avatarUrl;
       // Принудительная загрузка в кэш браузера
       img.onload = () => {
-        console.log('Avatar preloaded successfully');
+        console.log('[Header] Avatar preloaded successfully:', avatarUrl);
       };
       img.onerror = () => {
-        console.error('Failed to preload avatar');
+        // Тихо игнорируем ошибку - fallback аватар все равно отобразится
+        console.warn('[Header] Could not preload avatar (fallback will be used):', avatarUrl);
       };
     }
   }, [avatarUrl]);
@@ -93,9 +99,9 @@ export const Header: React.FC = () => {
         <div className="flex h-16 items-center justify-between">
           {/* Логотип */}
           <Link to="/" className="flex items-center space-x-2 transition-opacity hover:opacity-80">
-            <img 
-              src={theme === 'dark' ? logoDark : logoLight} 
-              alt="ANKI Generator Logo" 
+            <img
+              src={theme === 'light' ? logoLight : logoDark}
+              alt="ANKI Generator Logo"
               className="h-20 w-20 rounded-xl object-cover relative top-1 -left-1 md:top-0 md:left-0"
             />
             <span className="hidden text-xl font-semibold sm:inline-block dark:text-gray-100">
@@ -171,6 +177,12 @@ export const Header: React.FC = () => {
                   <Link to="/profile" className="flex cursor-pointer items-center">
                     <UserCircle className="mr-2 h-4 w-4" />
                     <span>{t.header.profile}</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/notifications" className="flex cursor-pointer items-center">
+                    <Bell className="mr-2 h-4 w-4" />
+                    <span>{t.header.notifications}</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -264,6 +276,18 @@ export const Header: React.FC = () => {
                     >
                       <UserCircle className="h-5 w-5" />
                       <span>{t.header.profile}</span>
+                    </Link>
+                    <Link
+                      to="/notifications"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center space-x-3 rounded-lg px-4 py-3 transition-all ${
+                        isActive('/notifications')
+                          ? 'bg-blue-50 text-blue-600 shadow-sm dark:bg-blue-950/50 dark:text-blue-400'
+                          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <Bell className="h-5 w-5" />
+                      <span>{t.header.notifications}</span>
                     </Link>
                   </nav>
 

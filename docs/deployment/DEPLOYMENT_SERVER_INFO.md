@@ -5,7 +5,7 @@
 - **IPv4:** 72.56.83.95
 - **IPv6:** 2a03:6f02::1:ef0
 - **SSH:** `ssh root@72.56.83.95`
-- **Root-пароль:** `hN9DVVo_pu6d_X`
+- **Root-пароль:** `(set via SSH_PASSWORD env variable)`
 - **Путь деплоя:** `/opt/anki_cards`
 
 ## Закрытые порты
@@ -53,7 +53,7 @@
 
 ```bash
 ssh root@72.56.83.95
-# Пароль: hN9DVVo_pu6d_X
+# Пароль: (set via SSH_PASSWORD env variable)
 ```
 
 ## Проверка после деплоя

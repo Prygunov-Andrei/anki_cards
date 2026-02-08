@@ -68,3 +68,54 @@ export const formatTokensWithText = (
   const locale = nativeLang === 'ru' ? 'ru-RU' : 'en-US';
   return `${formatTokenBalance(count, locale)} ${pluralizeTokens(count, t, nativeLang)}`;
 };
+
+/**
+ * Получить стоимость генерации в зависимости от провайдера и модели
+ */
+export const getGenerationCost = (
+  provider: 'openai' | 'gemini',
+  geminiModel?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
+): number => {
+  if (provider === 'openai') {
+    return 1; // DALL-E 3: 1 токен
+  }
+
+  if (provider === 'gemini') {
+    if (geminiModel === 'gemini-2.5-flash-image') {
+      return 0.5; // Gemini Flash: 0.5 токена
+    }
+    if (geminiModel === 'nano-banana-pro-preview') {
+      return 1; // Nano Banana Pro: 1 токен
+    }
+    // Дефолтная модель
+    return 0.5;
+  }
+
+  return 1; // Дефолт
+};
+
+/**
+ * Получить общую стоимость генерации медиа для колоды
+ */
+export const getTotalMediaCost = (
+  wordsCount: number,
+  generateImages: boolean,
+  generateAudio: boolean,
+  provider: 'openai' | 'gemini' = 'openai',
+  geminiModel?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
+): number => {
+  let cost = 0;
+
+  // Стоимость изображений
+  if (generateImages) {
+    const imageCost = getGenerationCost(provider, geminiModel);
+    cost += imageCost * wordsCount;
+  }
+
+  // Стоимость аудио (всегда 0 токенов, бесплатно)
+  if (generateAudio) {
+    cost += 0;
+  }
+
+  return cost;
+};

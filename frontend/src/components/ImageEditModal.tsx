@@ -110,3 +110,6 @@ export const ImageEditModal: React.FC<ImageEditModalProps> = ({
     </Dialog>
   );
 };
+
+// Default export для совместимости
+export default ImageEditModal;

@@ -25,27 +25,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-t2oob%hs%#_k3w9&%!@-=mzo3ki1-0wn18(@w=qq+a^43%(_$r')
+SECRET_KEY = os.environ['SECRET_KEY']  # No fallback — must be set in .env
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-# Базовые хосты
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+# Hosts — from .env, with sensible defaults
+ALLOWED_HOSTS = os.getenv(
+    'ALLOWED_HOSTS',
+    'localhost,127.0.0.1,www.get-anki.fun,get-anki.fun'
+).split(',')
 
-# Добавляем поддержку туннелей для разработки
-ALLOWED_HOSTS += [
-    '.ngrok-free.app', 
-    '.ngrok.io', 
-    '.trycloudflare.com',
-    'get-anki.fan.ngrok.app',  # Платный фиксированный домен ngrok
-]
-
-# Добавляем продакшн домен
-ALLOWED_HOSTS += [
-    'www.get-anki.fun',
-    'get-anki.fun',
-]
+if DEBUG:
+    ALLOWED_HOSTS += [
+        '.ngrok-free.app',
+        '.ngrok.io',
+        '.trycloudflare.com',
+        'get-anki.fan.ngrok.app',
+    ]
 
 
 # Application definition
@@ -66,6 +63,7 @@ INSTALLED_APPS = [
     'apps.words',
     'apps.cards',
     'apps.anki_sync',
+    'apps.training',
 ]
 
 MIDDLEWARE = [
@@ -218,8 +216,8 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.trycloudflare\.com$",
 ]
 
-# Для разработки разрешаем ВСЕ origins
-CORS_ALLOW_ALL_ORIGINS = True
+# Allow all origins only in DEBUG mode
+CORS_ALLOW_ALL_ORIGINS = DEBUG
 
 # Разрешаем все методы
 CORS_ALLOW_METHODS = [

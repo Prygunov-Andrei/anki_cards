@@ -6,7 +6,7 @@ import { AudioPlayer } from './AudioPlayer';
 import { ImagePreviewModal } from './ImagePreviewModal';
 import { ImageEditModal } from './ImageEditModal';
 import { EditableText } from './EditableText';
-import { Trash2, RefreshCw, ImageIcon, MoreVertical, ArrowRight, Volume2, ArrowLeftRight, FileText, Wand2, BookOpen } from 'lucide-react';
+import { Trash2, RefreshCw, ImageIcon, MoreVertical, ArrowRight, Volume2, ArrowLeftRight, FileText, Wand2, BookOpen, Sparkles } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,9 +15,11 @@ import {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
+  DropdownMenuSeparator,
 } from './ui/dropdown-menu';
 import { useTranslation } from '../contexts/LanguageContext';
 import { displayWord } from '../utils/helpers';
+import { useNavigate } from 'react-router-dom';
 
 interface WordCardProps {
   word: string;
@@ -38,7 +40,7 @@ interface WordCardProps {
   onCreateEmptyCard?: () => Promise<void>;
   onWordUpdate?: (wordId: number, data: { original_word?: string; translation?: string }) => Promise<void>;
   availableDecks?: { id: number; name: string }[];
-  allDecks?: { id: number; name: string; words?: any[] }[];
+  allDecks?: { id: number; name: string; words?: unknown[] }[];
   disabled?: boolean;
 }
 
@@ -70,6 +72,7 @@ export const WordCard: React.FC<WordCardProps> = ({
   disabled = false,
 }) => {
   const t = useTranslation();
+  const navigate = useNavigate();
   
   const [previewImage, setPreviewImage] = useState<{
     url: string;
@@ -340,6 +343,29 @@ export const WordCard: React.FC<WordCardProps> = ({
                 {t.words.createEmptyCard}
               </DropdownMenuItem>
             )}
+
+            {/* Разделитель */}
+            <DropdownMenuSeparator />
+
+            {/* AI контент → */}
+            {wordId && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/words/${wordId}`, { 
+                    state: { 
+                      deckId,
+                      word,
+                      translation 
+                    } 
+                  });
+                }}
+                disabled={disabled}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {t.words.aiContent}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -450,12 +476,14 @@ export const WordCard: React.FC<WordCardProps> = ({
       )}
 
       {/* Модальное окно редактирования изображения */}
-      <ImageEditModal
-        isOpen={editImageModalOpen}
-        onClose={() => setEditImageModalOpen(false)}
-        onSubmit={handleEditImage}
-        word={word}
-      />
+      {editImageModalOpen && (
+        <ImageEditModal
+          isOpen={editImageModalOpen}
+          onClose={() => setEditImageModalOpen(false)}
+          onSubmit={handleEditImage}
+          word={word}
+        />
+      )}
     </>
   );
 };

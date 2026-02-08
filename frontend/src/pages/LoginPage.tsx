@@ -9,9 +9,10 @@ import { useTheme } from '../contexts/ThemeContext';
 import authService from '../services/authService';
 import { showSuccess, showError } from '../utils/toast-helpers';
 
-// Логотипы из папки public (абсолютные пути)
-const logoLight = '/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
-const logoDark = '/8438de77d51aa44238d74565f4aecffecf7eb633.png';
+// Импортируем логотипы для светлой и темной темы
+import logoLight from 'figma:asset/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
+import logoDark from 'figma:asset/8438de77d51aa44238d74565f4aecffecf7eb633.png';
+import axios from 'axios';
 
 /**
  * Страница входа (всегда на английском языке)
@@ -36,11 +37,9 @@ export default function LoginPage() {
       newErrors.username = 'Please enter your username';
     }
 
-    // Валидация пароля
+    // Валидация пароля - при логине только проверяем, что не пустой
     if (password.length === 0) {
       newErrors.password = 'Please enter your password';
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
     }
 
     setErrors(newErrors);
@@ -57,16 +56,27 @@ export default function LoginPage() {
     
     setIsLoading(true);
 
+    console.log('[LoginPage] Attempting login with:', { username, password: '***' });
+
     try {
+      console.log('[LoginPage] Calling authService.login...');
       const response = await authService.login({ username, password });
+      console.log('[LoginPage] Login successful, response:', response);
       login(response.token, response.user);
       showSuccess(`Welcome back, ${response.user.username}!`);
       navigate('/');
-    } catch (error: any) {
-      console.error('Login error:', error);
+    } catch (error: unknown) {
+      console.error('[LoginPage] Login error:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('[LoginPage] Error details:', {
+          message: error.message,
+          stack: error.stack,
+          response: error.response
+        });
+      }
       
       // Обработка специфичных ошибок
-      const errorMessage = error.message || 'Login error';
+      const errorMessage = error instanceof Error ? error.message : 'Login error';
       if (errorMessage.includes('Invalid credentials') || errorMessage.includes('401')) {
         setErrors({ password: 'Invalid credentials' });
         showError('Invalid credentials');

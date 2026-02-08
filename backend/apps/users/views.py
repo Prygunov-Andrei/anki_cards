@@ -31,6 +31,8 @@ def register_view(request):
     serializer = UserRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
+        # age_group уже установлен в _age_group в методе create сериализатора
+        # Сигнал создаст UserTrainingSettings автоматически
         
         # Создаем токен авторизации
         token, created = Token.objects.get_or_create(user=user)

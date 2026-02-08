@@ -20,7 +20,7 @@ export const NetworkErrorBanner: React.FC<NetworkErrorBannerProps> = ({ onRetry 
           <p>Не удалось подключиться к backend серверу. Проверьте:</p>
           <ul className="ml-4 list-disc space-y-1 text-sm">
             <li>Backend сервер запущен (Django)</li>
-            <li>Туннель активен (Cloudflare/ngrok)</li>
+            <li>Backend доступен по адресу из .env (для разработки — localhost:8000)</li>
             <li>URL корректный в настройках</li>
           </ul>
           {onRetry && (

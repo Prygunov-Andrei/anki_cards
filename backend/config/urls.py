@@ -19,7 +19,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
-from apps.cards.urls import media_urlpatterns, prompt_urlpatterns, analysis_urlpatterns, deck_urlpatterns, token_urlpatterns
+from apps.cards.urls import media_urlpatterns, prompt_urlpatterns, analysis_urlpatterns, deck_urlpatterns, token_urlpatterns, card_urlpatterns
 from apps.anki_sync.urls import urlpatterns as anki_sync_urlpatterns
 
 
@@ -37,10 +37,12 @@ urlpatterns = [
     path('api/user/', include('apps.users.urls')),
     path('api/words/', include('apps.words.urls')),
     path('api/cards/', include('apps.cards.urls')),
+    path('api/training/', include('apps.training.urls')),
     path('api/media/', include((media_urlpatterns, 'media'), namespace='media')),
     path('api/user/', include((prompt_urlpatterns, 'prompts'), namespace='prompts')),
     path('api/cards/', include((analysis_urlpatterns, 'analysis'), namespace='analysis')),
     path('api/cards/', include((deck_urlpatterns, 'decks'), namespace='decks')),
+    path('api/cards/', include((card_urlpatterns, 'cards'), namespace='cards')),
     path('api/', include((token_urlpatterns, 'tokens'), namespace='tokens')),
     # Anki sync endpoints (должны быть на корневом уровне, т.к. Anki ожидает /sync/)
     path('', include('apps.anki_sync.urls')),

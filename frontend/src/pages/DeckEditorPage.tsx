@@ -17,12 +17,14 @@ import {
   BookOpen,
   Sparkles,
   Plus,
+  GraduationCap,
 } from 'lucide-react';
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
 import { getLanguageName } from '../utils/language-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
 import { useAuthContext } from '../contexts/AuthContext';
 import { Card } from '../components/ui/card';
+import axios from 'axios';
 
 /**
  * Страница DeckEditorPage - редактор колоды
@@ -489,8 +491,8 @@ const DeckEditorPage: React.FC = () => {
       // Перезагружаем колоду с обновлёнными данными
       await loadDeck();
 
-      showSuccess('удио удалено!', {
-        description: 'Аудио успешно удалено',
+      showSuccess(t.words.audioDeleted, {
+        description: t.words.audioDeleted,
       });
     } catch (error) {
       console.error('Error deleting audio:', error);
@@ -564,10 +566,13 @@ const DeckEditorPage: React.FC = () => {
 
       // Перезагружаем колоду, чтобы обновить список слов
       await loadDeck();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error inverting word:', error);
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : (error instanceof Error ? error.message : t.common.unknownError);
       showError(t.common.error, {
-        description: error?.response?.data?.error || error.message || t.common.unknownError,
+        description: message,
       });
     }
   };
@@ -589,10 +594,13 @@ const DeckEditorPage: React.FC = () => {
 
       // Перезагружаем колоду, чтобы обновить список слов
       await loadDeck();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating empty card:', error);
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : (error instanceof Error ? error.message : t.common.unknownError);
       showError(t.common.error, {
-        description: error?.response?.data?.error || error.message || t.common.unknownError,
+        description: message,
       });
     }
   };
@@ -612,11 +620,11 @@ const DeckEditorPage: React.FC = () => {
       showSuccess(t.decks.wordUpdated || 'Word updated', {
         description: t.decks.changesSaved || 'Changes saved successfully',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating word:', error);
       
       // Обработка ошибок валидации от backend
-      if (error.response?.data?.errors) {
+      if (axios.isAxiosError(error) && error.response?.data?.errors) {
         const errors = error.response.data.errors;
         const errorMessage = errors.original_word || errors.translation || t.decks.couldNotUpdateWord || 'Could not update word';
         
@@ -810,13 +818,24 @@ const DeckEditorPage: React.FC = () => {
 
       {/* Заголовок */}
       <div className="mb-8">
-        <div className="flex items-baseline gap-2 mb-4">
-          <EditableTitle
-            value={deck.name}
-            onSave={handleSaveTitle}
-            placeholder={t.decks.deckNamePlaceholder}
-          />
-          <span className="text-muted-foreground">({deck.words_count})</span>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-baseline gap-2 flex-1">
+            <EditableTitle
+              value={deck.name}
+              onSave={handleSaveTitle}
+              placeholder={t.decks.deckNamePlaceholder}
+            />
+            <span className="text-muted-foreground">({deck.words_count})</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/training/start?deck_id=${deck.id}`)}
+            className="shrink-0"
+          >
+            <GraduationCap className="mr-1.5 h-4 w-4" />
+            {t.trainingDashboard.train}
+          </Button>
         </div>
       </div>
 

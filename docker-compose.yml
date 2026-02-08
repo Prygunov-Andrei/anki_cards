@@ -42,12 +42,13 @@ services:
         condition: service_healthy
     networks:
       - anki_network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/\").read()' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import socket; s=socket.socket(); s.settimeout(5); s.connect((\"localhost\", 8000)); s.close()'"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
 
   frontend:
     build:
@@ -61,6 +62,12 @@ services:
     networks:
       - anki_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   postgres_data:

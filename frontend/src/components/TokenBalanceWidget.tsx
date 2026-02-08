@@ -21,17 +21,21 @@ export const TokenBalanceWidget: React.FC<TokenBalanceWidgetProps> = ({
   const [isAnimating, setIsAnimating] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Определяем состояние баланса
-  const isLowBalance = balance < 10 && balance > 0;
-  const isZeroBalance = balance === 0;
+  // Определяем состояние баланса (с проверкой на undefined)
+  const isLowBalance = balance !== undefined && balance < 10 && balance > 0;
+  const isZeroBalance = balance !== undefined && balance === 0;
 
   // Форматирование баланса с поддержкой дробных значений
-  const formatBalance = (value: number): string => {
+  const formatBalance = (value: number | undefined): string => {
+    // Если баланс не загружен, показываем 0
+    if (value === undefined || value === null) {
+      return '0';
+    }
     // Если баланс целый, показываем без десятичных знаков
     if (value % 1 === 0) {
       return value.toLocaleString('ru-RU');
     }
-    // Если дробный, п��казываем с одним десятичным знаком
+    // Если дробный, показываем с одним десятичным знаком
     return value.toLocaleString('ru-RU', {
       minimumFractionDigits: 1,
       maximumFractionDigits: 1,

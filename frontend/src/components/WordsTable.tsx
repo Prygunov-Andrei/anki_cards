@@ -171,7 +171,7 @@ export const WordsTable: React.FC<WordsTableProps> = ({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filteredWords.map((word) => {
           // Fallback для совместимости: backend может возвращать 'word' вместо 'original_word'
-          const wordText = word.original_word || (word as any).word || '???';
+          const wordText = word.original_word || (word as unknown as Record<string, string>).word || '???';
           const imageUrl = word.image_file ? getAbsoluteUrl(word.image_file) : undefined;
           const audioUrl = word.audio_file ? getAbsoluteUrl(word.audio_file) : undefined;
 

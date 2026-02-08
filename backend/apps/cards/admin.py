@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import GeneratedDeck, UserPrompt, Deck, PartOfSpeechCache, Token, TokenTransaction
+from .models import GeneratedDeck, UserPrompt, Deck, PartOfSpeechCache, Token, TokenTransaction, Card
 
 
 @admin.register(GeneratedDeck)
@@ -143,3 +143,46 @@ class TokenTransactionAdmin(admin.ModelAdmin):
     
     def has_change_permission(self, request, obj=None):
         return False  # Запрещаем изменение
+
+
+@admin.register(Card)
+class CardAdmin(admin.ModelAdmin):
+    """Административная панель для модели Card"""
+    list_display = [
+        'id', 'word', 'card_type', 'user',
+        'ease_factor', 'interval', 'next_review',
+        'is_in_learning_mode', 'is_auxiliary', 'is_suspended',
+    ]
+    list_filter = [
+        'card_type', 'is_in_learning_mode', 
+        'is_auxiliary', 'is_suspended',
+    ]
+    search_fields = ['word__original_word', 'word__translation']
+    readonly_fields = ['created_at', 'updated_at']
+    raw_id_fields = ['user', 'word']
+    
+    fieldsets = (
+        ('Основное', {
+            'fields': ('user', 'word', 'card_type')
+        }),
+        ('Cloze', {
+            'fields': ('cloze_sentence', 'cloze_word_index'),
+            'classes': ('collapse',),
+        }),
+        ('SM-2 Параметры', {
+            'fields': (
+                'ease_factor', 'interval', 'repetitions',
+                'lapses', 'consecutive_lapses', 'learning_step',
+            )
+        }),
+        ('Планирование', {
+            'fields': ('next_review', 'last_review')
+        }),
+        ('Статусы', {
+            'fields': ('is_in_learning_mode', 'is_auxiliary', 'is_suspended')
+        }),
+        ('Метаданные', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )

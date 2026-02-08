@@ -65,7 +65,7 @@ export function PublicRoute({ children }: PublicRouteProps) {
 
   // Если авторизован - редирект на главную или на страницу откуда пришли
   if (isAuthenticated) {
-    const from = (location.state as any)?.from?.pathname || '/';
+    const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/';
     return <Navigate to={from} replace />;
   }
 

@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 from apps.words.models import Word
-from .models import GeneratedDeck, UserPrompt, Deck, Token, TokenTransaction
+from .models import GeneratedDeck, UserPrompt, Deck, Token, TokenTransaction, Card, PartOfSpeechCache
 from .utils import create_card_model, create_deck, generate_apkg, parse_words_input
 from .prompt_utils import get_user_prompt, get_or_create_user_prompt, reset_user_prompt_to_default
 from .default_prompts import get_default_prompt, format_prompt, get_image_prompt_for_style, IMAGE_PROMPTS
@@ -2490,7 +2490,7 @@ class TestTokenAPI:
 class TestTokenIntegration:
     """Тесты для интеграции токенов с генерацией"""
     
-    @patch('apps.cards.views.generate_image_with_dalle')
+    @patch('apps.cards.views.generate_image')
     def test_image_generation_cost(self, mock_generate):
         """Генерация изображения стоит 1 токен"""
         from .token_utils import add_tokens, check_balance
@@ -2567,7 +2567,7 @@ class TestTokenIntegration:
         assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
         assert 'Недостаточно токенов' in str(response.data.get('error', ''))
     
-    @patch('apps.cards.views.generate_image_with_dalle')
+    @patch('apps.cards.views.generate_image')
     def test_generate_cards_error_refunds(self, mock_generate):
         """При ошибке генерации токены возвращаются"""
         from .token_utils import add_tokens, check_balance
@@ -2595,7 +2595,7 @@ class TestTokenIntegration:
         final_balance = check_balance(user)
         assert final_balance == initial_balance  # Баланс не изменился (списали и вернули)
     
-    @patch('apps.cards.views.generate_image_with_dalle')
+    @patch('apps.cards.views.generate_image')
     def test_generate_cards_creates_transaction(self, mock_generate):
         """Создается запись в TokenTransaction"""
         from .token_utils import add_tokens
@@ -2812,8 +2812,8 @@ class TestCardType:
         )
         assert word.card_type == 'normal'
     
-    def test_invert_word_sets_card_type(self):
-        """Тест, что инвертированное слово имеет тип 'inverted'"""
+    def test_invert_word_creates_card(self):
+        """Тест, что инвертирование создаёт Card(card_type='inverted') для того же Word"""
         user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
@@ -2843,9 +2843,17 @@ class TestCardType:
         )
         
         assert response.status_code == status.HTTP_200_OK
-        inverted_word_id = response.data['inverted_word']['id']
-        inverted_word = Word.objects.get(id=inverted_word_id)
-        assert inverted_word.card_type == 'inverted'
+        # Проверяем, что создана Card, а не Word
+        assert 'inverted_card' in response.data
+        card_id = response.data['inverted_card']['card_id']
+        card = Card.objects.get(id=card_id)
+        assert card.card_type == 'inverted'
+        assert card.word_id == word.id
+        # Word не должен был измениться
+        word.refresh_from_db()
+        assert word.card_type == 'normal'
+        # Не должно быть создано новых Word-ов
+        assert Word.objects.filter(user=user).count() == 1
     
     def test_create_empty_card_only_for_normal(self):
         """Тест, что пустые карточки создаются только для обычных карточек"""
@@ -2947,8 +2955,8 @@ class TestCardType:
         assert 'error' in response.data
         assert 'инвертированная' in response.data['error'].lower() or 'inverted' in response.data['error'].lower()
     
-    def test_invert_all_words_skips_already_inverted(self):
-        """Тест, что уже инвертированные карточки не инвертируются повторно"""
+    def test_invert_all_words_creates_cards_and_skips_legacy(self):
+        """Тест, что инвертирование создаёт Card-ы и пропускает legacy Word-ы"""
         user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
@@ -2971,7 +2979,7 @@ class TestCardType:
         )
         deck.words.add(normal_word)
         
-        # Создаем уже инвертированную карточку (НЕ связанную с normal_word)
+        # Создаем legacy-инвертированную карточку (Word с card_type='inverted')
         inverted_word = Word.objects.create(
             user=user,
             original_word='книга',
@@ -2999,46 +3007,31 @@ class TestCardType:
         
         assert response.status_code == status.HTTP_200_OK, f"Ожидался статус 200, получен {response.status_code}. Ответ: {response.data}"
         
-        # Должна быть создана только одна инвертированная карточка (для normal слова)
-        # Старая инвертированная и пустая карточки должны быть пропущены
-        inverted_count = response.data.get('inverted_words_count', 0)
-        inverted_list = response.data.get('inverted_words', [])
+        # Должна быть создана одна инвертированная Card (для normal_word)
+        # Legacy inverted и empty Word-ы должны быть пропущены
+        inverted_count = response.data.get('inverted_cards_count', 0)
+        inverted_list = response.data.get('inverted_cards', [])
         skipped_list = response.data.get('skipped_words', [])
         
-        assert inverted_count == 1, f"Ожидалось 1 инвертированная карточка, получено {inverted_count}. Inverted: {inverted_list}, Skipped: {skipped_list}"
+        assert inverted_count == 1, f"Ожидалась 1 Card, получено {inverted_count}. Cards: {inverted_list}, Skipped: {skipped_list}"
         
-        # Проверяем, что инвертированная и пустая карточки были пропущены
+        # Проверяем, что legacy inverted и empty Word-ы были пропущены
         skipped = response.data.get('skipped_words', [])
-        assert len(skipped) == 2, f"Ожидалось 2 пропущенных карточки, получено {len(skipped)}. Пропущенные: {skipped}"
-        skipped_ids = [s['id'] for s in skipped]
-        skipped_original_words = [s.get('original_word', '') for s in skipped]
+        assert len(skipped) == 2, f"Ожидалось 2 пропущенных, получено {len(skipped)}. Пропущенные: {skipped}"
         
-        # Проверяем по original_word, так как ID могут отличаться
-        assert inverted_word.original_word in skipped_original_words, f"Инвертированная карточка '{inverted_word.original_word}' должна быть пропущена. Пропущенные: {skipped_original_words}"
-        assert empty_word.original_word in skipped_original_words, f"Пустая карточка '{empty_word.original_word}' должна быть пропущена. Пропущенные: {skipped_original_words}"
-        
-        # Проверяем, что в колоде теперь 4 карточки (1 normal + 1 inverted (новая для normal) + 1 inverted (старая) + 1 empty)
-        deck.refresh_from_db()
-        assert deck.words.count() == 4, f"Ожидалось 4 карточки в колоде, получено {deck.words.count()}"
-        
-        # Проверяем, что старая инвертированная карточка не изменилась
-        inverted_word.refresh_from_db()
-        assert inverted_word.original_word == 'книга', f"Ожидалось 'книга', получено '{inverted_word.original_word}'"
-        assert inverted_word.translation == 'livro'
-        assert inverted_word.card_type == 'inverted'
-        
-        # Проверяем, что для normal слова была создана инвертированная карточка
-        normal_word.refresh_from_db()
-        inverted_for_normal = Word.objects.filter(
-            user=user,
-            original_word=normal_word.translation,  # 'дом'
-            language=deck.source_lang,  # 'ru'
-            card_type='inverted'
+        # Проверяем, что создана Card(inverted) для normal_word
+        inverted_card = Card.objects.filter(
+            user=user, word=normal_word, card_type='inverted'
         ).first()
-        assert inverted_for_normal is not None, "Инвертированная карточка для normal слова должна быть создана"
-        assert inverted_for_normal in deck.words.all(), "Инвертированная карточка для normal слова должна быть в колоде"
-        # Проверяем, что это не та же карточка, что inverted_word
-        assert inverted_for_normal.id != inverted_word.id, "Инвертированная карточка для normal слова должна быть новой"
+        assert inverted_card is not None, "Card(inverted) должна быть создана для normal_word"
+        
+        # Проверяем, что в колоде по-прежнему 3 Word-а (Word-ы не изменились)
+        deck.refresh_from_db()
+        assert deck.words.count() == 3, f"Ожидалось 3 Word-а в колоде, получено {deck.words.count()}"
+        
+        # Проверяем, что normal_word не изменился
+        normal_word.refresh_from_db()
+        assert normal_word.card_type == 'normal'
     
     def test_generate_apkg_with_empty_card(self):
         """Тест генерации APKG с пустой карточкой (display_word должен быть пустым)"""
@@ -3061,3 +3054,390 @@ class TestCardType:
             assert result_path.exists()
             # Файл должен быть создан (проверка содержимого APKG сложна, но функция должна работать)
             assert result_path.suffix == '.apkg'
+
+# ═══════════════════════════════════════════════════════════════
+# ЭТАП 3: Тесты для модели Card
+# ═══════════════════════════════════════════════════════════════
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
+from datetime import timedelta
+
+
+@pytest.mark.django_db
+class TestCardModel:
+    """Unit-тесты модели Card"""
+    
+    def setup_method(self):
+        """Настройка перед каждым тестом"""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.word = Word.objects.create(
+            user=self.user,
+            original_word='Hund',
+            translation='собака',
+            language='de'
+        )
+        # Удаляем автосозданную карточку для чистых тестов
+        Card.objects.filter(word=self.word).delete()
+    
+    def test_create_normal_card(self):
+        """Тест создания обычной карточки"""
+        card = Card.create_from_word(self.word, 'normal')
+        
+        assert card.card_type == 'normal'
+        assert card.word == self.word
+        assert card.user == self.user
+        assert card.ease_factor == 2.5
+        assert card.is_in_learning_mode is True
+        assert card.is_auxiliary is False
+        assert card.is_suspended is False
+    
+    def test_create_inverted_card(self):
+        """Тест создания инвертированной карточки"""
+        card = Card.create_inverted(self.word)
+        
+        assert card.card_type == 'inverted'
+        assert card.is_auxiliary is False
+    
+    def test_create_empty_card_without_media_fails(self):
+        """Тест: empty-карточка требует медиа"""
+        with pytest.raises(ValueError) as exc_info:
+            Card.create_empty(self.word)
+        
+        assert 'изображение или аудио' in str(exc_info.value)
+    
+    def test_create_empty_card_with_image(self):
+        """Тест создания empty-карточки с изображением"""
+        image = SimpleUploadedFile(
+            name='test.jpg',
+            content=b'\x89PNG\r\n\x1a\n',
+            content_type='image/jpeg'
+        )
+        self.word.image_file = image
+        self.word.save()
+        
+        card = Card.create_empty(self.word)
+        
+        assert card.card_type == 'empty'
+        assert card.is_auxiliary is True
+    
+    def test_create_cloze_card(self):
+        """Тест создания cloze-карточки"""
+        sentence = "Der Hund ist groß"
+        card = Card.create_cloze(self.word, sentence, word_index=1)
+        
+        assert card.card_type == 'cloze'
+        assert card.cloze_sentence == sentence
+        assert card.cloze_word_index == 1
+        assert card.is_auxiliary is True
+    
+    def test_create_cloze_without_sentence_fails(self):
+        """Тест: cloze требует предложение"""
+        with pytest.raises(ValueError):
+            Card.create_cloze(self.word, '', 0)
+    
+    def test_suspend_and_unsuspend(self):
+        """Тест приостановки и возобновления"""
+        card = Card.create_from_word(self.word)
+        
+        card.suspend()
+        assert card.is_suspended is True
+        
+        card.unsuspend()
+        assert card.is_suspended is False
+    
+    def test_enter_and_exit_learning_mode(self):
+        """Тест входа/выхода из режима изучения"""
+        card = Card.create_from_word(self.word)
+        card.is_in_learning_mode = False
+        card.save()
+        
+        card.enter_learning_mode()
+        assert card.is_in_learning_mode is True
+        assert card.learning_step == 0
+        
+        card.exit_learning_mode()
+        assert card.is_in_learning_mode is False
+    
+    def test_get_front_content_normal(self):
+        """Тест получения лицевой стороны normal"""
+        card = Card.create_from_word(self.word)
+        front = card.get_front_content()
+        
+        assert front['text'] == 'Hund'
+        assert front['image_url'] is None
+        assert front['audio_url'] is None
+    
+    def test_get_front_content_inverted(self):
+        """Тест получения лицевой стороны inverted"""
+        card = Card.create_inverted(self.word)
+        front = card.get_front_content()
+        
+        assert front['text'] == 'собака'
+    
+    def test_get_back_content_normal(self):
+        """Тест получения оборотной стороны normal"""
+        card = Card.create_from_word(self.word)
+        back = card.get_back_content()
+        
+        assert back['text'] == 'собака'
+    
+    def test_cloze_text_creation(self):
+        """Тест создания текста с пропуском"""
+        sentence = "Der Hund ist groß"
+        card = Card.create_cloze(self.word, sentence, word_index=1)
+        
+        cloze_text = card._create_cloze_text()
+        assert cloze_text == "Der [...] ist groß"
+    
+    def test_is_due_new_card(self):
+        """Тест: новая карточка готова для показа"""
+        card = Card.create_from_word(self.word)
+        assert card.is_due() is True
+    
+    def test_is_due_suspended_card(self):
+        """Тест: приостановленная карточка не готова"""
+        card = Card.create_from_word(self.word)
+        card.suspend()
+        assert card.is_due() is False
+    
+    def test_is_due_future_review(self):
+        """Тест: карточка с будущим next_review не готова"""
+        card = Card.create_from_word(self.word)
+        card.is_in_learning_mode = False
+        card.next_review = timezone.now() + timedelta(days=1)
+        card.save()
+        
+        assert card.is_due() is False
+    
+    def test_is_due_past_review(self):
+        """Тест: карточка с прошедшим next_review готова"""
+        card = Card.create_from_word(self.word)
+        card.is_in_learning_mode = False
+        card.next_review = timezone.now() - timedelta(hours=1)
+        card.save()
+        
+        assert card.is_due() is True
+
+
+@pytest.mark.django_db
+class TestCardManager:
+    """Тесты менеджера CardManager"""
+    
+    def setup_method(self):
+        """Настройка перед каждым тестом"""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.word1 = Word.objects.create(
+            user=self.user,
+            original_word='Hund',
+            translation='собака',
+            language='de'
+        )
+        self.word2 = Word.objects.create(
+            user=self.user,
+            original_word='Katze',
+            translation='кошка',
+            language='de'
+        )
+        # Удаляем автосозданные карточки
+        Card.objects.filter(word__in=[self.word1, self.word2]).delete()
+    
+    def test_for_user(self):
+        """Тест получения карточек пользователя"""
+        card1 = Card.create_from_word(self.word1)
+        card2 = Card.create_from_word(self.word2)
+        card2.suspend()
+        
+        cards = Card.objects.for_user(self.user)
+        assert cards.count() == 1  # Только не приостановленные
+    
+    def test_due_for_review(self):
+        """Тест получения карточек для повторения"""
+        card = Card.create_from_word(self.word1)
+        card.is_in_learning_mode = False
+        card.next_review = timezone.now() - timedelta(hours=1)
+        card.save()
+        
+        due = Card.objects.due_for_review(self.user)
+        assert due.count() == 1
+    
+    def test_in_learning(self):
+        """Тест получения карточек в режиме изучения"""
+        card1 = Card.create_from_word(self.word1)
+        card2 = Card.create_from_word(self.word2)
+        card2.is_in_learning_mode = False
+        card2.save()
+        
+        learning = Card.objects.in_learning(self.user)
+        assert learning.count() == 1
+    
+    def test_by_word(self):
+        """Тест получения карточек по слову"""
+        Card.create_from_word(self.word1)
+        Card.create_inverted(self.word1)
+        Card.create_from_word(self.word2)
+        
+        cards = Card.objects.by_word(self.word1)
+        assert cards.count() == 2
+
+
+@pytest.mark.django_db
+class TestCardSignals:
+    """Тесты сигналов автосоздания"""
+    
+    def setup_method(self):
+        """Настройка перед каждым тестом"""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+    
+    def test_auto_create_card_on_word_creation(self):
+        """Тест: при создании слова автоматически создаётся карточка"""
+        word = Word.objects.create(
+            user=self.user,
+            original_word='Auto',
+            translation='машина',
+            language='de'
+        )
+        
+        cards = Card.objects.filter(word=word)
+        assert cards.count() == 1
+        assert cards.first().card_type == 'normal'
+
+
+@pytest.mark.django_db
+class TestCardAPI:
+    """API-тесты для карточек"""
+    
+    def setup_method(self):
+        """Настройка перед каждым тестом"""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        
+        self.word = Word.objects.create(
+            user=self.user,
+            original_word='Haus',
+            translation='дом',
+            language='de'
+        )
+        # Удаляем автосозданную карточку для чистых тестов
+        Card.objects.filter(word=self.word).delete()
+    
+    def test_list_cards(self):
+        """GET /api/cards/ — список карточек"""
+        Card.create_from_word(self.word)
+        
+        response = self.client.get('/api/cards/cards/')
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+    
+    def test_card_detail(self):
+        """GET /api/cards/{id}/ — детали карточки"""
+        card = Card.create_from_word(self.word)
+        
+        response = self.client.get(f'/api/cards/cards/{card.id}/')
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['card_type'] == 'normal'
+        assert 'front_content' in response.data
+        assert 'back_content' in response.data
+    
+    def test_create_inverted_card(self):
+        """POST /api/words/{id}/cards/inverted/"""
+        response = self.client.post(f'/api/words/{self.word.id}/cards/inverted/')
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['card_type'] == 'inverted'
+    
+    def test_create_cloze_card(self):
+        """POST /api/words/{id}/cards/cloze/"""
+        data = {
+            'sentence': 'Das Haus ist groß',
+            'word_index': 1
+        }
+        
+        response = self.client.post(
+            f'/api/words/{self.word.id}/cards/cloze/',
+            data
+        )
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['card_type'] == 'cloze'
+        assert response.data['cloze_sentence'] == 'Das Haus ist groß'
+    
+    def test_suspend_card(self):
+        """POST /api/cards/{id}/suspend/"""
+        card = Card.create_from_word(self.word)
+        
+        response = self.client.post(f'/api/cards/cards/{card.id}/suspend/')
+        
+        assert response.status_code == status.HTTP_200_OK
+        card.refresh_from_db()
+        assert card.is_suspended is True
+    
+    def test_unsuspend_card(self):
+        """POST /api/cards/{id}/unsuspend/"""
+        card = Card.create_from_word(self.word)
+        card.suspend()
+        
+        response = self.client.post(f'/api/cards/cards/{card.id}/unsuspend/')
+        
+        assert response.status_code == status.HTTP_200_OK
+        card.refresh_from_db()
+        assert card.is_suspended is False
+    
+    def test_delete_auxiliary_card(self):
+        """DELETE /api/cards/{id}/ — удаление вспомогательной"""
+        self.word.sentences = [{'text': 'Das Haus ist groß', 'source': 'user'}]
+        self.word.save()
+        card = Card.create_cloze(self.word, 'Das Haus ist groß', 1)
+        
+        response = self.client.delete(f'/api/cards/cards/{card.id}/')
+        
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+    
+    def test_cannot_delete_only_normal_card(self):
+        """DELETE /api/cards/{id}/ — нельзя удалить единственную normal"""
+        card = Card.create_from_word(self.word)
+        
+        response = self.client.delete(f'/api/cards/cards/{card.id}/')
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+    
+    def test_enter_learning_mode(self):
+        """POST /api/cards/{id}/enter-learning/"""
+        card = Card.create_from_word(self.word)
+        card.is_in_learning_mode = False
+        card.save()
+        
+        response = self.client.post(f'/api/cards/cards/{card.id}/enter-learning/')
+        
+        assert response.status_code == status.HTTP_200_OK
+        card.refresh_from_db()
+        assert card.is_in_learning_mode is True
+    
+    def test_word_cards_list(self):
+        """GET /api/words/{id}/cards/ — все карточки слова"""
+        Card.create_from_word(self.word)
+        Card.create_inverted(self.word)
+        
+        response = self.client.get(f'/api/words/{self.word.id}/cards/')
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 2

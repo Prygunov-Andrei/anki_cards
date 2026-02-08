@@ -1,6 +1,7 @@
-import apiClient, { handleApiError, ApiError } from './api';
-import { User } from '../types/auth';
-import { API_ENDPOINTS } from '../lib/config';
+import axios from 'axios';
+import apiClient, { handleApiError } from './api';
+import { User } from '../types'; // ИСПРАВЛЕНО: правильный импорт User
+import { API_ENDPOINTS } from '../lib/api-constants'; // ИСПРАВЛЕНО: используем новый файл констант
 
 /**
  * Интерфейс для данных входа
@@ -40,20 +41,36 @@ export const authService = {
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
+      console.log('[authService] Sending login request with credentials:', { username: credentials.username });
       const response = await apiClient.post<{ token: string; user_id: number }>(API_ENDPOINTS.LOGIN, credentials);
+      
+      console.log('[authService] Login response received:', response.data);
+      console.log('[authService] Response headers:', response.headers);
+      console.log('[authService] Full response:', response);
+      
+      // ⚠️ Проверка: убеждаемся, что ответ не HTML
+      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+        console.error('[authService] ❌ Получен HTML вместо JSON!');
+        console.error('[authService] Это означает, что запрос уходит не на backend API');
+        console.error('[authService] Проверьте BASE_URL в /services/api.ts');
+        throw new Error('Backend недоступен: получен HTML вместо JSON. Проверьте, что backend запущен и VITE_API_BASE_URL указан верно.');
+      }
       
       // Сохраняем токен
       if (response.data.token) {
         const token = response.data.token;
+        console.log('[authService] Token found:', token);
         localStorage.setItem('authToken', token);
         
         // Получаем профиль пользователя с сервера с токеном
+        console.log('[authService] Fetching user profile...');
         const profileResponse = await apiClient.get<User>('/api/user/profile/', {
           headers: {
             'Authorization': `Token ${token}`
           }
         });
         const user = profileResponse.data;
+        console.log('[authService] User profile received:', user);
         
         // Сохраняем данные пользователя
         localStorage.setItem('user', JSON.stringify(user));
@@ -64,8 +81,10 @@ export const authService = {
         };
       }
       
+      console.error('[authService] No token in response! Response data:', response.data);
       throw new Error('No token received');
     } catch (error) {
+      console.error('[authService] Login error:', error);
       const apiError = handleApiError(error);
       throw new Error(apiError.message);
     }
@@ -109,8 +128,12 @@ export const authService = {
       }
       
       throw new Error('No token received');
-    } catch (error: any) {
-      console.error('[authService] Registration error details:', error.response?.data);
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        console.error('[authService] Registration error details:', error.response?.data);
+      } else {
+        console.error('[authService] Registration error details:', error);
+      }
       const apiError = handleApiError(error);
       throw new Error(apiError.message);
     }

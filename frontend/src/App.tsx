@@ -1,3 +1,19 @@
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import MainPage from './pages/MainPage';
+import ProfilePage from './pages/ProfilePage';
+import DecksPage from './pages/DecksPage';
+import DeckEditorPage from './pages/DeckEditorPage';
+import WordDetailPage from './pages/WordDetailPage';
+import WordsPage from './pages/WordsPage';
+import CategoriesPage from './pages/CategoriesPage';
+import TrainingDashboardPage from './pages/TrainingDashboardPage';
+import TrainingStartPage from './pages/TrainingStartPage';
+import TrainingSessionPage from './pages/TrainingSessionPage';
+import NotificationSettingsPage from './pages/NotificationSettingsPage';
+import ForgettingCurvePage from './pages/ForgettingCurvePage';
+import NotFoundPage from './pages/NotFoundPage';
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -6,15 +22,6 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { Toaster } from './components/ui/sonner';
-
-// Pages
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import MainPage from './pages/MainPage';
-import ProfilePage from './pages/ProfilePage';
-import DecksPage from './pages/DecksPage';
-import DeckEditorPage from './pages/DeckEditorPage';
-import NotFoundPage from './pages/NotFoundPage';
 
 /**
  * Главный компонент приложения ANKI Generator
@@ -68,6 +75,26 @@ function App() {
                   }
                 />
                 <Route
+                  path="/words"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <WordsPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/categories"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <CategoriesPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/decks"
                   element={
                     <ProtectedRoute>
@@ -83,6 +110,64 @@ function App() {
                     <ProtectedRoute>
                       <Layout>
                         <DeckEditorPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/training"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <TrainingDashboardPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/training/start"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <TrainingStartPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/training/session"
+                  element={
+                    <ProtectedRoute>
+                      <TrainingSessionPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/forgetting-curve"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <ForgettingCurvePage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/notifications"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <NotificationSettingsPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/words/:id"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <WordDetailPage />
                       </Layout>
                     </ProtectedRoute>
                   }

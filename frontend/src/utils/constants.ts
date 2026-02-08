@@ -13,6 +13,7 @@ export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'de', name: 'German', nativeName: 'Deutsch', flag: '🇩🇪' },
   { code: 'it', name: 'Italian', nativeName: 'Italiano', flag: '🇮🇹' },
   { code: 'pt', name: 'Portuguese', nativeName: 'Português', flag: '🇵🇹' },
+  { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', flag: '🇹🇷' },
   { code: 'zh', name: 'Chinese', nativeName: '中文', flag: '🇨🇳' },
   { code: 'ja', name: 'Japanese', nativeName: '日本語', flag: '🇯🇵' },
   { code: 'ko', name: 'Korean', nativeName: '한국어', flag: '🇰🇷' },

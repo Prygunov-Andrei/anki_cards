@@ -14,6 +14,7 @@ import { MediaModelSelector, MediaModel, mediaModelToBackend, backendToMediaMode
 import { profileService } from '../services/profile.service';
 import { X, Volume2, Sparkles } from 'lucide-react';
 import { translations, SupportedLocale } from '../locales';
+import axios from 'axios';
 
 /**
  * Страница профиля пользователя
@@ -174,58 +175,65 @@ export default function ProfilePage() {
       showSuccess(toastTranslations.toast.profileUpdated, {
         description: toastTranslations.toast.allChangesSaved,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Profile update error:', error);
-      console.error('Error response data:', error.response?.data);
 
-      if (error.response?.status === 400) {
-        const errorData = error.response.data;
-        
-        // Логируем все ошибки валидации
-        console.error('Validation errors:', errorData);
-        
-        // Обрабатываем специфичные ошибки
-        if (errorData.email) {
-          showError(t.errors.invalidEmail, {
-            description: errorData.email[0] || t.errors.invalidEmail,
-          });
-        } else if (errorData.avatar) {
-          showError(t.errors.unsupportedFormat, {
-            description: errorData.avatar[0] || t.errors.useCorrectFormat,
-          });
-        } else if (errorData.native_language) {
-          console.error('Native language error detail:', errorData.native_language);
-          showError(t.errors.validation, {
-            description: `Native language error: ${errorData.native_language[0] || 'Invalid'}`,
-          });
-        } else if (errorData.learning_language) {
-          console.error('Learning language error detail:', errorData.learning_language);
-          showError(t.errors.validation, {
-            description: `Learning language error: ${errorData.learning_language[0] || 'Invalid'}`,
-          });
-        } else if (errorData.image_provider) {
-          showError(t.errors.validation, {
-            description: errorData.image_provider[0] || 'Invalid image provider',
-          });
-        } else if (errorData.gemini_model) {
-          showError(t.errors.validation, {
-            description: errorData.gemini_model[0] || 'Invalid Gemini model',
-          });
-        } else if (errorData.audio_provider) {
-          showError(t.errors.validation, {
-            description: errorData.audio_provider[0] || 'Invalid audio provider',
+      if (axios.isAxiosError(error)) {
+        console.error('Error response data:', error.response?.data);
+
+        if (error.response?.status === 400) {
+          const errorData = error.response.data;
+          
+          // Логируем все ошибки валидации
+          console.error('Validation errors:', errorData);
+          
+          // Обрабатываем специфичные ошибки
+          if (errorData.email) {
+            showError(t.errors.invalidEmail, {
+              description: errorData.email[0] || t.errors.invalidEmail,
+            });
+          } else if (errorData.avatar) {
+            showError(t.errors.unsupportedFormat, {
+              description: errorData.avatar[0] || t.errors.useCorrectFormat,
+            });
+          } else if (errorData.native_language) {
+            console.error('Native language error detail:', errorData.native_language);
+            showError(t.errors.validation, {
+              description: `Native language error: ${errorData.native_language[0] || 'Invalid'}`,
+            });
+          } else if (errorData.learning_language) {
+            console.error('Learning language error detail:', errorData.learning_language);
+            showError(t.errors.validation, {
+              description: `Learning language error: ${errorData.learning_language[0] || 'Invalid'}`,
+            });
+          } else if (errorData.image_provider) {
+            showError(t.errors.validation, {
+              description: errorData.image_provider[0] || 'Invalid image provider',
+            });
+          } else if (errorData.gemini_model) {
+            showError(t.errors.validation, {
+              description: errorData.gemini_model[0] || 'Invalid Gemini model',
+            });
+          } else if (errorData.audio_provider) {
+            showError(t.errors.validation, {
+              description: errorData.audio_provider[0] || 'Invalid audio provider',
+            });
+          } else {
+            // Показываем общую ошибку с деталями
+            const errorMessage = JSON.stringify(errorData);
+            showError(t.errors.validation, {
+              description: errorMessage.length < 100 ? errorMessage : t.errors.validation,
+            });
+          }
+        } else if (error.response?.status === 401) {
+          showError(t.errors.sessionExpired, {
+            description: t.errors.pleaseLoginAgain,
           });
         } else {
-          // Показываем общую ошибку с деталями
-          const errorMessage = JSON.stringify(errorData);
-          showError(t.errors.validation, {
-            description: errorMessage.length < 100 ? errorMessage : t.errors.validation,
+          showError(t.errors.generic, {
+            description: t.errors.checkConnection,
           });
         }
-      } else if (error.response?.status === 401) {
-        showError(t.errors.sessionExpired, {
-          description: t.errors.pleaseLoginAgain,
-        });
       } else {
         showError(t.errors.generic, {
           description: t.errors.checkConnection,

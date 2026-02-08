@@ -10,6 +10,7 @@ LANGUAGE_CHOICES = [
     ('es', 'Испанский'),
     ('fr', 'Французский'),
     ('it', 'Итальянский'),
+    ('tr', 'Турецкий'),
 ]
 
 
@@ -270,9 +271,12 @@ class AudioUploadSerializer(serializers.Serializer):
                 f"Размер файла превышает 5MB. Текущий размер: {value.size / (1024 * 1024):.2f}MB"
             )
         
-        # Проверка формата
-        if not value.name.lower().endswith('.mp3'):
-            raise serializers.ValidationError("Файл должен быть в формате MP3")
+        # Проверка формата (MP3, WebM, WAV, OGG)
+        allowed_extensions = ('.mp3', '.webm', '.wav', '.ogg')
+        if not any(value.name.lower().endswith(ext) for ext in allowed_extensions):
+            raise serializers.ValidationError(
+                f"Поддерживаемые форматы: {', '.join(allowed_extensions)}"
+            )
         
         return value
 
@@ -568,4 +572,206 @@ class DeckCreateEmptyCardSerializer(serializers.Serializer):
         required=True,
         help_text="ID слова для создания пустой карточки"
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# ЭТАП 3: Сериализаторы для Card
+# ═══════════════════════════════════════════════════════════════
+
+from apps.words.serializers import WordListSerializer
+
+
+class CardSerializer(serializers.ModelSerializer):
+    """Полное представление карточки"""
+    
+    word = WordListSerializer(read_only=True)
+    front_content = serializers.SerializerMethodField()
+    back_content = serializers.SerializerMethodField()
+    is_due = serializers.SerializerMethodField()
+    
+    class Meta:
+        from .models import Card
+        model = Card
+        fields = [
+            'id',
+            'word',
+            'card_type',
+            'cloze_sentence',
+            'cloze_word_index',
+            # SM-2
+            'ease_factor',
+            'interval',
+            'repetitions',
+            'lapses',
+            'consecutive_lapses',
+            'learning_step',
+            # Планирование
+            'next_review',
+            'last_review',
+            # Статусы
+            'is_in_learning_mode',
+            'is_auxiliary',
+            'is_suspended',
+            # Контент
+            'front_content',
+            'back_content',
+            'is_due',
+            # Мета
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'word', 'ease_factor', 'interval', 'repetitions',
+            'lapses', 'consecutive_lapses', 'learning_step',
+            'next_review', 'last_review', 'is_auxiliary',
+            'created_at', 'updated_at',
+        ]
+    
+    def get_front_content(self, obj):
+        return obj.get_front_content()
+    
+    def get_back_content(self, obj):
+        return obj.get_back_content()
+    
+    def get_is_due(self, obj):
+        return obj.is_due()
+
+
+class CardListSerializer(serializers.ModelSerializer):
+    """Сокращённое представление для списков"""
+    
+    word_id = serializers.IntegerField(source='word.id', read_only=True)
+    word_text = serializers.CharField(source='word.original_word', read_only=True)
+    word_translation = serializers.CharField(source='word.translation', read_only=True)
+    image_file = serializers.SerializerMethodField()
+    audio_file = serializers.SerializerMethodField()
+    is_due = serializers.SerializerMethodField()
+    
+    class Meta:
+        from .models import Card
+        model = Card
+        fields = [
+            'id',
+            'card_type',
+            'word_id',
+            'word_text',
+            'word_translation',
+            'image_file',
+            'audio_file',
+            'interval',
+            'ease_factor',
+            'next_review',
+            'is_in_learning_mode',
+            'is_auxiliary',
+            'is_suspended',
+            'is_due',
+        ]
+    
+    def get_image_file(self, obj):
+        """Возвращает полный URL изображения слова"""
+        if obj.word and obj.word.image_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.word.image_file.url)
+            return obj.word.image_file.url
+        return None
+    
+    def get_audio_file(self, obj):
+        """Возвращает полный URL аудиофайла слова"""
+        if obj.word and obj.word.audio_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.word.audio_file.url)
+            return obj.word.audio_file.url
+        return None
+    
+    def get_is_due(self, obj):
+        return obj.is_due()
+
+
+class CardCreateClozeSerializer(serializers.Serializer):
+    """Сериализатор для создания cloze-карточки"""
+    
+    sentence = serializers.CharField(
+        required=True,
+        help_text="Предложение с целевым словом"
+    )
+    word_index = serializers.IntegerField(
+        required=False,
+        default=0,
+        help_text="Индекс слова для пропуска (0-based)"
+    )
+    
+    def validate_sentence(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Предложение не может быть пустым")
+        return value.strip()
+    
+    def validate(self, data):
+        sentence = data.get('sentence', '')
+        word_index = data.get('word_index', 0)
+        
+        words = sentence.split()
+        if word_index < 0 or word_index >= len(words):
+            raise serializers.ValidationError({
+                'word_index': f"Индекс должен быть от 0 до {len(words) - 1}"
+            })
+        
+        return data
+
+
+class CardReviewSerializer(serializers.ModelSerializer):
+    """
+    Сериализатор для показа карточки на тренировке.
+    Содержит только данные, необходимые для отображения.
+    """
+    
+    front_content = serializers.SerializerMethodField()
+    
+    class Meta:
+        from .models import Card
+        model = Card
+        fields = [
+            'id',
+            'card_type',
+            'front_content',
+            'is_in_learning_mode',
+        ]
+    
+    def get_front_content(self, obj):
+        return obj.get_front_content()
+
+
+class CardAnswerSerializer(serializers.ModelSerializer):
+    """
+    Сериализатор для ответа — показывает оборотную сторону.
+    """
+    
+    front_content = serializers.SerializerMethodField()
+    back_content = serializers.SerializerMethodField()
+    word_etymology = serializers.CharField(source='word.etymology', read_only=True)
+    word_notes = serializers.CharField(source='word.notes', read_only=True)
+    word_hint_text = serializers.CharField(source='word.hint_text', read_only=True)
+    word_sentences = serializers.JSONField(source='word.sentences', read_only=True)
+    
+    class Meta:
+        from .models import Card
+        model = Card
+        fields = [
+            'id',
+            'card_type',
+            'front_content',
+            'back_content',
+            'is_in_learning_mode',
+            'word_etymology',
+            'word_notes',
+            'word_hint_text',
+            'word_sentences',
+        ]
+    
+    def get_front_content(self, obj):
+        return obj.get_front_content()
+    
+    def get_back_content(self, obj):
+        return obj.get_back_content()
 

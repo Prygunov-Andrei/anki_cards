@@ -11,6 +11,7 @@ interface TokenContextType {
   fetchTransactions: () => Promise<void>;
   checkBalance: (requiredAmount: number) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
+  updateBalance: (newBalance: number) => void;
 }
 
 const TokenContext = createContext<TokenContextType | undefined>(undefined);
@@ -89,6 +90,13 @@ export const TokenProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await fetchBalance();
   }, [fetchBalance]);
 
+  /**
+   * Обновить баланс (локально)
+   */
+  const updateBalance = useCallback((newBalance: number) => {
+    setBalance(newBalance);
+  }, []);
+
   // Загружаем баланс при монтировании компонента
   useEffect(() => {
     if (isAuthenticated) {
@@ -104,6 +112,7 @@ export const TokenProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     fetchTransactions,
     checkBalance,
     refreshBalance,
+    updateBalance,
   };
 
   return <TokenContext.Provider value={value}>{children}</TokenContext.Provider>;

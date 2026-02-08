@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '../types';
 import authService from '../services/authService';
 
@@ -56,40 +56,51 @@ export const useAuth = () => {
     };
 
     initAuth();
+
+    // Слушаем custom event от API interceptor (когда токен стал невалидным при 401)
+    const handleTokenExpired = () => {
+      if (isMounted) {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    };
+    window.addEventListener('auth:token-expired', handleTokenExpired);
     
     // Cleanup функция для предотвращения обновления размонтированного компонента
     return () => {
       isMounted = false;
+      window.removeEventListener('auth:token-expired', handleTokenExpired);
     };
   }, []);
 
-  const login = (token: string, userData: User) => {
+  const login = useCallback((token: string, userData: User) => {
     localStorage.setItem('authToken', token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
     setIsAuthenticated(true);
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await authService.logout();
     setUser(null);
     setIsAuthenticated(false);
-  };
+  }, []);
 
-  const updateUser = (userData: Partial<User>) => {
-    if (user) {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
+  const updateUser = useCallback((userData: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updatedUser = { ...prev, ...userData };
       localStorage.setItem('user', JSON.stringify(updatedUser));
-    }
-  };
+      return updatedUser;
+    });
+  }, []);
 
-  return {
+  return useMemo(() => ({
     user,
     isAuthenticated,
     isLoading,
     login,
     logout,
     updateUser,
-  };
+  }), [user, isAuthenticated, isLoading, login, logout, updateUser]);
 };

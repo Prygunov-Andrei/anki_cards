@@ -52,3 +52,16 @@ token_urlpatterns = [
     path('tokens/add/', views.add_tokens_view, name='token-add'),
 ]
 
+# ═══════════════════════════════════════════════════════════════
+# ЭТАП 3: Card endpoints
+# ═══════════════════════════════════════════════════════════════
+card_urlpatterns = [
+    # Список и детали карточек
+    path('cards/', views.card_list_view, name='card-list'),
+    path('cards/<int:card_id>/', views.card_detail_view, name='card-detail'),
+    
+    # Состояние карточки
+    path('cards/<int:card_id>/suspend/', views.card_suspend_view, name='card-suspend'),
+    path('cards/<int:card_id>/unsuspend/', views.card_unsuspend_view, name='card-unsuspend'),
+    path('cards/<int:card_id>/enter-learning/', views.card_enter_learning_view, name='card-enter-learning'),
+]

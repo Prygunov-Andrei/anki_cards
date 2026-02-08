@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Параметры (значения по умолчанию для продакшн сервера)
 SERVER="${1:-root@72.56.83.95}"
 REMOTE_PATH="${2:-/opt/anki_cards}"
-SSH_PASSWORD="${SSH_PASSWORD:-hN9DVVo_pu6d_X}"
+SSH_PASSWORD="${SSH_PASSWORD:?SSH_PASSWORD environment variable must be set}"
 
 # Проверка наличия sshpass для автоматического ввода пароля
 if ! command -v sshpass &> /dev/null; then

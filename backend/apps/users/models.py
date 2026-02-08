@@ -13,6 +13,7 @@ class User(AbstractUser):
         ('es', 'Spanish'),
         ('fr', 'French'),
         ('it', 'Italian'),
+        ('tr', 'Turkish'),
     ]
     
     NATIVE_LANGUAGE_CHOICES = [
@@ -23,6 +24,7 @@ class User(AbstractUser):
         ('es', 'Spanish'),
         ('fr', 'French'),
         ('it', 'Italian'),
+        ('tr', 'Turkish'),
     ]
     
     LEARNING_LANGUAGE_CHOICES = [
@@ -33,6 +35,7 @@ class User(AbstractUser):
         ('es', 'Spanish'),
         ('fr', 'French'),
         ('it', 'Italian'),
+        ('tr', 'Turkish'),
     ]
     
     THEME_CHOICES = [

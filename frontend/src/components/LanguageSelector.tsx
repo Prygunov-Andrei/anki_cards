@@ -27,11 +27,12 @@ export const ALL_LANGUAGES: Language[] = [
   { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇪🇸' },
   { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷' },
   { code: 'it', name: 'Italian', nativeName: 'Italiano', flag: '🇮🇹' },
+  { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', flag: '🇹🇷' },
 ];
 
 /**
  * Поддерживаемые языки для native_language (родной язык)
- * Все 7 языков полностью поддерживаются бэкендом ✅
+ * Все 8 языков полностью поддерживаются бэкендом
  */
 export const NATIVE_LANGUAGES: Language[] = [
   { code: 'ru', name: 'Russian', nativeName: 'Русский', flag: '🇷🇺' },
@@ -41,11 +42,12 @@ export const NATIVE_LANGUAGES: Language[] = [
   { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇪🇸' },
   { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷' },
   { code: 'it', name: 'Italian', nativeName: 'Italiano', flag: '🇮🇹' },
+  { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', flag: '🇹🇷' },
 ];
 
 /**
  * Поддерживаемые языки для learning_language (изучаемый язык)
- * Все 7 языков полностью поддерживаются бэкендом ✅
+ * Все 8 языков полностью поддерживаются бэкендом
  */
 export const LEARNING_LANGUAGES: Language[] = [
   { code: 'ru', name: 'Russian', nativeName: 'Русский', flag: '🇷🇺' },
@@ -55,6 +57,7 @@ export const LEARNING_LANGUAGES: Language[] = [
   { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇪🇸' },
   { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷' },
   { code: 'it', name: 'Italian', nativeName: 'Italiano', flag: '🇮🇹' },
+  { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', flag: '🇹🇷' },
 ];
 
 /**

@@ -1,5 +1,6 @@
 import api from './api';
 import { Deck } from '../types';
+import { API_ENDPOINTS } from '../lib/api-constants';
 
 /**
  * Deck Service - сервис для работы с колодами
@@ -11,7 +12,7 @@ class DeckService {
    */
   async getDecks(): Promise<Deck[]> {
     try {
-      const response = await api.get<Deck[]>('/api/cards/decks/');
+      const response = await api.get<Deck[]>(API_ENDPOINTS.DECKS);
       return response.data;
     } catch (error) {
       console.error('Error fetching decks:', error);
@@ -26,7 +27,7 @@ class DeckService {
    */
   async getDeck(id: number): Promise<Deck> {
     try {
-      const response = await api.get<Deck>(`/api/cards/decks/${id}/`);
+      const response = await api.get<Deck>(API_ENDPOINTS.DECK_BY_ID(id));
       return response.data;
     } catch (error) {
       console.error('Error fetching deck:', error);
@@ -45,7 +46,7 @@ class DeckService {
     source_lang: string;
   }): Promise<Deck> {
     try {
-      const response = await api.post<Deck>('/api/cards/decks/', data);
+      const response = await api.post<Deck>(API_ENDPOINTS.DECKS, data);
       return response.data;
     } catch (error) {
       console.error('Error creating deck:', error);
@@ -64,7 +65,7 @@ class DeckService {
     data: Partial<{ name: string; target_lang: string; source_lang: string }>
   ): Promise<Deck> {
     try {
-      const response = await api.patch<Deck>(`/api/cards/decks/${id}/`, data);
+      const response = await api.patch<Deck>(API_ENDPOINTS.DECK_BY_ID(id), data);
       return response.data;
     } catch (error) {
       console.error('Error updating deck:', error);
@@ -79,7 +80,7 @@ class DeckService {
    */
   async deleteDeck(id: number): Promise<void> {
     try {
-      await api.delete(`/api/cards/decks/${id}/`);
+      await api.delete(API_ENDPOINTS.DECK_BY_ID(id));
     } catch (error) {
       console.error('Error deleting deck:', error);
       throw error;
@@ -108,14 +109,14 @@ class DeckService {
         language: deck.target_lang || 'en',
       }));
       
-      const response = await api.post<any>(
-        `/api/cards/decks/${id}/add_words/`,
+      const response = await api.post<{ errors?: Array<{ error?: string; message?: string } | string>; [key: string]: unknown }>(
+        API_ENDPOINTS.DECK_ADD_WORDS(id),
         { words: formattedWords }
       );
       
       // Если backend вернул 207 с ошибками, выбрасываем исключение
       if (response.status === 207 && response.data.errors && response.data.errors.length > 0) {
-        const errorMessages = response.data.errors.map((err: any) => 
+        const errorMessages = response.data.errors.map((err: { error?: string; message?: string } | string) => 
           typeof err === 'string' ? err : err.error || err.message || JSON.stringify(err)
         ).join('; ');
         throw new Error(`Backend errors: ${errorMessages}`);
@@ -137,7 +138,7 @@ class DeckService {
   async removeWordFromDeck(deckId: number, wordId: number): Promise<Deck> {
     try {
       const response = await api.post<Deck>(
-        `/api/cards/decks/${deckId}/remove_word/`,
+        API_ENDPOINTS.DECK_REMOVE_WORD(deckId),
         { word_id: wordId }
       );
       return response.data;
@@ -155,7 +156,7 @@ class DeckService {
   async generateDeckApkg(id: number): Promise<{ file_id: string }> {
     try {
       const response = await api.post<{ file_id: string }>(
-        `/api/cards/decks/${id}/generate/`
+        API_ENDPOINTS.DECK_GENERATE(id)
       );
       return response.data;
     } catch (error) {
@@ -171,7 +172,7 @@ class DeckService {
    */
   async downloadDeck(fileId: string): Promise<Blob> {
     try {
-      const response = await api.get<Blob>(`/api/cards/download/${fileId}/`, {
+      const response = await api.get<Blob>(API_ENDPOINTS.DOWNLOAD(fileId), {
         responseType: 'blob',
       });
       return response.data;
@@ -492,12 +493,48 @@ class DeckService {
   }> {
     try {
       const response = await api.patch(
-        `/api/cards/decks/${deckId}/words/${wordId}/`,
+        API_ENDPOINTS.DECK_WORD(deckId, wordId),
         data
       );
       return response.data;
     } catch (error) {
       console.error('Error updating word media:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Обновление AI-контента для слова в колоде
+   * @param deckId - ID колоды
+   * @param wordId - ID слова
+   * @param data - AI-контент для обновления
+   * @returns Promise с обновлённым словом
+   */
+  async updateWordAIContent(
+    deckId: number,
+    wordId: number,
+    data: {
+      etymology?: string;
+      hint_text?: string;
+      hint_audio?: string | null;
+      sentences?: Array<{
+        id?: number;
+        sentence: string;
+        translation: string;
+        audio_file?: string | null;
+      }>;
+      part_of_speech?: string;
+      notes?: string;
+    }
+  ): Promise<unknown> {
+    try {
+      const response = await api.patch(
+        API_ENDPOINTS.DECK_WORD(deckId, wordId),
+        data
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error updating word AI content:', error);
       throw error;
     }
   }
@@ -517,7 +554,7 @@ class DeckService {
     try {
       // Пытаемся использовать специальный эндпоинт для переноса
       await api.post(
-        `/api/cards/decks/${fromDeckId}/words/${wordId}/move/`,
+        `${API_ENDPOINTS.DECKS}/${fromDeckId}/words/${wordId}/move/`,
         { target_deck_id: toDeckId }
       );
     } catch (error) {
@@ -615,13 +652,13 @@ class DeckService {
     message: string;
     deck_id: number;
     deck_name: string;
-    inverted_words_count: number;
-    inverted_words: Array<{
-      id: number;
+    inverted_cards_count: number;
+    inverted_cards: Array<{
+      card_id: number;
+      word_id: number;
       original_word: string;
       translation: string;
-      language: string;
-      created: boolean;
+      card_type: string;
     }>;
     skipped_words?: Array<{
       id: number;
@@ -657,13 +694,10 @@ class DeckService {
       translation: string;
       language: string;
     };
-    inverted_word: {
-      id: number;
-      original_word: string;
-      translation: string;
-      language: string;
-      created: boolean;
-      added_to_deck: boolean;
+    inverted_card: {
+      card_id: number;
+      word_id: number;
+      card_type: string;
     };
   }> {
     try {

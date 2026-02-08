@@ -11,11 +11,9 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.core.files.storage import default_storage
-
 from apps.words.models import Word
 from django.shortcuts import get_object_or_404
-from .models import GeneratedDeck, UserPrompt, Deck
+from .models import GeneratedDeck, UserPrompt, Deck, Card
 from .serializers import (
     CardGenerationSerializer,
     ImageGenerationSerializer,
@@ -36,7 +34,13 @@ from .serializers import (
     DeckWordRemoveSerializer,
     DeckMergeSerializer,
     DeckInvertWordSerializer,
-    DeckCreateEmptyCardSerializer
+    DeckCreateEmptyCardSerializer,
+    # Этап 3: Card serializers
+    CardSerializer,
+    CardListSerializer,
+    CardCreateClozeSerializer,
+    CardReviewSerializer,
+    CardAnswerSerializer,
 )
 from .utils import generate_apkg, parse_words_input
 from .llm_utils import (
@@ -133,15 +137,10 @@ def generate_cards_view(request):
     words_data = []
     media_files = []
     
-    # Логируем критическую операцию
-    logger.info(f"Начало генерации колоды для пользователя {request.user.username}: {len(words_list)} слов, название: {deck_name}")
-    logger.info(f"Audio files keys: {list(audio_files.keys())}")
-    logger.info(f"Image files keys: {list(image_files.keys())}")
-    logger.info(f"Audio files values: {list(audio_files.values())}")
-    logger.info(f"Image files values: {list(image_files.values())}")
-    logger.info(f"Request data keys: {list(request.data.keys())}")
-    logger.info(f"Request data audio_files: {request.data.get('audio_files', 'NOT FOUND')}")
-    logger.info(f"Request data image_files: {request.data.get('image_files', 'NOT FOUND')}")
+    logger.info(
+        "Deck generation for user=%s: %d words, name=%s",
+        request.user.username, len(words_list), deck_name
+    )
     
     for word in words_list:
         # Получаем перевод с учетом возможных различий в пунктуации
@@ -465,20 +464,18 @@ def generate_image_view(request):
     
     # Проверяем баланс токенов
     balance = check_balance(request.user)
-    # Для дробных значений (0.5) конвертируем: 0.5 токена = 1 единица в БД, 1 токен = 2 единицы
-    cost_in_units = int(cost * 2)  # 0.5 -> 1, 1.0 -> 2
+    cost_int = max(1, int(cost))  # Минимум 1 токен
     
-    if balance < cost_in_units:
-        balance_display = balance / 2.0  # Для отображения пользователю
+    if balance < cost_int:
         return Response({
-            'error': f'Недостаточно токенов. Требуется: {cost}, доступно: {balance_display}'
+            'error': f'Недостаточно токенов. Требуется: {cost_int}, доступно: {balance}'
         }, status=status.HTTP_402_PAYMENT_REQUIRED)
     
     try:
         # Списываем токены перед генерацией
         token, success = spend_tokens(
             request.user,
-            cost_in_units,
+            cost_int,
             description=f"Генерация изображения для слова '{word}' ({provider}, модель: {gemini_model or 'N/A'}, стоимость: {cost} токенов)"
         )
         
@@ -493,7 +490,7 @@ def generate_image_view(request):
             translation=translation,
             language=language,
             user=request.user,
-            native_language='русском',  # TODO: получить из профиля пользователя
+            native_language=getattr(request.user, 'native_language', 'русском'),
             english_translation=None,  # TODO: получить из перевода или API
             image_style=image_style,
             provider=provider,  # Если указан в запросе, иначе берется из user.image_provider
@@ -587,23 +584,21 @@ def edit_image_view(request):
             'error': f'Файл изображения не найден: {word_obj.image_file.name}'
         }, status=status.HTTP_404_NOT_FOUND)
     
-    # Стоимость редактирования = стоимость генерации nano-banana-pro (1 токен = 2 единицы)
-    EDIT_COST = 1.0
-    cost_in_units = int(EDIT_COST * 2)
+    # Стоимость редактирования = 1 токен
+    EDIT_COST = 1
     
     # Проверяем баланс токенов
     balance = check_balance(request.user)
-    if balance < cost_in_units:
-        balance_display = balance / 2.0
+    if balance < EDIT_COST:
         return Response({
-            'error': f'Недостаточно токенов. Требуется: {EDIT_COST}, доступно: {balance_display}'
+            'error': f'Недостаточно токенов. Требуется: {EDIT_COST}, доступно: {balance}'
         }, status=status.HTTP_402_PAYMENT_REQUIRED)
     
     try:
         # Списываем токены
         token, success = spend_tokens(
             request.user,
-            cost_in_units,
+            EDIT_COST,
             description=f"Редактирование изображения для слова '{word_obj.original_word}' (миксин: '{mixin}')"
         )
         
@@ -651,7 +646,7 @@ def edit_image_view(request):
         # При ошибке возвращаем токены
         refund_tokens(
             request.user,
-            cost_in_units,
+            EDIT_COST,
             description=f"Возврат токенов за ошибку редактирования изображения для слова '{word_obj.original_word}'"
         )
         return Response({
@@ -824,9 +819,10 @@ def upload_audio_view(request):
     audio_file = serializer.validated_data['audio']
     
     try:
-        # Генерируем уникальное имя файла
+        # Генерируем уникальное имя файла с правильным расширением
         file_id = str(uuid.uuid4())
-        filename = f"{file_id}.mp3"
+        ext = Path(audio_file.name).suffix.lower() or '.mp3'
+        filename = f"{file_id}{ext}"
         
         # Сохраняем файл
         media_root = Path(settings.MEDIA_ROOT)
@@ -1643,11 +1639,9 @@ def get_token_balance_view(request):
     Получение баланса токенов пользователя
     """
     try:
-        balance_internal = check_balance(request.user)
-        # Конвертируем из внутреннего формата (где 2 = 1 токен) в реальные токены для отображения
-        balance_display = balance_internal / 2.0
+        balance = check_balance(request.user)
         return Response({
-            'balance': balance_display
+            'balance': balance
         }, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({
@@ -1728,19 +1722,15 @@ def add_tokens_view(request):
         UserModel = get_user_model()
         target_user = UserModel.objects.get(id=user_id)
         
-        # amount уже в токенах, add_tokens конвертирует в внутренний формат
         token = add_tokens(
             target_user,
-            amount,  # Передаем как есть, функция сама конвертирует
+            amount,
             description or f"Начислено администратором {request.user.username}"
         )
         
-        # Конвертируем баланс для отображения (из внутреннего формата)
-        balance_display = token.balance / 2.0
-        
         return Response({
             'message': f'Начислено {amount} токенов пользователю {target_user.username}',
-            'balance': balance_display
+            'balance': token.balance
         }, status=status.HTTP_200_OK)
     except UserModel.DoesNotExist:
         return Response({
@@ -1756,13 +1746,12 @@ def add_tokens_view(request):
 @permission_classes([IsAuthenticated])
 def deck_invert_all_words_view(request, deck_id):
     """
-    Инвертирование всех слов в колоде
+    Инвертирование всех слов в колоде (Card-level)
     
-    Создает инвертированные версии всех слов колоды:
-    - original_word и translation меняются местами
-    - language меняется на source_lang колоды
-    - Медиафайлы остаются теми же
-    - Инвертированные слова добавляются в ту же колоду
+    Создаёт инвертированные Card-ы для слов колоды:
+    - Card(card_type='inverted') указывает на тот же Word
+    - Новые Word-объекты НЕ создаются
+    - Каждая инвертированная карточка живёт в SM-2 независимо
     """
     deck = get_object_or_404(
         Deck.objects.select_related('user').prefetch_related('words'),
@@ -1776,76 +1765,46 @@ def deck_invert_all_words_view(request, deck_id):
             'error': 'Колода пуста'
         }, status=status.HTTP_400_BAD_REQUEST)
     
-    inverted_words = []
+    inverted_cards = []
     skipped_words = []
     errors = []
     
     for word in words:
         try:
-            # Пропускаем уже инвертированные и пустые карточки
-            if word.card_type == 'inverted' or word.card_type == 'empty':
+            # Пропускаем legacy-инвертированные и пустые Word-ы
+            if word.card_type in ('inverted', 'empty'):
                 skipped_words.append({
                     'id': word.id,
                     'original_word': word.original_word,
-                    'reason': f'Пропущено: уже {word.get_card_type_display().lower()} карточка'
+                    'reason': f'Пропущено: legacy {word.card_type} Word'
                 })
                 continue
             
-            # Проверяем, есть ли уже инвертированная версия этого слова в колоде
-            # Инвертированная версия = слово, где:
-            # - original_word == translation обычного слова
-            # - translation == original_word обычного слова
-            # - language == source_lang колоды
-            inverted_original = word.translation
-            inverted_translation = word.original_word
-            inverted_language = deck.source_lang
-            
-            # Проверяем, есть ли уже такое слово в колоде
-            existing_inverted = deck.words.filter(
-                original_word=inverted_original,
-                language=inverted_language,
-                translation=inverted_translation
+            # Проверяем, есть ли уже инвертированная Card для этого Word
+            existing_card = Card.objects.filter(
+                user=request.user,
+                word=word,
+                card_type='inverted'
             ).first()
             
-            if existing_inverted:
-                # Инвертированная версия уже существует в колоде - пропускаем
+            if existing_card:
                 skipped_words.append({
                     'id': word.id,
                     'original_word': word.original_word,
-                    'reason': f'Пропущено: инвертированная версия уже существует в колоде'
+                    'reason': 'Инвертированная карточка уже существует'
                 })
                 continue
             
-            # Создаем инвертированное слово
-            # Используем update_or_create для обновления, если слово уже существует
-            inverted_word, created = Word.objects.update_or_create(
-                user=request.user,
-                original_word=inverted_original,
-                language=inverted_language,
-                defaults={
-                    'translation': inverted_translation,
-                    'card_type': 'inverted',  # Помечаем как инвертированную карточку
-                    'audio_file': word.audio_file,  # Используем те же медиафайлы
-                    'image_file': word.image_file,
-                }
-            )
+            # Создаём инвертированную Card на уровне Card-модели
+            inverted_card = Card.create_inverted(word)
             
-            # Добавляем инвертированное слово в колоду, если его там еще нет
-            if inverted_word not in deck.words.all():
-                deck.words.add(inverted_word)
-                inverted_words.append({
-                    'id': inverted_word.id,
-                    'original_word': inverted_word.original_word,
-                    'translation': inverted_word.translation,
-                    'language': inverted_word.language,
-                    'created': created
-                })
-            else:
-                skipped_words.append({
-                    'id': inverted_word.id,
-                    'original_word': inverted_word.original_word,
-                    'reason': 'Уже в колоде'
-                })
+            inverted_cards.append({
+                'card_id': inverted_card.id,
+                'word_id': word.id,
+                'original_word': word.original_word,
+                'translation': word.translation,
+                'card_type': 'inverted',
+            })
                 
         except Exception as e:
             errors.append({
@@ -1853,23 +1812,23 @@ def deck_invert_all_words_view(request, deck_id):
                 'original_word': word.original_word,
                 'error': str(e)
             })
-            logger.error(f"Ошибка при инвертировании слова {word.id}: {str(e)}")
+            logger.error(f"Ошибка при создании инвертированной карточки для слова {word.id}: {str(e)}")
     
-    # Обновляем updated_at колоды после добавления инвертированных слов
-    if inverted_words or skipped_words:
+    # Обновляем updated_at колоды
+    if inverted_cards:
         deck.save()
     
     logger.info(
         f"Инвертирование всех слов колоды {deck_id}: "
-        f"создано {len(inverted_words)}, пропущено {len(skipped_words)}, ошибок {len(errors)}"
+        f"создано карточек {len(inverted_cards)}, пропущено {len(skipped_words)}, ошибок {len(errors)}"
     )
     
     return Response({
-        'message': f'Инвертировано {len(inverted_words)} слов',
+        'message': f'Создано {len(inverted_cards)} инвертированных карточек',
         'deck_id': deck_id,
         'deck_name': deck.name,
-        'inverted_words_count': len(inverted_words),
-        'inverted_words': inverted_words,
+        'inverted_cards_count': len(inverted_cards),
+        'inverted_cards': inverted_cards,
         'skipped_words': skipped_words if skipped_words else None,
         'errors': errors if errors else None
     }, status=status.HTTP_200_OK)
@@ -1879,13 +1838,12 @@ def deck_invert_all_words_view(request, deck_id):
 @permission_classes([IsAuthenticated])
 def deck_invert_word_view(request, deck_id):
     """
-    Инвертирование одного слова в колоде
+    Инвертирование одного слова в колоде (Card-level)
     
-    Создает инвертированную версию указанного слова:
-    - original_word и translation меняются местами
-    - language меняется на source_lang колоды
-    - Медиафайлы остаются теми же
-    - Инвертированное слово добавляется в колоду
+    Создаёт инвертированную Card для указанного слова:
+    - Card(card_type='inverted') указывает на тот же Word
+    - Новый Word-объект НЕ создаётся
+    - Карточка живёт в SM-2 независимо
     """
     deck = get_object_or_404(
         Deck.objects.select_related('user').prefetch_related('words'),
@@ -1908,62 +1866,51 @@ def deck_invert_word_view(request, deck_id):
         }, status=status.HTTP_404_NOT_FOUND)
     
     try:
-        # Проверяем, что слово не является уже инвертированным или пустым
-        if word.card_type == 'inverted':
+        # Проверяем, что слово не является legacy-инвертированным или пустым
+        if word.card_type in ('inverted', 'empty'):
             return Response({
-                'error': 'Нельзя инвертировать уже инвертированную карточку.'
+                'error': f'Нельзя инвертировать {word.card_type} слово.'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        if word.card_type == 'empty':
-            return Response({
-                'error': 'Нельзя инвертировать пустую карточку.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Создаем инвертированное слово
-        inverted_original = word.translation
-        inverted_translation = word.original_word
-        inverted_language = deck.source_lang
-        
-        # Используем update_or_create для обновления, если слово уже существует
-        inverted_word, created = Word.objects.update_or_create(
+        # Проверяем, есть ли уже инвертированная Card
+        existing_card = Card.objects.filter(
             user=request.user,
-            original_word=inverted_original,
-            language=inverted_language,
-            defaults={
-                'translation': inverted_translation,
-                'card_type': 'inverted',  # Помечаем как инвертированную карточку
-                'audio_file': word.audio_file,  # Используем те же медиафайлы
-                'image_file': word.image_file,
-            }
-        )
+            word=word,
+            card_type='inverted'
+        ).first()
         
-        # Добавляем инвертированное слово в колоду, если его там еще нет
-        was_in_deck = inverted_word in deck.words.all()
-        if not was_in_deck:
-            deck.words.add(inverted_word)
-            # Обновляем updated_at колоды после добавления слова
-            deck.save()
+        if existing_card:
+            return Response({
+                'error': 'Инвертированная карточка уже существует для этого слова.',
+                'inverted_card': {
+                    'card_id': existing_card.id,
+                    'word_id': word.id,
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Создаём инвертированную Card на уровне Card-модели
+        inverted_card = Card.create_inverted(word)
+        
+        # Обновляем updated_at колоды
+        deck.save()
         
         logger.info(
             f"Инвертирование слова {word_id} в колоде {deck_id}: "
-            f"создано новое слово {inverted_word.id} (created={created}, was_in_deck={was_in_deck})"
+            f"создана Card {inverted_card.id} (card_type=inverted)"
         )
         
         return Response({
-            'message': 'Слово успешно инвертировано',
+            'message': 'Инвертированная карточка создана',
             'original_word': {
                 'id': word.id,
                 'original_word': word.original_word,
                 'translation': word.translation,
                 'language': word.language
             },
-            'inverted_word': {
-                'id': inverted_word.id,
-                'original_word': inverted_word.original_word,
-                'translation': inverted_word.translation,
-                'language': inverted_word.language,
-                'created': created,
-                'added_to_deck': not was_in_deck
+            'inverted_card': {
+                'card_id': inverted_card.id,
+                'word_id': word.id,
+                'card_type': 'inverted',
             }
         }, status=status.HTTP_200_OK)
         
@@ -2226,3 +2173,207 @@ def deck_create_empty_card_view(request, deck_id):
         return Response({
             'error': f'Ошибка при создании пустой карточки: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ═══════════════════════════════════════════════════════════════
+# ЭТАП 3: Card API Views
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def card_list_view(request):
+    """
+    GET /api/cards/ — Список карточек пользователя
+    
+    Query params:
+        - type: фильтр по типу (normal, inverted, empty, cloze)
+        - learning: true/false — только в режиме изучения
+        - suspended: true/false — включая приостановленные
+        - word_id: фильтр по слову
+    """
+    user = request.user
+    cards = Card.objects.filter(user=user).select_related('word')
+    
+    # Фильтры
+    card_type = request.query_params.get('type')
+    if card_type:
+        cards = cards.filter(card_type=card_type)
+    
+    learning = request.query_params.get('learning')
+    if learning == 'true':
+        cards = cards.filter(is_in_learning_mode=True)
+    elif learning == 'false':
+        cards = cards.filter(is_in_learning_mode=False)
+    
+    suspended = request.query_params.get('suspended')
+    if suspended != 'true':
+        cards = cards.filter(is_suspended=False)
+    
+    word_id = request.query_params.get('word_id')
+    if word_id:
+        cards = cards.filter(word_id=word_id)
+    
+    serializer = CardListSerializer(cards, many=True, context={'request': request})
+    return Response(serializer.data)
+
+
+@api_view(['GET', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def card_detail_view(request, card_id):
+    """
+    GET /api/cards/{id}/ — Детали карточки
+    DELETE /api/cards/{id}/ — Удалить карточку
+    """
+    card = get_object_or_404(Card.objects.select_related('word'), id=card_id, user=request.user)
+    
+    if request.method == 'GET':
+        serializer = CardSerializer(card)
+        return Response(serializer.data)
+    
+    elif request.method == 'DELETE':
+        # Нельзя удалить основную карточку, если это единственная
+        if card.card_type == 'normal':
+            other_cards = Card.objects.filter(word=card.word).exclude(id=card.id).count()
+            if other_cards == 0:
+                return Response(
+                    {'error': 'Нельзя удалить единственную карточку слова'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        card.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_create_inverted_view(request, word_id):
+    """
+    POST /api/words/{word_id}/cards/inverted/ — Создать инвертированную карточку
+    """
+    word = get_object_or_404(Word, id=word_id, user=request.user)
+    
+    # Проверяем, нет ли уже инвертированной
+    if Card.objects.filter(word=word, card_type='inverted').exists():
+        return Response(
+            {'error': 'Инвертированная карточка уже существует'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    card = Card.create_inverted(word)
+    serializer = CardSerializer(card)
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_create_empty_view(request, word_id):
+    """
+    POST /api/words/{word_id}/cards/empty/ — Создать пустую карточку
+    """
+    word = get_object_or_404(Word, id=word_id, user=request.user)
+    
+    # Проверяем наличие медиа
+    if not word.image_file and not word.audio_file:
+        return Response(
+            {'error': 'Для empty-карточки нужно изображение или аудио'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Проверяем, нет ли уже пустой
+    if Card.objects.filter(word=word, card_type='empty').exists():
+        return Response(
+            {'error': 'Пустая карточка уже существует'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        card = Card.create_empty(word)
+        serializer = CardSerializer(card)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    except ValueError as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_create_cloze_view(request, word_id):
+    """
+    POST /api/words/{word_id}/cards/cloze/ — Создать cloze-карточку
+    
+    Body:
+        - sentence: str — Предложение с целевым словом
+        - word_index: int — Индекс слова для пропуска (0-based)
+    """
+    word = get_object_or_404(Word, id=word_id, user=request.user)
+    
+    serializer = CardCreateClozeSerializer(data=request.data, context={'request': request})
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    sentence = serializer.validated_data['sentence']
+    word_index = serializer.validated_data.get('word_index', 0)
+    
+    # Проверяем, нет ли уже такой cloze
+    if Card.objects.filter(word=word, card_type='cloze', cloze_sentence=sentence).exists():
+        return Response(
+            {'error': 'Cloze-карточка с этим предложением уже существует'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        card = Card.create_cloze(word, sentence, word_index)
+        serializer = CardSerializer(card)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    except ValueError as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_suspend_view(request, card_id):
+    """
+    POST /api/cards/{id}/suspend/ — Приостановить карточку
+    """
+    card = get_object_or_404(Card, id=card_id, user=request.user)
+    card.suspend()
+    return Response({'status': 'suspended'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_unsuspend_view(request, card_id):
+    """
+    POST /api/cards/{id}/unsuspend/ — Возобновить карточку
+    """
+    card = get_object_or_404(Card, id=card_id, user=request.user)
+    card.unsuspend()
+    return Response({'status': 'unsuspended'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def card_enter_learning_view(request, card_id):
+    """
+    POST /api/cards/{id}/enter-learning/ — Отправить в режим Изучения
+    """
+    card = get_object_or_404(Card, id=card_id, user=request.user)
+    card.enter_learning_mode()
+    return Response({'status': 'in_learning_mode'})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def word_cards_list_view(request, word_id):
+    """
+    GET /api/words/{word_id}/cards/ — Все карточки слова
+    """
+    word = get_object_or_404(Word, id=word_id, user=request.user)
+    cards = Card.objects.filter(word=word).select_related('word')
+    serializer = CardListSerializer(cards, many=True, context={'request': request})
+    return Response(serializer.data)

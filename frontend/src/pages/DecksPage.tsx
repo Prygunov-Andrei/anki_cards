@@ -10,6 +10,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
 import { BookOpen } from 'lucide-react';
+import axios from 'axios';
 
 /**
  * Страница DecksPage - список всех колод пользователя
@@ -38,10 +39,18 @@ export default function DecksPage() {
       setIsLoading(true);
       setHasNetworkError(false);
       const data = await deckService.getDecks();
-      setDecks(data);
+      // Проверяем, что данные действительно массив
+      if (Array.isArray(data)) {
+        setDecks(data);
+      } else {
+        console.error('Invalid decks data received:', data);
+        setDecks([]);
+      }
     } catch (error) {
       console.error('Error loading decks:', error);
       setHasNetworkError(true);
+      // При ошибке устанавливаем пустой массив
+      setDecks([]);
       showError(t.decks.couldNotLoadDecks, {
         description: t.errors.checkConnection,
       });
@@ -246,10 +255,13 @@ export default function DecksPage() {
 
       // Обновляем список колод
       await loadDecks();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error merging decks:', error);
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : (error instanceof Error ? error.message : t.common.unknownError);
       showError(t.decks.couldNotMergeDecks, {
-        description: error?.response?.data?.error || error.message || t.common.unknownError,
+        description: message,
       });
     }
   };
@@ -266,7 +278,7 @@ export default function DecksPage() {
       const result = await deckService.invertAllWords(selectedDeckForInvert.id);
 
       showSuccess(
-        `${result.inverted_words_count} ${t.words.wordsInverted}`,
+        `${result.inverted_cards_count} ${t.words.wordsInverted}`,
         {
           description: result.message,
         }
@@ -278,10 +290,13 @@ export default function DecksPage() {
 
       // Обновляем список колод
       await loadDecks();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error inverting words:', error);
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : (error instanceof Error ? error.message : t.common.unknownError);
       showError(t.common.error, {
-        description: error?.response?.data?.error || error.message || t.common.unknownError,
+        description: message,
       });
     }
   };
@@ -386,10 +401,13 @@ export default function DecksPage() {
 
       // Обновляем список колод
       await loadDecks();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating empty cards:', error);
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : (error instanceof Error ? error.message : t.common.unknownError);
       showError(t.common.error, {
-        description: error?.response?.data?.error || error.message || t.common.unknownError,
+        description: message,
       });
     }
   };

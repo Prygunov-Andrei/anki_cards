@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
@@ -19,10 +19,8 @@ import { deckService } from '../services/deck.service';
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
 import { getLanguageName } from '../utils/language-helpers';
 import { getCardImageUrl, getAudioUrl, getRelativePath } from '../utils/url-helpers';
-import { getTotalMediaCost } from '../utils/token-helpers';
-import { formatTokensWithText } from '../utils/token-formatting';
+import { getTotalMediaCost, formatTokensWithText } from '../utils/token-formatting';
 import { Download, Loader2, Sparkles, ImageIcon, Volume2 } from 'lucide-react';
-import { GeminiModel } from '../types';
 
 /**
  * Главная страница - быстрая генерация карточек
@@ -65,6 +63,15 @@ export default function MainPage() {
   // Медиа-файлы для предпросмотра
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({});
   const [generatedAudio, setGeneratedAudio] = useState<Record<string, string>>({});
+
+  // Ref для очистки таймера сброса формы при размонтировании
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
 
   // Языки берем из профиля пользователя
   const targetLang = user?.learning_language || 'en';
@@ -1002,7 +1009,7 @@ export default function MainPage() {
       if (sizeMB < 1) {
         console.warn('⚠️ ВНИМАНИЕ: Размер файла слишком мал! Медиафайлы могут отсутствовать.');
         console.log('🔍 Проверка медиафайлов:');
-        console.log('  - generatedImages:', Object.keys(generatedImages).length, 'файло��');
+        console.log('  - generatedImages:', Object.keys(generatedImages).length, 'файло');
         console.log('  - generatedAudio:', Object.keys(generatedAudio).length, 'файлов');
         console.log('  - Примеры URL изображений:', Object.values(generatedImages).slice(0, 2));
         console.log('  - Примеры URL аудио:', Object.values(generatedAudio).slice(0, 2));
@@ -1040,7 +1047,7 @@ export default function MainPage() {
       await refreshBalance();
 
       // Сброс формы через небольшую задержку, чтобы показать "complete"
-      setTimeout(() => {
+      resetTimerRef.current = setTimeout(() => {
         setWords([]);
         setTranslations([]);
         setDeckName(t.decks.newDeck);

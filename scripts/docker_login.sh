@@ -6,7 +6,7 @@
 set -e
 
 SERVER="root@72.56.83.95"
-SSH_PASSWORD="hN9DVVo_pu6d_X"
+SSH_PASSWORD="${SSH_PASSWORD:?SSH_PASSWORD environment variable must be set}"
 DOCKER_USERNAME="prygunov1979"
 
 if [ -z "$1" ]; then

@@ -16,6 +16,7 @@ const languageFlags: Record<string, string> = {
   de: '🇩🇪', // German
   it: '🇮🇹', // Italian
   pt: '🇵🇹', // Portuguese
+  tr: '🇹🇷', // Turkish
 };
 
 /**
@@ -29,6 +30,7 @@ const languageNames: Record<string, string> = {
   de: 'Немецкий',
   it: 'Итальянский',
   pt: 'Португальский',
+  tr: 'Турецкий',
 };
 
 /**
@@ -42,6 +44,7 @@ const languageBackendNames: Record<string, string> = {
   de: 'German',
   it: 'Italian',
   pt: 'Portuguese',
+  tr: 'Turkish',
 };
 
 /**

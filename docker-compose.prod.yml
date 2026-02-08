@@ -3,6 +3,8 @@
 
 services:
   backend:
+    # NOTE: Backend port 8000 from base compose is intentionally NOT re-exposed.
+    # In production, backend is only accessible via nginx proxy on the internal network.
     environment:
       - DEBUG=False
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from .models import User
+from apps.training.models import UserTrainingSettings
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -25,12 +26,18 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         required=False,
         help_text='Язык изучения'
     )
+    age_group = serializers.ChoiceField(
+        choices=UserTrainingSettings.AGE_GROUPS,
+        required=False,
+        default='adult',
+        help_text='Возрастная группа (влияет на начальные параметры тренировки)'
+    )
     
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password', 'password_confirm',
-            'preferred_language', 'native_language', 'learning_language'
+            'preferred_language', 'native_language', 'learning_language', 'age_group'
         ]
         extra_kwargs = {
             'email': {'required': True},
@@ -57,8 +64,12 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
+        # Извлекаем age_group для передачи в сигнал
+        age_group = validated_data.pop('age_group', 'adult')
         user = User.objects.create_user(**validated_data)
         user.set_password(password)
+        # Устанавливаем age_group как атрибут для сигнала
+        user._age_group = age_group
         user.save()
         return user
 

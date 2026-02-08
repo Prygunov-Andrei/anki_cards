@@ -12,6 +12,7 @@ LANGUAGE_NAMES: Dict[str, str] = {
     'es': 'Spanish',
     'fr': 'French',
     'it': 'Italian',
+    'tr': 'Turkish',
 }
 
 

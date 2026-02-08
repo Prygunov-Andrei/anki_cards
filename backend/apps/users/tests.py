@@ -30,7 +30,7 @@ class TestUserModel:
         assert user.check_password('testpass123')
         assert user.is_active is True
         assert user.is_staff is False
-        assert user.preferred_language == 'pt'  # Значение по умолчанию
+        assert user.preferred_language == 'en'  # Значение по умолчанию
 
     def test_superuser_creation(self):
         """Тест создания суперпользователя"""
@@ -188,8 +188,8 @@ class TestUserProfileExtension:
             email='test@example.com',
             password='testpass123'
         )
-        assert user.native_language == 'ru'
-        assert user.learning_language == 'pt'
+        assert user.native_language == 'en'
+        assert user.learning_language == 'de'
         assert user.theme == 'light'
 
     def test_native_language_choices(self):

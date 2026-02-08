@@ -73,9 +73,7 @@ def add_tokens(user, amount: int, description: str = "") -> Token:
         raise ValueError("Количество токенов должно быть положительным")
     
     token = get_or_create_token(user)
-    # Конвертируем токены в внутренний формат (1 токен = 2 единицы в БД)
-    amount_internal = amount * 2
-    token.balance += amount_internal
+    token.balance += amount
     token.save()
     
     # Создаем транзакцию
@@ -86,8 +84,7 @@ def add_tokens(user, amount: int, description: str = "") -> Token:
         description=description or f"Начислено {amount} токенов"
     )
     
-    balance_display = token.balance / 2.0
-    logger.info(f"Начислено {amount} токенов пользователю {user.username} (ID: {user.id}). Баланс: {balance_display}")
+    logger.info(f"Начислено {amount} токенов пользователю {user.username} (ID: {user.id}). Баланс: {token.balance}")
     return token
 
 
@@ -123,8 +120,7 @@ def spend_tokens(user, amount: int, description: str = "") -> Tuple[Token, bool]
         description=description or f"Потрачено {amount} токенов"
     )
     
-    balance_display = token.balance / 2.0
-    logger.info(f"Списано {amount} единиц у пользователя {user.username} (ID: {user.id}). Баланс: {balance_display} токенов")
+    logger.info(f"Списано {amount} токенов у пользователя {user.username} (ID: {user.id}). Баланс: {token.balance}")
     return token, True
 
 
@@ -155,8 +151,7 @@ def refund_tokens(user, amount: int, description: str = "") -> Token:
         description=description or f"Возвращено {amount} токенов"
     )
     
-    balance_display = token.balance / 2.0
-    logger.info(f"Возвращено {amount} единиц пользователю {user.username} (ID: {user.id}). Баланс: {balance_display} токенов")
+    logger.info(f"Возвращено {amount} токенов пользователю {user.username} (ID: {user.id}). Баланс: {token.balance}")
     return token
 
 
