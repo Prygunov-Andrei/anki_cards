@@ -732,7 +732,7 @@ export const fr: TranslationKeys = {
       noCards: 'Pas de cartes pour l\'entraînement. Ajoutez des mots ou attendez.',
       startFailed: 'Erreur lors du démarrage de l\'entraînement',
     },
-    stats: { streakDays: 'Jours consécutifs', successRate: 'Taux de réussite', totalWords: 'Total des mots' },
+    stats: { streakDays: 'Jours consécutifs', successRate: 'Taux de réussite', totalWords: 'Total des mots', totalCards: 'Total des cartes' },
     cardsOverview: { title: 'Cartes pour l\'entraînement', learning: 'Apprentissage', review: 'Révision', new: 'Nouvelles' },
     sessionSettings: { title: 'Paramètres de session', duration: 'Durée', includeNew: 'Nouvelles cartes' },
     startButton: { loading: 'Chargement...', start: 'Commencer l\'entraînement' },
@@ -814,12 +814,18 @@ export const fr: TranslationKeys = {
     card: {
       translation: 'Traduction',
       word: 'Mot',
-      learningMode: 'Mode d\'apprentissage',
+      learningMode: 'Étudier',
       flipHint: 'Cliquez pour retourner',
       hint: 'Indice',
       listen: 'Écouter',
       etymology: 'Étymologie',
       examples: 'Exemples',
+    },
+    serviceZone: {
+      hint: 'Indice',
+      generating: 'Génération...',
+      hintGenerated: 'Indice généré',
+      hintError: 'Erreur de génération d\'indice',
     },
   },
   trainingCard: {

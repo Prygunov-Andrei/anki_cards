@@ -750,6 +750,7 @@ export const de: TranslationKeys = {
       streakDays: 'Tage in Folge',
       successRate: 'Erfolgsquote',
       totalWords: 'Wörter gesamt',
+      totalCards: 'Karten gesamt',
     },
     cardsOverview: {
       title: 'Karten zum Training',
@@ -869,12 +870,18 @@ export const de: TranslationKeys = {
     card: {
       translation: 'Übersetzung',
       word: 'Wort',
-      learningMode: 'Lernmodus',
+      learningMode: 'Lernen',
       flipHint: 'Klicken zum Umdrehen',
       hint: 'Hinweis',
       listen: 'Anhören',
       etymology: 'Etymologie',
       examples: 'Beispiele',
+    },
+    serviceZone: {
+      hint: 'Hinweis',
+      generating: 'Generieren...',
+      hintGenerated: 'Hinweis generiert',
+      hintError: 'Fehler bei der Hinweisgenerierung',
     },
   },
   trainingCard: {

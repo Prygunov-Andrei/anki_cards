@@ -730,6 +730,7 @@ export const ru = {
       streakDays: 'Дни подряд',
       successRate: 'Успешность',
       totalWords: 'Всего слов',
+      totalCards: 'Всего карточек',
     },
     cardsOverview: {
       title: 'Карточки к тренировке',
@@ -889,12 +890,18 @@ export const ru = {
     card: {
       translation: 'Перевод',
       word: 'Слово',
-      learningMode: 'Режим изучения',
+      learningMode: 'Изучение',
       flipHint: 'Нажмите, чтобы перевернуть',
       hint: 'Подсказка',
       listen: 'Прослушать',
       etymology: 'Этимология',
       examples: 'Примеры',
+    },
+    serviceZone: {
+      hint: 'Подсказка',
+      generating: 'Генерация...',
+      hintGenerated: 'Подсказка сгенерирована',
+      hintError: 'Ошибка генерации подсказки',
     },
   },
   trainingCard: {

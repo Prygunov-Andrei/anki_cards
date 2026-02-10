@@ -742,7 +742,7 @@ export const pt: TranslationKeys = {
       noCards: 'Sem cartões para treino. Adicione palavras ou aguarde.',
       startFailed: 'Erro ao iniciar o treino',
     },
-    stats: { streakDays: 'Dias seguidos', successRate: 'Taxa de acerto', totalWords: 'Total de palavras' },
+    stats: { streakDays: 'Dias seguidos', successRate: 'Taxa de acerto', totalWords: 'Total de palavras', totalCards: 'Total de cartões' },
     cardsOverview: { title: 'Cartões para treino', learning: 'Aprendendo', review: 'Revisão', new: 'Novos' },
     sessionSettings: { title: 'Configurações da sessão', duration: 'Duração', includeNew: 'Cartões novos' },
     startButton: { loading: 'Carregando...', start: 'Iniciar treino' },
@@ -824,12 +824,18 @@ export const pt: TranslationKeys = {
     card: {
       translation: 'Tradução',
       word: 'Palavra',
-      learningMode: 'Modo de aprendizagem',
+      learningMode: 'Estudar',
       flipHint: 'Clique para virar',
       hint: 'Dica',
       listen: 'Ouvir',
       etymology: 'Etimologia',
       examples: 'Exemplos',
+    },
+    serviceZone: {
+      hint: 'Dica',
+      generating: 'Gerando...',
+      hintGenerated: 'Dica gerada',
+      hintError: 'Erro ao gerar dica',
     },
   },
   trainingCard: {

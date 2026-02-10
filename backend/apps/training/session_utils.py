@@ -12,9 +12,9 @@ from .models import UserTrainingSettings
 
 
 # Константы времени на карточку (в минутах)
-TIME_PER_LEARNING_CARD = 2.5
+TIME_PER_LEARNING_CARD = 1.5
 TIME_PER_REVIEW_CARD = 0.25
-TIME_PER_NEW_CARD = 2.5
+TIME_PER_NEW_CARD = 0.5
 
 
 def estimate_session_time(
@@ -206,13 +206,15 @@ def build_card_queue(
     )
     
     # 3. Новые карточки (если нужно)
-    # Это карточки в режиме обучения, но еще не показанные (next_review в будущем)
+    # Это карточки в режиме обучения, но еще не показанные
+    # (next_review в будущем ИЛИ next_review=NULL — только что созданные)
     new_cards = []
     if include_new_cards:
         new_cards = list(
             base_queryset.filter(
                 is_in_learning_mode=True,
-                next_review__gt=timezone.now()
+            ).filter(
+                Q(next_review__gt=timezone.now()) | Q(next_review__isnull=True)
             ).order_by('created_at')
         )
     

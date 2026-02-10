@@ -692,6 +692,7 @@ export const en: TranslationKeys = {
       streakDays: 'Days in a row',
       successRate: 'Success rate',
       totalWords: 'Total words',
+      totalCards: 'Total cards',
     },
     cardsOverview: {
       title: 'Cards for training',
@@ -851,12 +852,18 @@ export const en: TranslationKeys = {
     card: {
       translation: 'Translation',
       word: 'Word',
-      learningMode: 'Learning mode',
+      learningMode: 'Study',
       flipHint: 'Click to flip',
       hint: 'Hint',
       listen: 'Listen',
       etymology: 'Etymology',
       examples: 'Examples',
+    },
+    serviceZone: {
+      hint: 'Hint',
+      generating: 'Generating...',
+      hintGenerated: 'Hint generated',
+      hintError: 'Failed to generate hint',
     },
   },
 

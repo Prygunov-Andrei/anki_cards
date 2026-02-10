@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { trainingService } from '../services/training.service';
 import { wordsService } from '../services/words.service';
+import { aiGenerationService } from '../services/ai-generation.service';
 import type {
   CardListItem,
   TrainingSessionResponse,
@@ -11,9 +12,8 @@ import { TrainingCard, type WordDetail } from '../components/training/TrainingCa
 import { TrainingCardMenu } from '../components/training/TrainingCardMenu';
 import { AudioRecorder } from '../components/training/AudioRecorder';
 import { ImageUploadDialog } from '../components/training/ImageUploadDialog';
-import { getAudioUrl } from '../utils/url-helpers';
+import { getAudioUrl, getAbsoluteUrl } from '../utils/url-helpers';
 import { AnswerButtons } from '../components/training/AnswerButtons';
-import { SessionProgress } from '../components/training/SessionProgress';
 import { SessionTimer } from '../components/training/SessionTimer';
 import { Button } from '../components/ui/button';
 import {
@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { X, Trophy, ArrowRight, RotateCcw } from 'lucide-react';
+import { X, Trophy, ArrowRight, RotateCcw, Volume2, Lightbulb, BookOpen, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -52,6 +52,9 @@ export default function TrainingSessionPage() {
   const [showAudioRecorder, setShowAudioRecorder] = useState(false);
   const [showImageUpload, setShowImageUpload] = useState(false);
 
+  // Hint generation state
+  const [isGeneratingHint, setIsGeneratingHint] = useState(false);
+
   // Stats for this session
   const [sessionStats, setSessionStats] = useState({
     answered: 0,
@@ -69,6 +72,9 @@ export default function TrainingSessionPage() {
 
   // Card start time for time_spent
   const cardStartTime = useRef<number>(Date.now());
+
+  // Audio player ref
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Initialize from navigation state
   useEffect(() => {
@@ -118,21 +124,20 @@ export default function TrainingSessionPage() {
   useEffect(() => {
     if (!currentCard) return;
     loadWordDetail(currentCard);
-    // Preload next card
     const nextCard = cards[currentIndex + 1];
     if (nextCard) {
       loadWordDetail(nextCard);
     }
   }, [currentIndex, cards]);
 
-  // Update card media (image/audio) in the cards array — used by TrainingCardMenu
+  // Update card media (image/audio) in the cards array
   const updateCardMedia = useCallback((cardId: number, updates: { image_file?: string; audio_file?: string }) => {
     setCards((prev) =>
       prev.map((c) => (c.id === cardId ? { ...c, ...updates } : c))
     );
   }, []);
 
-  // Update word detail cache — used by TrainingCardMenu after generation
+  // Update word detail cache
   const updateWordDetail = useCallback((cardId: number, updates: Partial<WordDetail>) => {
     setWordDetailCache((prev) => ({
       ...prev,
@@ -140,8 +145,18 @@ export default function TrainingSessionPage() {
     }));
   }, []);
 
-  // Auto-play audio on flip
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Play audio helper
+  const playAudio = useCallback((url: string) => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      audioRef.current = new Audio(url);
+      audioRef.current.play().catch(() => { /* autoplay blocked */ });
+    } catch {
+      // Silent fail
+    }
+  }, []);
 
   const handleFlip = () => {
     if (!isFlipped && currentCard) {
@@ -149,16 +164,60 @@ export default function TrainingSessionPage() {
       // Auto-play word audio on flip
       const audioUrl = getAudioUrl(currentCard.audio_file);
       if (audioUrl) {
-        try {
-          if (audioRef.current) {
-            audioRef.current.pause();
-          }
-          audioRef.current = new Audio(audioUrl);
-          audioRef.current.play().catch(() => { /* autoplay blocked */ });
-        } catch {
-          // Silent fail
+        playAudio(audioUrl);
+      }
+    }
+  };
+
+  // Handle hint button press (auto-generate if needed)
+  const handleHintPress = async () => {
+    if (!currentCard) return;
+    const detail = wordDetailCache[currentCard.id];
+
+    // If hint_audio exists, just play it
+    if (detail?.hint_audio) {
+      const hintUrl = getAbsoluteUrl(detail.hint_audio);
+      if (hintUrl) {
+        playAudio(hintUrl);
+        return;
+      }
+    }
+
+    // Otherwise, generate hint with audio
+    setIsGeneratingHint(true);
+    try {
+      const result = await aiGenerationService.generateHint({
+        word_id: currentCard.word_id,
+        generate_audio: true,
+      });
+
+      // Update cache with new hint data
+      updateWordDetail(currentCard.id, {
+        hint_text: result.hint_text,
+        hint_audio: result.hint_audio_url ?? undefined,
+      });
+
+      // Play the generated audio
+      if (result.hint_audio_url) {
+        const hintUrl = getAbsoluteUrl(result.hint_audio_url);
+        if (hintUrl) {
+          playAudio(hintUrl);
         }
       }
+      toast.success(t.training.serviceZone.hintGenerated);
+    } catch {
+      toast.error(t.training.serviceZone.hintError);
+    } finally {
+      setIsGeneratingHint(false);
+    }
+  };
+
+  // Handle listen button (play word audio)
+  const handleListen = () => {
+    if (!currentCard) return;
+    const audioUrl = getAudioUrl(currentCard.audio_file);
+    if (audioUrl) {
+      playAudio(audioUrl);
     }
   };
 
@@ -269,7 +328,7 @@ export default function TrainingSessionPage() {
               {t.trainingSession.finished.buttons.done}
             </Button>
             <Button
-              className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
+              className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-700 text-white hover:from-indigo-700 hover:to-purple-800"
               onClick={() => {
                 navigate('/training');
               }}
@@ -283,11 +342,15 @@ export default function TrainingSessionPage() {
     );
   }
 
+  // Current word audio available?
+  const hasWordAudio = !!(currentCard && getAudioUrl(currentCard.audio_file));
+  const currentDetail = currentCard ? wordDetailCache[currentCard.id] : null;
+
   // Training session
   return (
-    <div className="container mx-auto max-w-lg px-4 py-4">
-      {/* Top bar */}
-      <div className="mb-4 flex items-center justify-between">
+    <div className="container mx-auto max-w-lg px-4 py-2">
+      {/* Minimal top bar: only exit button */}
+      <div className="mb-2 flex items-center">
         <Button
           variant="ghost"
           size="icon"
@@ -296,36 +359,20 @@ export default function TrainingSessionPage() {
         >
           <X className="h-5 w-5" />
         </Button>
-        <SessionTimer
-          durationMinutes={durationMinutes}
-          onTimeUp={handleTimeUp}
-          active={!isFinished}
-        />
-      </div>
-
-      {/* Progress */}
-      <div className="mb-6">
-        <SessionProgress
-          current={sessionStats.answered}
-          total={cards.length}
-          newCount={sessionStats.newCount}
-          reviewCount={sessionStats.reviewCount}
-          learningCount={sessionStats.learningCount}
-        />
       </div>
 
       {/* Card */}
       {currentCard && (
-        <div className="mb-6">
+        <div className="mb-3">
           <TrainingCard
             card={currentCard}
             isFlipped={isFlipped}
             onFlip={handleFlip}
-            wordDetail={wordDetailCache[currentCard.id] ?? null}
+            wordDetail={currentDetail ?? null}
             menuElement={
               <TrainingCardMenu
                 card={currentCard}
-                wordDetail={wordDetailCache[currentCard.id] ?? null}
+                wordDetail={currentDetail ?? null}
                 onUpdateWordDetail={updateWordDetail}
                 onUpdateCardMedia={updateCardMedia}
                 onStartRecording={() => setShowAudioRecorder(true)}
@@ -335,6 +382,73 @@ export default function TrainingSessionPage() {
           />
         </div>
       )}
+
+      {/* Service zone — thin strip below the card */}
+      <div className="mb-3 flex items-center justify-between rounded-xl border bg-card/50 px-4 py-2">
+        {/* Left: counter */}
+        <span className="text-sm font-medium text-muted-foreground">
+          {sessionStats.answered + 1}/{cards.length}
+        </span>
+
+        {/* Center: timer */}
+        <SessionTimer
+          durationMinutes={durationMinutes}
+          onTimeUp={handleTimeUp}
+          active={!isFinished}
+        />
+
+        {/* Right: context-dependent buttons */}
+        <div className="flex items-center gap-2">
+          {!isFlipped ? (
+            /* FRONT: Hint button */
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleHintPress();
+              }}
+              disabled={isGeneratingHint}
+              className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-50"
+            >
+              {isGeneratingHint ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Lightbulb className="h-3.5 w-3.5" />
+              )}
+              {isGeneratingHint
+                ? t.training.serviceZone.generating
+                : t.training.serviceZone.hint}
+            </button>
+          ) : (
+            /* BACK: Listen + Study buttons */
+            <>
+              {hasWordAudio && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleListen();
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-colors"
+                >
+                  <Volume2 className="h-3.5 w-3.5" />
+                  {t.training.card.listen}
+                </button>
+              )}
+              {currentCard?.is_in_learning_mode && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/words/${currentCard.word_id}`);
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:hover:bg-orange-900/50 transition-colors"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  {t.training.card.learningMode}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Answer buttons (visible only when flipped) */}
       {isFlipped && (

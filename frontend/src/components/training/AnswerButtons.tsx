@@ -7,42 +7,30 @@ import { useLanguage } from '../../contexts/LanguageContext';
 interface AnswerButtonsProps {
   onAnswer: (quality: AnswerQuality) => void;
   disabled?: boolean;
-  isLearningMode?: boolean;
 }
 
 const ANSWER_CONFIG = [
   {
     quality: 0 as AnswerQuality,
-    label: 'Снова',
-    sublabel: '<1 мин',
     color: 'bg-red-500 hover:bg-red-600 text-white',
-    shortcut: '1',
   },
   {
     quality: 1 as AnswerQuality,
-    label: 'Трудно',
-    sublabel: '',
-    color: 'bg-orange-500 hover:bg-orange-600 text-white',
-    shortcut: '2',
+    color: 'bg-yellow-400 hover:bg-yellow-500 text-gray-900 dark:bg-yellow-500 dark:hover:bg-yellow-600 dark:text-gray-900',
   },
   {
     quality: 2 as AnswerQuality,
-    label: 'Хорошо',
-    sublabel: '',
-    color: 'bg-green-500 hover:bg-green-600 text-white',
-    shortcut: '3',
+    color: 'bg-emerald-300 hover:bg-emerald-400 text-gray-900 dark:bg-emerald-500 dark:hover:bg-emerald-600 dark:text-white',
   },
   {
     quality: 3 as AnswerQuality,
-    label: 'Легко',
-    sublabel: '',
-    color: 'bg-blue-500 hover:bg-blue-600 text-white',
-    shortcut: '4',
+    color: 'bg-green-500 hover:bg-green-600 text-white',
   },
 ];
 
 /**
  * 4 кнопки ответа SM-2: Снова, Трудно, Хорошо, Легко
+ * Клавиатурные шорткаты 1-4 работают, но цифры не отображаются.
  */
 export const AnswerButtons: React.FC<AnswerButtonsProps> = ({
   onAnswer,
@@ -57,7 +45,7 @@ export const AnswerButtons: React.FC<AnswerButtonsProps> = ({
     3: t.training.answerButtons.easy,
   };
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (1-4)
   React.useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (disabled) return;
@@ -79,14 +67,11 @@ export const AnswerButtons: React.FC<AnswerButtonsProps> = ({
           onClick={() => onAnswer(cfg.quality)}
           disabled={disabled}
           className={cn(
-            'flex flex-col items-center py-3 h-auto rounded-xl font-semibold text-sm shadow-md transition-all active:scale-95',
+            'flex items-center justify-center py-3 h-auto rounded-xl font-semibold text-sm shadow-md transition-all active:scale-95',
             cfg.color
           )}
         >
-          <span>{answerLabels[cfg.quality]}</span>
-          <span className="text-[10px] font-normal opacity-80 mt-0.5">
-            {cfg.shortcut}
-          </span>
+          {answerLabels[cfg.quality]}
         </Button>
       ))}
     </div>

@@ -1253,8 +1253,8 @@ class TestSessionUtils:
         
         time = estimate_session_time(learning_count=5, review_count=10, new_count=2)
         
-        # Ожидаемое время: 5*2.5 + 10*0.25 + 2*2.5 = 12.5 + 2.5 + 5 = 20 минут
-        assert time == 20
+        # Ожидаемое время: 5*1.5 + 10*0.25 + 2*0.5 = 7.5 + 2.5 + 1.0 = 11 минут
+        assert time == 11
     
     def test_limit_cards_by_time(self):
         """Тест ограничения карточек по времени"""

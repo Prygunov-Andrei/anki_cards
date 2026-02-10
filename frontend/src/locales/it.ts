@@ -732,7 +732,7 @@ export const it: TranslationKeys = {
       noCards: 'Nessuna carta per l\'allenamento. Aggiungi parole o attendi.',
       startFailed: 'Errore nell\'avvio dell\'allenamento',
     },
-    stats: { streakDays: 'Giorni consecutivi', successRate: 'Tasso di successo', totalWords: 'Parole totali' },
+    stats: { streakDays: 'Giorni consecutivi', successRate: 'Tasso di successo', totalWords: 'Parole totali', totalCards: 'Carte totali' },
     cardsOverview: { title: 'Carte per l\'allenamento', learning: 'Apprendimento', review: 'Ripasso', new: 'Nuove' },
     sessionSettings: { title: 'Impostazioni sessione', duration: 'Durata', includeNew: 'Carte nuove' },
     startButton: { loading: 'Caricamento...', start: 'Inizia l\'allenamento' },
@@ -814,12 +814,18 @@ export const it: TranslationKeys = {
     card: {
       translation: 'Traduzione',
       word: 'Parola',
-      learningMode: 'Modalità di apprendimento',
+      learningMode: 'Studia',
       flipHint: 'Clicca per girare',
       hint: 'Suggerimento',
       listen: 'Ascolta',
       etymology: 'Etimologia',
       examples: 'Esempi',
+    },
+    serviceZone: {
+      hint: 'Suggerimento',
+      generating: 'Generazione...',
+      hintGenerated: 'Suggerimento generato',
+      hintError: 'Errore nella generazione del suggerimento',
     },
   },
   trainingCard: {

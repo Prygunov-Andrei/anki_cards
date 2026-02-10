@@ -732,6 +732,7 @@ export const tr: TranslationKeys = {
       streakDays: 'Ardışık gün',
       successRate: 'Başarı oranı',
       totalWords: 'Toplam kelime',
+      totalCards: 'Toplam kart',
     },
     cardsOverview: {
       title: 'Eğitim kartları',
@@ -891,12 +892,18 @@ export const tr: TranslationKeys = {
     card: {
       translation: 'Çeviri',
       word: 'Kelime',
-      learningMode: 'Öğrenme modu',
+      learningMode: 'Öğren',
       flipHint: 'Çevirmek için tıklayın',
       hint: 'İpucu',
       listen: 'Dinle',
       etymology: 'Etimoloji',
       examples: 'Örnekler',
+    },
+    serviceZone: {
+      hint: 'İpucu',
+      generating: 'Oluşturuluyor...',
+      hintGenerated: 'İpucu oluşturuldu',
+      hintError: 'İpucu oluşturma hatası',
     },
   },
   trainingCard: {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, RefreshCw, Loader2, Volume2 } from 'lucide-react';
+import { Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Checkbox } from '../ui/checkbox';
@@ -95,10 +95,9 @@ export const HintGenerator: React.FC<HintGeneratorProps> = ({
             
             {safeHintAudio && (
               <div className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-50 to-pink-50 p-3">
-                <Volume2 className="h-5 w-5 text-purple-500" />
                 <AudioPlayer 
-                  audioSrc={safeHintAudio}
-                  className="flex-1"
+                  audioUrl={safeHintAudio}
+                  word="hint"
                 />
               </div>
             )}

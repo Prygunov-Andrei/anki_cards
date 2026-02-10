@@ -177,7 +177,7 @@ export const WordsTable: React.FC<WordsTableProps> = ({
 
           return (
             <WordCard
-              key={word.id}
+              key={word.unique_id || `word-${word.id}-${word.card_type || 'normal'}`}
               word={wordText}
               translation={word.translation}
               imageUrl={imageUrl}

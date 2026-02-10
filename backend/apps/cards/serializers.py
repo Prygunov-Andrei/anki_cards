@@ -368,7 +368,7 @@ class GermanWordProcessingSerializer(serializers.Serializer):
 # ========== ЭТАП 7: Управление колодами и карточками ==========
 
 class WordSerializer(serializers.Serializer):
-    """Сериализатор для слова в колоде"""
+    """Сериализатор для слова в колоде (полный, включая AI-контент)"""
     
     id = serializers.IntegerField(read_only=True)
     original_word = serializers.CharField(read_only=True)
@@ -377,6 +377,17 @@ class WordSerializer(serializers.Serializer):
     card_type = serializers.CharField(read_only=True)
     image_file = serializers.SerializerMethodField()
     audio_file = serializers.SerializerMethodField()
+    # AI-generated content fields
+    etymology = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    sentences = serializers.JSONField(read_only=True, default=list)
+    notes = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    hint_text = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    hint_audio = serializers.SerializerMethodField()
+    part_of_speech = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    stickers = serializers.JSONField(read_only=True, default=list)
+    learning_status = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
     
     def get_image_file(self, obj):
         """Возвращает URL изображения или None"""
@@ -388,6 +399,12 @@ class WordSerializer(serializers.Serializer):
         """Возвращает URL аудио или None"""
         if obj.audio_file:
             return obj.audio_file.url
+        return None
+    
+    def get_hint_audio(self, obj):
+        """Возвращает URL аудио подсказки или None"""
+        if hasattr(obj, 'hint_audio') and obj.hint_audio:
+            return obj.hint_audio.url if hasattr(obj.hint_audio, 'url') else obj.hint_audio
         return None
 
 
@@ -408,11 +425,12 @@ class DeckSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_unique_words_count(self, obj):
-        """Подсчитывает количество уникальных слов для изучения (только normal, исключая inverted и empty)"""
-        # Считаем только карточки типа 'normal' - это и есть слова на изучении
-        # Инвертированные карточки - это те же слова, но в обратном направлении
-        # Пустые карточки - это не слова для изучения
-        return obj.words.filter(card_type='normal').count()
+        """Подсчитывает количество уникальных слов (все Word-ы в колоде).
+        
+        После миграции инверсии на Card-level, все Word-ы считаются нормальными.
+        Инвертированные карточки — это Card-ы, а не Word-ы.
+        """
+        return obj.words.count()
 
 
 class DeckDetailSerializer(serializers.ModelSerializer):
@@ -432,9 +450,55 @@ class DeckDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_words(self, obj):
-        """Возвращает список слов колоды"""
+        """Возвращает список слов колоды с учётом Card-level карточек.
+        
+        Для каждого Word возвращает его как 'normal' карточку.
+        Если у Word есть инвертированная Card — добавляет ещё один элемент
+        с card_type='inverted' (тот же Word, но помеченный как inverted).
+        
+        Каждая запись содержит unique_id (составной ключ word_id + card_type)
+        для корректного рендеринга на фронтенде (React-key).
+        """
+        from .models import Card
         words = obj.words.all()
-        return WordSerializer(words, many=True).data
+        
+        # Собираем inverted Card-ы с их id и word_id
+        word_ids = list(words.values_list('id', flat=True))
+        inverted_cards = dict(
+            Card.objects.filter(
+                word_id__in=word_ids,
+                card_type='inverted',
+                user=obj.user,
+            ).values_list('word_id', 'id')
+        )
+        
+        # Собираем normal Card-ы с их id и word_id
+        normal_cards = dict(
+            Card.objects.filter(
+                word_id__in=word_ids,
+                card_type='normal',
+                user=obj.user,
+            ).values_list('word_id', 'id')
+        )
+        
+        result = []
+        for word in words:
+            # Основная (normal) карточка
+            word_data = WordSerializer(word).data
+            word_data['card_type'] = 'normal'
+            word_data['unique_id'] = f"word-{word.id}-normal"
+            word_data['card_id'] = normal_cards.get(word.id)
+            result.append(word_data)
+            
+            # Если есть инвертированная Card — добавляем дубль с card_type='inverted'
+            if word.id in inverted_cards:
+                inverted_data = WordSerializer(word).data
+                inverted_data['card_type'] = 'inverted'
+                inverted_data['unique_id'] = f"word-{word.id}-inverted"
+                inverted_data['card_id'] = inverted_cards[word.id]
+                result.append(inverted_data)
+        
+        return result
 
 
 class DeckCreateSerializer(serializers.ModelSerializer):

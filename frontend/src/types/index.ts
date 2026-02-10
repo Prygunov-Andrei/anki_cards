@@ -48,10 +48,12 @@ export interface WordSentence {
 
 export interface Word {
   id: number;
+  unique_id?: string;  // Составной ключ "word-{id}-{card_type}" для React-key
+  card_id?: number | null;  // ID карточки (Card) в БД
   original_word: string;
   translation: string;
   language: string;
-  card_type?: 'normal' | 'inverted' | 'empty'; // deprecated
+  card_type?: 'normal' | 'inverted' | 'empty';
   audio_file: string | null;
   image_file: string | null;
   image_url?: string | null;

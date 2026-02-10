@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trainingService } from '../services/training.service';
 import { wordsService } from '../services/words.service';
-import type { TrainingStats, WordsStats } from '../types';
+import type { TrainingStats, WordsStats, TrainingCardCounts } from '../types';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import {
@@ -44,6 +44,7 @@ export default function TrainingStartPage() {
 
   const [stats, setStats] = useState<TrainingStats | null>(null);
   const [wordsStats, setWordsStats] = useState<WordsStats | null>(null);
+  const [scopedCards, setScopedCards] = useState<TrainingCardCounts | null>(null);
   const [scopeName, setScopeName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
@@ -79,20 +80,24 @@ export default function TrainingStartPage() {
           wordsService.getWordsStats().catch(() => null),
         ]);
 
-        // Load scope name from dashboard if scoped
-        if (isScoped) {
-          try {
-            const dashboard = await trainingService.getDashboard();
-            if (deckId) {
-              const deck = dashboard.decks.find((d) => d.id === deckId);
-              if (deck && !cancelled) setScopeName(deck.name);
-            } else if (categoryId) {
-              const cat = dashboard.categories.find((c) => c.id === categoryId);
-              if (cat && !cancelled) setScopeName(`${cat.icon || '📂'} ${cat.name}`);
+        // Load scope name + scoped card counts from dashboard
+        try {
+          const dashboard = await trainingService.getDashboard();
+          if (deckId) {
+            const deck = dashboard.decks.find((d) => d.id === deckId);
+            if (deck && !cancelled) {
+              setScopeName(deck.name);
+              setScopedCards(deck.cards);
             }
-          } catch {
-            // Scope name is optional
+          } else if (categoryId) {
+            const cat = dashboard.categories.find((c) => c.id === categoryId);
+            if (cat && !cancelled) {
+              setScopeName(`${cat.icon || '📂'} ${cat.name}`);
+              setScopedCards(cat.cards);
+            }
           }
+        } catch {
+          // Dashboard is optional, fallback to global stats
         }
 
         if (!cancelled) {
@@ -206,22 +211,24 @@ export default function TrainingStartPage() {
           </div>
           <div className="flex flex-col items-center rounded-xl border bg-card p-4">
             <BookOpen className="mb-1 h-5 w-5 text-blue-500" />
-            <span className="text-lg font-bold">{wordsStats?.total_words ?? 0}</span>
+            <span className="text-lg font-bold">
+              {scopedCards ? scopedCards.total : (wordsStats?.total_words ?? 0)}
+            </span>
             <span className="text-xs text-muted-foreground">
-              {t.trainingStart.stats.totalWords}
+              {scopedCards ? t.trainingStart.stats.totalCards : t.trainingStart.stats.totalWords}
             </span>
           </div>
         </div>
       )}
 
-      {/* Cards overview */}
-      {!isLoading && stats?.cards_by_status && (
+      {/* Cards overview -- use scoped card counts when available */}
+      {!isLoading && (scopedCards || stats?.cards_by_status) && (
         <div className="mb-6 rounded-xl border bg-card p-4">
           <h3 className="mb-3 text-sm font-medium">{t.trainingStart.cardsOverview.title}</h3>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
               <span className="text-2xl font-bold text-orange-500">
-                {stats.cards_by_status.learning}
+                {scopedCards ? scopedCards.learning : stats?.cards_by_status?.learning ?? 0}
               </span>
               <p className="text-xs text-muted-foreground">
                 {t.trainingStart.cardsOverview.learning}
@@ -229,7 +236,7 @@ export default function TrainingStartPage() {
             </div>
             <div>
               <span className="text-2xl font-bold text-green-500">
-                {stats.cards_by_status.review}
+                {scopedCards ? scopedCards.review : stats?.cards_by_status?.review ?? 0}
               </span>
               <p className="text-xs text-muted-foreground">
                 {t.trainingStart.cardsOverview.review}
@@ -237,7 +244,7 @@ export default function TrainingStartPage() {
             </div>
             <div>
               <span className="text-2xl font-bold text-blue-500">
-                {stats.cards_by_status.new}
+                {scopedCards ? scopedCards.new : stats?.cards_by_status?.new ?? 0}
               </span>
               <p className="text-xs text-muted-foreground">{t.trainingStart.cardsOverview.new}</p>
             </div>
@@ -284,7 +291,7 @@ export default function TrainingStartPage() {
         onClick={handleStart}
         disabled={isStarting || isLoading}
         size="lg"
-        className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 py-6 text-lg font-semibold shadow-lg transition-all hover:from-indigo-600 hover:to-purple-700 active:scale-[0.98]"
+        className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-700 py-6 text-lg font-bold text-white shadow-lg transition-all hover:from-indigo-700 hover:to-purple-800 active:scale-[0.98]"
       >
         {isStarting ? (
           <>

@@ -1769,8 +1769,13 @@ def deck_invert_all_words_view(request, deck_id):
     skipped_words = []
     errors = []
     
-    for word in words:
+    for idx, word in enumerate(words):
         try:
+            logger.debug(
+                f"Инвертирование слова [{idx + 1}/{words.count()}]: "
+                f"id={word.id}, word='{word.original_word}', card_type='{word.card_type}'"
+            )
+            
             # Пропускаем legacy-инвертированные и пустые Word-ы
             if word.card_type in ('inverted', 'empty'):
                 skipped_words.append({
@@ -1778,6 +1783,7 @@ def deck_invert_all_words_view(request, deck_id):
                     'original_word': word.original_word,
                     'reason': f'Пропущено: legacy {word.card_type} Word'
                 })
+                logger.debug(f"  -> Пропущено: legacy {word.card_type}")
                 continue
             
             # Проверяем, есть ли уже инвертированная Card для этого Word
@@ -1793,6 +1799,7 @@ def deck_invert_all_words_view(request, deck_id):
                     'original_word': word.original_word,
                     'reason': 'Инвертированная карточка уже существует'
                 })
+                logger.debug(f"  -> Пропущено: inverted Card #{existing_card.id} уже существует")
                 continue
             
             # Создаём инвертированную Card на уровне Card-модели
@@ -1805,6 +1812,7 @@ def deck_invert_all_words_view(request, deck_id):
                 'translation': word.translation,
                 'card_type': 'inverted',
             })
+            logger.debug(f"  -> Создана inverted Card #{inverted_card.id}")
                 
         except Exception as e:
             errors.append({

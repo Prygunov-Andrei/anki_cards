@@ -38,6 +38,7 @@ db.sqlite3-journal
 .env
 .env.local
 .env.*.local
+.env.deploy
 
 # Node
 node_modules/
