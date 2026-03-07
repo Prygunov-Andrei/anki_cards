@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Count
 
 from apps.words.models import Word
+from apps.cards.models import Deck
 from apps.cards.llm_utils import translate_words
 from .models import LiterarySource, LiteraryText, WordContextMedia
 from .serializers import (
@@ -105,6 +106,44 @@ def word_context_media_view(request, word_id):
         context_media, many=True, context={'request': request}
     )
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_deck_context_view(request):
+    """
+    POST /api/literary-context/generate-deck-context/
+    Body: {deck_id: int}
+    Uses user's active_literary_source. Generates context for all words in the deck.
+    """
+    deck_id = request.data.get('deck_id')
+    if not deck_id:
+        return Response(
+            {'error': 'deck_id is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    deck = get_object_or_404(Deck, id=deck_id, user=request.user)
+    source = getattr(request.user, 'active_literary_source', None)
+    if not source:
+        return Response(
+            {'error': 'No literary source selected. Choose one in your profile or on the main page.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    words = deck.words.all()
+    if not words.exists():
+        return Response({'generated': 0, 'skipped': 0, 'errors': 0})
+
+    try:
+        stats = generate_batch_context(words, source, skip_existing=True)
+    except Exception as e:
+        logger.error(f'Deck context generation failed for deck {deck_id}: {e}')
+        return Response(
+            {'error': 'Generation failed. Please try again later.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    return Response(stats, status=status.HTTP_200_OK)
 
 
 # --- Reader API ---

@@ -3,12 +3,14 @@ import { BookOpen, Quote } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { LiteraryContextBadge } from './LiteraryContextBadge';
 import { GenerateContextButton } from './GenerateContextButton';
+import { CompactLiterarySourceSelector } from './CompactLiterarySourceSelector';
 import { literaryContextService } from '../../services/literary-context.service';
 import { WordContextMedia } from '../../types/literary-context';
 
 interface LiteraryContextSectionProps {
   wordId: number;
   activeSource: string | null;
+  onSourceChange?: (slug: string | null) => void;
   literaryContext?: {
     source_slug: string;
     hint_text: string;
@@ -23,6 +25,7 @@ interface LiteraryContextSectionProps {
 export const LiteraryContextSection: React.FC<LiteraryContextSectionProps> = ({
   wordId,
   activeSource,
+  onSourceChange,
   literaryContext,
 }) => {
   const [contextMedia, setContextMedia] = useState<WordContextMedia[]>([]);
@@ -41,19 +44,23 @@ export const LiteraryContextSection: React.FC<LiteraryContextSectionProps> = ({
     loadMedia();
   }, [wordId]);
 
-  if (!activeSource && contextMedia.length === 0) {
-    return null;
-  }
-
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <BookOpen className="h-4 w-4" />
-          Literary Context
+          Литературный контекст
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Source selector */}
+        {onSourceChange && (
+          <CompactLiterarySourceSelector
+            activeSource={activeSource}
+            onSourceChange={onSourceChange}
+          />
+        )}
+
         {/* Current overlay info */}
         {literaryContext && (
           <div className="space-y-3">
@@ -86,7 +93,7 @@ export const LiteraryContextSection: React.FC<LiteraryContextSectionProps> = ({
         {/* No context yet */}
         {activeSource && !literaryContext && (
           <div className="text-center py-4 text-sm text-muted-foreground">
-            <p>Literary context not yet generated for this word.</p>
+            <p>Литературный контекст ещё не сгенерирован для этого слова.</p>
             <div className="mt-3">
               <GenerateContextButton
                 wordId={wordId}
@@ -95,6 +102,13 @@ export const LiteraryContextSection: React.FC<LiteraryContextSectionProps> = ({
               />
             </div>
           </div>
+        )}
+
+        {/* No source selected */}
+        {!activeSource && !literaryContext && (
+          <p className="text-center py-2 text-sm text-muted-foreground">
+            Выберите литературный источник выше, чтобы генерировать контекст из произведений.
+          </p>
         )}
 
         {/* Regenerate button if context exists */}

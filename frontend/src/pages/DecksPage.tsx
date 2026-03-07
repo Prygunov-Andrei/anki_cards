@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageHelpButton } from '../components/PageHelpButton';
 import { Deck } from '../types';
 import { deckService } from '../services/deck.service';
+import { literaryContextService } from '../services/literary-context.service';
 import { DeckCard } from '../components/DeckCard';
 import { DeleteDeckModal } from '../components/DeleteDeckModal';
 import { InvertWordsConfirmModal } from '../components/InvertWordsConfirmModal';
@@ -10,6 +11,7 @@ import { NetworkErrorBanner } from '../components/NetworkErrorBanner';
 import { Skeleton } from '../components/ui/skeleton';
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
+import { useAuthContext } from '../contexts/AuthContext';
 import { BookOpen } from 'lucide-react';
 import axios from 'axios';
 
@@ -18,6 +20,7 @@ import axios from 'axios';
  */
 export default function DecksPage() {
   const t = useTranslation();
+  const { user } = useAuthContext();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasNetworkError, setHasNetworkError] = useState(false);
@@ -413,6 +416,46 @@ export default function DecksPage() {
     }
   };
 
+  /**
+   * Сгенерировать литературный контекст для всех слов колоды
+   */
+  const handleGenerateLiteraryContext = async (deck: Deck) => {
+    if (deck.words_count === 0) {
+      showError(t.decks.emptyDeck);
+      return;
+    }
+    if (!user?.active_literary_source) {
+      showError('Не выбран литературный источник', {
+        description: 'Выберите источник (например, Чехов) на главной странице или в настройках тренировки.',
+      });
+      return;
+    }
+
+    try {
+      showInfo(`Генерация контекста для "${deck.name}"...`, {
+        description: `${deck.words_count} слов, источник: ${user.active_literary_source}`,
+      });
+
+      const stats = await literaryContextService.generateDeckContext(deck.id);
+
+      if (stats.generated > 0) {
+        showSuccess(`Контекст сгенерирован: ${stats.generated} слов`, {
+          description: stats.skipped > 0 ? `Пропущено (уже есть): ${stats.skipped}` : undefined,
+        });
+      } else if (stats.skipped > 0) {
+        showInfo(`Все ${stats.skipped} слов уже имеют литературный контекст`);
+      } else {
+        showInfo('Нет слов для генерации контекста');
+      }
+    } catch (error: unknown) {
+      console.error('Error generating literary context:', error);
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : (error instanceof Error ? error.message : 'Неизвестная ошибка');
+      showError('Ошибка генерации контекста', { description: message });
+    }
+  };
+
   // Состояние загрузки
   if (isLoading) {
     return (
@@ -473,6 +516,7 @@ export default function DecksPage() {
             onMerge={handleMergeDecks}
             onInvertAll={openInvertWordsModal}
             onCreateEmptyCards={handleCreateEmptyCards}
+            onGenerateLiteraryContext={handleGenerateLiteraryContext}
             availableDecks={decks.filter((d) => d.id !== deck.id)}
           />
         ))}

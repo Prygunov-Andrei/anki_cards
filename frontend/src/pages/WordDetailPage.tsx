@@ -26,7 +26,7 @@ const WordDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const t = useTranslation();
-  const { user } = useAuthContext();
+  const { user, updateUser } = useAuthContext();
   const [word, setWord] = useState<Word | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -235,7 +235,7 @@ const WordDetailPage: React.FC = () => {
 
       {/* Табы */}
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5">
+        <TabsList className="w-full">
           <TabsTrigger value="basic">Основное</TabsTrigger>
           <TabsTrigger value="etymology">Этимология</TabsTrigger>
           <TabsTrigger value="sentences">Примеры</TabsTrigger>
@@ -282,6 +282,7 @@ const WordDetailPage: React.FC = () => {
           <LiteraryContextSection
             wordId={word.id}
             activeSource={user?.active_literary_source ?? null}
+            onSourceChange={(slug) => updateUser({ active_literary_source: slug })}
             literaryContext={word.literary_context}
           />
         </TabsContent>

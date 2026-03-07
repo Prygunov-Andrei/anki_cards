@@ -13,7 +13,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from './ui/dropdown-menu';
-import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download, Merge, ArrowLeftRight, FileText, GraduationCap } from 'lucide-react';
+import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download, Merge, ArrowLeftRight, FileText, GraduationCap, Library } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ru, enUS, de, es, fr, it, ptBR } from 'date-fns/locale';
 import { getAbsoluteUrl } from '../utils/url-helpers';
@@ -27,6 +27,7 @@ interface DeckCardProps {
   onMerge?: (sourceDeckId: number, targetDeckId: number) => void;
   onInvertAll?: (deck: Deck) => void;
   onCreateEmptyCards?: (deck: Deck) => void;
+  onGenerateLiteraryContext?: (deck: Deck) => void;
   availableDecks?: Deck[];
 }
 
@@ -41,6 +42,7 @@ export const DeckCard: React.FC<DeckCardProps> = ({
   onMerge,
   onInvertAll,
   onCreateEmptyCards,
+  onGenerateLiteraryContext,
   availableDecks,
 }) => {
   const t = useTranslation();
@@ -197,7 +199,20 @@ export const DeckCard: React.FC<DeckCardProps> = ({
                     {t.words.createEmptyCards}
                   </DropdownMenuItem>
                 )}
-                
+
+                {onGenerateLiteraryContext && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onGenerateLiteraryContext(deck);
+                    }}
+                  >
+                    <Library className="mr-2 h-4 w-4" />
+                    Литературный контекст
+                  </DropdownMenuItem>
+                )}
+
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={(e) => {
