@@ -25,10 +25,10 @@ export const literaryContextService = {
     return response.data;
   },
 
-  async generateDeckContext(deckId: number): Promise<BatchContextStats> {
+  async generateDeckContext(deckId: number, sourceSlug: string): Promise<BatchContextStats> {
     const response = await apiClient.post<BatchContextStats>(
       `${BASE}/generate-deck-context/`,
-      { deck_id: deckId },
+      { deck_id: deckId, source_slug: sourceSlug },
       { timeout: 300000 } // 5 minutes for large decks
     );
     return response.data;

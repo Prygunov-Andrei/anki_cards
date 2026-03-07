@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Deck } from '../types';
+import { LiterarySource } from '../types/literary-context';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import {
@@ -27,8 +28,9 @@ interface DeckCardProps {
   onMerge?: (sourceDeckId: number, targetDeckId: number) => void;
   onInvertAll?: (deck: Deck) => void;
   onCreateEmptyCards?: (deck: Deck) => void;
-  onGenerateLiteraryContext?: (deck: Deck) => void;
+  onGenerateLiteraryContext?: (deck: Deck, sourceSlug: string) => void;
   availableDecks?: Deck[];
+  literarySources?: LiterarySource[];
 }
 
 /**
@@ -44,6 +46,7 @@ export const DeckCard: React.FC<DeckCardProps> = ({
   onCreateEmptyCards,
   onGenerateLiteraryContext,
   availableDecks,
+  literarySources,
 }) => {
   const t = useTranslation();
   const { locale } = useLanguage();
@@ -200,17 +203,27 @@ export const DeckCard: React.FC<DeckCardProps> = ({
                   </DropdownMenuItem>
                 )}
 
-                {onGenerateLiteraryContext && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      onGenerateLiteraryContext(deck);
-                    }}
-                  >
-                    <Library className="mr-2 h-4 w-4" />
-                    Литературный контекст
-                  </DropdownMenuItem>
+                {onGenerateLiteraryContext && literarySources && literarySources.length > 0 && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Library className="mr-2 h-4 w-4" />
+                      Литературный контекст
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {literarySources.map((source) => (
+                        <DropdownMenuItem
+                          key={source.slug}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onGenerateLiteraryContext(deck, source.slug);
+                          }}
+                        >
+                          {source.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                 )}
 
                 <DropdownMenuSeparator />

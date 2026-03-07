@@ -11,8 +11,8 @@ import { NetworkErrorBanner } from '../components/NetworkErrorBanner';
 import { Skeleton } from '../components/ui/skeleton';
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
-import { useAuthContext } from '../contexts/AuthContext';
 import { BookOpen } from 'lucide-react';
+import { LiterarySource } from '../types/literary-context';
 import axios from 'axios';
 
 /**
@@ -20,8 +20,8 @@ import axios from 'axios';
  */
 export default function DecksPage() {
   const t = useTranslation();
-  const { user } = useAuthContext();
   const [decks, setDecks] = useState<Deck[]>([]);
+  const [literarySources, setLiterarySources] = useState<LiterarySource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasNetworkError, setHasNetworkError] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -30,9 +30,10 @@ export default function DecksPage() {
   const [selectedDeckForInvert, setSelectedDeckForInvert] = useState<Deck | null>(null);
   const navigate = useNavigate();
 
-  // Загрузка колод при монтировании
+  // Загрузка колод и литературных источников при монтировании
   useEffect(() => {
     loadDecks();
+    literaryContextService.getSources().then(setLiterarySources).catch(() => {});
   }, []);
 
   /**
@@ -419,24 +420,21 @@ export default function DecksPage() {
   /**
    * Сгенерировать литературный контекст для всех слов колоды
    */
-  const handleGenerateLiteraryContext = async (deck: Deck) => {
+  const handleGenerateLiteraryContext = async (deck: Deck, sourceSlug: string) => {
     if (deck.words_count === 0) {
       showError(t.decks.emptyDeck);
       return;
     }
-    if (!user?.active_literary_source) {
-      showError('Не выбран литературный источник', {
-        description: 'Выберите источник (например, Чехов) на главной странице или в настройках тренировки.',
-      });
-      return;
-    }
+
+    const source = literarySources.find(s => s.slug === sourceSlug);
+    const sourceName = source?.name || sourceSlug;
 
     try {
       showInfo(`Генерация контекста для "${deck.name}"...`, {
-        description: `${deck.words_count} слов, источник: ${user.active_literary_source}`,
+        description: `${deck.words_count} слов, источник: ${sourceName}`,
       });
 
-      const stats = await literaryContextService.generateDeckContext(deck.id);
+      const stats = await literaryContextService.generateDeckContext(deck.id, sourceSlug);
 
       if (stats.generated > 0) {
         showSuccess(`Контекст сгенерирован: ${stats.generated} слов`, {
@@ -517,6 +515,7 @@ export default function DecksPage() {
             onInvertAll={openInvertWordsModal}
             onCreateEmptyCards={handleCreateEmptyCards}
             onGenerateLiteraryContext={handleGenerateLiteraryContext}
+            literarySources={literarySources}
             availableDecks={decks.filter((d) => d.id !== deck.id)}
           />
         ))}

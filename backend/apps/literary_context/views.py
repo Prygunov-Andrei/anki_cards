@@ -113,23 +113,20 @@ def word_context_media_view(request, word_id):
 def generate_deck_context_view(request):
     """
     POST /api/literary-context/generate-deck-context/
-    Body: {deck_id: int}
-    Uses user's active_literary_source. Generates context for all words in the deck.
+    Body: {deck_id: int, source_slug: str}
+    Generates literary context for all words in the deck using the specified source.
     """
     deck_id = request.data.get('deck_id')
-    if not deck_id:
+    source_slug = request.data.get('source_slug')
+
+    if not deck_id or not source_slug:
         return Response(
-            {'error': 'deck_id is required'},
+            {'error': 'deck_id and source_slug are required'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     deck = get_object_or_404(Deck, id=deck_id, user=request.user)
-    source = getattr(request.user, 'active_literary_source', None)
-    if not source:
-        return Response(
-            {'error': 'No literary source selected. Choose one in your profile or on the main page.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    source = get_object_or_404(LiterarySource, slug=source_slug, is_active=True)
 
     words = deck.words.all()
     if not words.exists():
