@@ -10,7 +10,11 @@ class LiteraryContextOverlayMixin:
         if not request or not hasattr(request, 'user'):
             return None
 
-        source = getattr(request.user, 'active_literary_source', None)
+        deck = self.context.get('deck')
+        if deck and getattr(deck, 'literary_source_override', False):
+            source = deck.literary_source
+        else:
+            source = getattr(request.user, 'active_literary_source', None)
         if not source:
             return None
 

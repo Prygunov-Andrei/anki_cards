@@ -44,6 +44,7 @@ deck_urlpatterns = [
     path('decks/<int:deck_id>/invert_word/', views.deck_invert_word_view, name='deck-invert-word'),
     path('decks/<int:deck_id>/create_empty_cards/', views.deck_create_empty_cards_view, name='deck-create-empty-cards'),
     path('decks/<int:deck_id>/create_empty_card/', views.deck_create_empty_card_view, name='deck-create-empty-card'),
+    path('decks/<int:deck_id>/literary-source/', views.deck_set_literary_source_view, name='deck-set-literary-source'),
 ]
 
 # Token endpoints (Этап 9)

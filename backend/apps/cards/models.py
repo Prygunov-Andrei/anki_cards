@@ -222,6 +222,10 @@ class Deck(models.Model):
         related_name='decks',
         verbose_name='Литературный источник'
     )
+    literary_source_override = models.BooleanField(
+        default=False,
+        verbose_name='Переопределение литературного источника',
+    )
     is_learning_active = models.BooleanField(
         default=False,
         verbose_name='Активна для тренировки',
@@ -235,6 +239,11 @@ class Deck(models.Model):
         auto_now=True,
         verbose_name='Дата обновления'
     )
+
+    def get_effective_literary_source(self, user):
+        if self.literary_source_override:
+            return self.literary_source
+        return getattr(user, 'active_literary_source', None)
 
     class Meta:
         verbose_name = 'Колода'

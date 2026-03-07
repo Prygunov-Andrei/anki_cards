@@ -14,7 +14,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from './ui/dropdown-menu';
-import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download, Merge, ArrowLeftRight, FileText, GraduationCap, Library } from 'lucide-react';
+import { MoreVertical, Edit, Trash2, BookOpen, Calendar, Download, Merge, ArrowLeftRight, FileText, GraduationCap, Library, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ru, enUS, de, es, fr, it, ptBR } from 'date-fns/locale';
 import { getAbsoluteUrl } from '../utils/url-helpers';
@@ -29,6 +29,7 @@ interface DeckCardProps {
   onInvertAll?: (deck: Deck) => void;
   onCreateEmptyCards?: (deck: Deck) => void;
   onGenerateLiteraryContext?: (deck: Deck, sourceSlug: string) => void;
+  onSetDeckLiterarySource?: (deck: Deck, sourceSlug: string | null, useGlobal: boolean) => void;
   availableDecks?: Deck[];
   literarySources?: LiterarySource[];
 }
@@ -45,6 +46,7 @@ export const DeckCard: React.FC<DeckCardProps> = ({
   onInvertAll,
   onCreateEmptyCards,
   onGenerateLiteraryContext,
+  onSetDeckLiterarySource,
   availableDecks,
   literarySources,
 }) => {
@@ -203,23 +205,61 @@ export const DeckCard: React.FC<DeckCardProps> = ({
                   </DropdownMenuItem>
                 )}
 
-                {onGenerateLiteraryContext && literarySources && literarySources.length > 0 && (
+                {literarySources && literarySources.length > 0 && (
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
                       <Library className="mr-2 h-4 w-4" />
                       Литературный контекст
+                      {deck.literary_source_override && deck.literary_source_display && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          ({deck.literary_source_display.name})
+                        </span>
+                      )}
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onSetDeckLiterarySource?.(deck, null, true);
+                        }}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span>Глобальная настройка</span>
+                          {!deck.literary_source_override && <Check className="ml-2 h-4 w-4" />}
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onSetDeckLiterarySource?.(deck, null, false);
+                        }}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span>Стандарт</span>
+                          {deck.literary_source_override && !deck.literary_source_display && <Check className="ml-2 h-4 w-4" />}
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       {literarySources.map((source) => (
                         <DropdownMenuItem
                           key={source.slug}
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
-                            onGenerateLiteraryContext(deck, source.slug);
+                            if (deck.literary_source_display?.slug === source.slug) {
+                              onSetDeckLiterarySource?.(deck, source.slug, false);
+                            } else {
+                              onGenerateLiteraryContext?.(deck, source.slug);
+                            }
                           }}
                         >
-                          {source.name}
+                          <div className="flex items-center justify-between w-full">
+                            <span>{source.name}</span>
+                            {deck.literary_source_display?.slug === source.slug && <Check className="ml-2 h-4 w-4" />}
+                          </div>
                         </DropdownMenuItem>
                       ))}
                     </DropdownMenuSubContent>

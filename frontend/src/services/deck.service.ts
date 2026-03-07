@@ -807,6 +807,17 @@ class DeckService {
       throw error;
     }
   }
+  async setDeckLiterarySource(
+    deckId: number,
+    sourceSlug: string | null,
+    useGlobal: boolean
+  ): Promise<{ status: string }> {
+    const body = useGlobal
+      ? { use_global: true }
+      : { source_slug: sourceSlug };
+    const response = await api.patch(`/api/cards/decks/${deckId}/literary-source/`, body);
+    return response.data;
+  }
 }
 
 export const deckService = new DeckService();

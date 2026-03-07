@@ -316,6 +316,9 @@ export interface Deck {
   words?: Word[]; // Может быть undefined при загрузке
   words_count: number; // Общее количество карточек
   unique_words_count?: number; // Количество уникальных слов (normal + inverted, без empty)
+  literary_source?: number | null;
+  literary_source_override?: boolean;
+  literary_source_display?: { slug: string; name: string } | null;
   created_at: string;
   updated_at: string;
 }

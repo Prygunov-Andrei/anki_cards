@@ -3643,3 +3643,129 @@ class TestPhotoWordExtraction:
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         token.refresh_from_db()
         assert token.balance == initial_balance
+
+
+@pytest.mark.django_db
+class TestDeckLiterarySource:
+    """Tests for per-deck literary source (рубашка) feature."""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='testuser_literary',
+            password='testpass123'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.deck = Deck.objects.create(
+            name='Test Deck',
+            user=self.user,
+            target_lang='de',
+            source_lang='ru',
+        )
+
+    def _create_source(self, slug='chekhov', name='Чехов'):
+        from apps.literary_context.models import LiterarySource
+        source, _ = LiterarySource.objects.get_or_create(
+            slug=slug,
+            defaults={'name': name, 'is_active': True, 'source_language': 'ru'},
+        )
+        return source
+
+    def test_deck_default_no_override(self):
+        """New deck has literary_source_override=False by default."""
+        assert self.deck.literary_source_override is False
+        assert self.deck.literary_source is None
+
+    def test_set_deck_literary_source_chekhov(self):
+        """PATCH with source_slug sets override=True and literary_source."""
+        source = self._create_source()
+        response = self.client.patch(
+            f'/api/cards/decks/{self.deck.id}/literary-source/',
+            {'source_slug': source.slug},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert response.data['status'] == 'source'
+        self.deck.refresh_from_db()
+        assert self.deck.literary_source_override is True
+        assert self.deck.literary_source_id == source.id
+
+    def test_set_deck_literary_source_standard(self):
+        """PATCH with source_slug=null sets override=True, literary_source=None."""
+        source = self._create_source()
+        self.deck.literary_source = source
+        self.deck.literary_source_override = True
+        self.deck.save()
+
+        response = self.client.patch(
+            f'/api/cards/decks/{self.deck.id}/literary-source/',
+            {'source_slug': None},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert response.data['status'] == 'standard'
+        self.deck.refresh_from_db()
+        assert self.deck.literary_source_override is True
+        assert self.deck.literary_source is None
+
+    def test_reset_deck_to_global(self):
+        """PATCH with use_global=true sets override=False."""
+        source = self._create_source()
+        self.deck.literary_source = source
+        self.deck.literary_source_override = True
+        self.deck.save()
+
+        response = self.client.patch(
+            f'/api/cards/decks/{self.deck.id}/literary-source/',
+            {'use_global': True},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert response.data['status'] == 'global'
+        self.deck.refresh_from_db()
+        assert self.deck.literary_source_override is False
+
+    def test_get_effective_literary_source_with_override(self):
+        """When override=True, deck source is used regardless of user setting."""
+        source = self._create_source()
+        self.deck.literary_source = source
+        self.deck.literary_source_override = True
+        self.deck.save()
+
+        effective = self.deck.get_effective_literary_source(self.user)
+        assert effective == source
+
+    def test_get_effective_literary_source_falls_back_to_global(self):
+        """When override=False, user's active_literary_source is used."""
+        source = self._create_source()
+        self.user.active_literary_source = source
+        self.user.save()
+
+        self.deck.literary_source_override = False
+        self.deck.save()
+
+        effective = self.deck.get_effective_literary_source(self.user)
+        assert effective == source
+
+    def test_get_effective_literary_source_standard(self):
+        """When override=True and source=None, returns None (standard)."""
+        self.deck.literary_source = None
+        self.deck.literary_source_override = True
+        self.deck.save()
+
+        effective = self.deck.get_effective_literary_source(self.user)
+        assert effective is None
+
+    def test_deck_serializer_includes_literary_fields(self):
+        """DeckSerializer includes literary_source_override and literary_source_display."""
+        source = self._create_source()
+        self.deck.literary_source = source
+        self.deck.literary_source_override = True
+        self.deck.save()
+
+        response = self.client.get('/api/cards/decks/')
+        assert response.status_code == 200
+        deck_data = next(d for d in response.data if d['id'] == self.deck.id)
+        assert deck_data['literary_source_override'] is True
+        assert deck_data['literary_source_display']['slug'] == 'chekhov'
+        assert deck_data['literary_source_display']['name'] == 'Чехов'

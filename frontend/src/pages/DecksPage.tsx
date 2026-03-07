@@ -452,6 +452,29 @@ export default function DecksPage() {
         : (error instanceof Error ? error.message : 'Неизвестная ошибка');
       showError('Ошибка генерации контекста', { description: message });
     }
+
+    await loadDecks();
+  };
+
+  const handleSetDeckLiterarySource = async (deck: Deck, sourceSlug: string | null, useGlobal: boolean) => {
+    try {
+      await deckService.setDeckLiterarySource(deck.id, sourceSlug, useGlobal);
+      if (useGlobal) {
+        showSuccess('Колода использует глобальную настройку');
+      } else if (sourceSlug) {
+        const source = literarySources.find(s => s.slug === sourceSlug);
+        showSuccess(`Источник: ${source?.name || sourceSlug}`);
+      } else {
+        showSuccess('Стандартный контекст (без рубашки)');
+      }
+      await loadDecks();
+    } catch (error: unknown) {
+      console.error('Error setting deck literary source:', error);
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : (error instanceof Error ? error.message : 'Неизвестная ошибка');
+      showError('Ошибка', { description: message });
+    }
   };
 
   // Состояние загрузки
@@ -515,6 +538,7 @@ export default function DecksPage() {
             onInvertAll={openInvertWordsModal}
             onCreateEmptyCards={handleCreateEmptyCards}
             onGenerateLiteraryContext={handleGenerateLiteraryContext}
+            onSetDeckLiterarySource={handleSetDeckLiterarySource}
             literarySources={literarySources}
             availableDecks={decks.filter((d) => d.id !== deck.id)}
           />

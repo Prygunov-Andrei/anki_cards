@@ -414,20 +414,26 @@ class WordSerializer(serializers.Serializer):
 
 class DeckSerializer(serializers.ModelSerializer):
     """Сериализатор для колоды (список)"""
-    
+
     words_count = serializers.IntegerField(read_only=True)
     unique_words_count = serializers.SerializerMethodField()
+    literary_source_display = serializers.SerializerMethodField()
     user = serializers.StringRelatedField(read_only=True)
-    
+
     class Meta:
         from .models import Deck
         model = Deck
         fields = [
             'id', 'name', 'cover', 'target_lang', 'source_lang',
-            'literary_source',
+            'literary_source', 'literary_source_override', 'literary_source_display',
             'words_count', 'unique_words_count', 'user', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_literary_source_display(self, obj):
+        if obj.literary_source:
+            return {'slug': obj.literary_source.slug, 'name': obj.literary_source.name}
+        return None
     
     def get_unique_words_count(self, obj):
         """Подсчитывает количество уникальных слов (все Word-ы в колоде).
@@ -486,18 +492,19 @@ class DeckDetailSerializer(serializers.ModelSerializer):
             ).values_list('word_id', 'id')
         )
         
+        ctx = {**self.context, 'deck': obj}
         result = []
         for word in words:
             # Основная (normal) карточка
-            word_data = WordSerializer(word).data
+            word_data = WordSerializer(word, context=ctx).data
             word_data['card_type'] = 'normal'
             word_data['unique_id'] = f"word-{word.id}-normal"
             word_data['card_id'] = normal_cards.get(word.id)
             result.append(word_data)
-            
+
             # Если есть инвертированная Card — добавляем дубль с card_type='inverted'
             if word.id in inverted_cards:
-                inverted_data = WordSerializer(word).data
+                inverted_data = WordSerializer(word, context=ctx).data
                 inverted_data['card_type'] = 'inverted'
                 inverted_data['unique_id'] = f"word-{word.id}-inverted"
                 inverted_data['card_id'] = inverted_cards[word.id]

@@ -140,6 +140,12 @@ def generate_deck_context_view(request):
             {'error': 'Generation failed. Please try again later.'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+    # Auto-set deck literary source to the generated source
+    deck.literary_source = source
+    deck.literary_source_override = True
+    deck.save(update_fields=['literary_source', 'literary_source_override', 'updated_at'])
+
     return Response(stats, status=status.HTTP_200_OK)
 
 

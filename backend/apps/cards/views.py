@@ -1218,6 +1218,39 @@ def deck_detail_view(request, deck_id):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def deck_set_literary_source_view(request, deck_id):
+    """
+    PATCH /api/cards/decks/<deck_id>/literary-source/
+    Body:
+      {"source_slug": "chekhov"}  → override=True, literary_source=chekhov
+      {"source_slug": null}       → override=True, literary_source=null (Стандарт)
+      {"use_global": true}        → override=False (глобальная настройка)
+    """
+    deck = get_object_or_404(Deck, id=deck_id, user=request.user)
+
+    if request.data.get('use_global'):
+        deck.literary_source_override = False
+        deck.save(update_fields=['literary_source_override', 'updated_at'])
+        return Response({'status': 'global'})
+
+    source_slug = request.data.get('source_slug')
+    if source_slug:
+        from apps.literary_context.models import LiterarySource
+        source = get_object_or_404(LiterarySource, slug=source_slug, is_active=True)
+        deck.literary_source = source
+        deck.literary_source_override = True
+        deck.save(update_fields=['literary_source', 'literary_source_override', 'updated_at'])
+        return Response({'status': 'source', 'source_slug': source.slug, 'source_name': source.name})
+
+    # source_slug is null → Стандарт (no overlay)
+    deck.literary_source = None
+    deck.literary_source_override = True
+    deck.save(update_fields=['literary_source', 'literary_source_override', 'updated_at'])
+    return Response({'status': 'standard'})
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_add_words_view(request, deck_id):
