@@ -434,10 +434,12 @@ export const fr: TranslationKeys = {
 
   header: {
     home: 'Accueil',
+    create: 'Créer',
     training: 'Entraînement',
     words: 'Mots',
     categories: 'Catégories',
     decks: 'Paquets',
+    library: 'Bibliothèque',
     forgettingCurve: "Courbes d'oubli",
     profile: 'Profil',
     notifications: 'Notifications',
@@ -538,6 +540,17 @@ export const fr: TranslationKeys = {
     word: 'mot',
     words: 'mots',
     wordsGenitive: 'mots',
+
+    photoExtraction: {
+      scanFromPhoto: 'Scanner depuis une photo',
+      extractingWords: 'Extraction des mots...',
+      extractedWords: 'Mots extraits',
+      noWordsFound: 'Aucun mot trouvé dans cette image',
+      addExtractedWords: 'Ajouter les mots',
+      wordsFound: 'mots trouvés',
+      cancel: 'Annuler',
+      extractionError: "Erreur lors de l'extraction des mots de la photo",
+    },
   },
 
   nav: {
@@ -859,5 +872,130 @@ export const fr: TranslationKeys = {
       imageTooLarge: 'L\'image ne doit pas dépasser 10 Mo',
       dragDropHint: 'Glissez une image ici ou cliquez pour sélectionner',
     },
+  },
+
+  library: {
+    title: 'Bibliothèque',
+    stories: 'histoires',
+    translated: 'traduites',
+    search: 'Rechercher des histoires...',
+    words: 'mots',
+    byLength: 'Longueur',
+    empty: 'Aucune source littéraire disponible',
+    addToVocabulary: 'Au vocabulaire',
+    alreadyInVocabulary: 'Déjà dans le vocabulaire',
+    wordAdded: 'Mot ajouté',
+  },
+
+  help: {
+    tipsTitle: 'Conseils',
+    dontShowAgain: 'Ne plus afficher',
+    create: {
+      title: 'Créer un paquet',
+      steps: [
+        'Photographiez des mots ou saisissez-les manuellement',
+        'Choisissez une "couverture" — le style littéraire des cartes',
+        'Cliquez sur "Traduction auto" pour traduire les mots',
+        'Cliquez sur "Magie" pour générer images et audio',
+        'Nommez le paquet et téléchargez le fichier .apkg',
+      ],
+      tips: [
+        'Glissez un jeton sur un autre pour combiner des mots en phrase',
+        'Votre progression est sauvegardée automatiquement — vous pouvez naviguer vers d\'autres pages',
+        'Si la génération a été interrompue — cliquez à nouveau sur "Magie", les images déjà générées ne seront pas perdues',
+      ],
+    },
+    words: {
+      title: 'Catalogue de mots',
+      steps: [
+        'Tous vos mots de tous les paquets en un seul endroit',
+        'Utilisez la recherche et les filtres pour naviguer',
+        'Cliquez sur un mot pour voir les détails et modifier',
+      ],
+      tips: [
+        'Filtrez par catégorie pour trouver rapidement les mots souhaités',
+        'Les mots sans catégorie peuvent être assignés sur la page de détails',
+      ],
+    },
+    decks: {
+      title: 'Gestion des paquets',
+      steps: [
+        'Tous vos paquets créés sont affichés ici',
+        'Cliquez sur un paquet pour télécharger le fichier .apkg',
+        'Utilisez le menu du paquet pour supprimer ou inverser',
+      ],
+      tips: [
+        'L\'inversion crée un paquet avec le sens de traduction inversé',
+        'Le fichier .apkg téléchargé peut être importé dans Anki',
+      ],
+    },
+    training: {
+      title: 'Entraînement',
+      steps: [
+        'Sélectionnez des catégories ou des mots à entraîner',
+        'Évaluez vos connaissances sur une échelle de 1 à 5',
+        'Le système montrera les mots que vous oubliez le plus souvent',
+      ],
+      tips: [
+        'Des sessions courtes régulières sont plus efficaces que de rares sessions longues',
+        'Utilisez la courbe d\'oubli pour suivre votre progression',
+      ],
+    },
+    categories: {
+      title: 'Catégories',
+      steps: [
+        'Organisez les mots par catégories thématiques',
+        'Créez des catégories imbriquées pour une classification plus précise',
+        'Glissez les catégories pour modifier la hiérarchie',
+      ],
+      tips: [
+        'Les catégories aident à concentrer l\'entraînement sur des sujets spécifiques',
+        'Un mot peut appartenir à plusieurs catégories',
+      ],
+    },
+    profile: {
+      title: 'Profil',
+      steps: [
+        'Configurez votre nom, avatar et email',
+        'Choisissez votre langue maternelle et la langue étudiée',
+        'Gérez les paramètres de notifications',
+      ],
+      tips: [
+        'La langue de l\'interface change en fonction de la langue maternelle sélectionnée',
+      ],
+    },
+    forgettingCurve: {
+      title: 'Courbe d\'oubli',
+      steps: [
+        'Le graphique montre à quelle vitesse vous oubliez les mots',
+        'Plus la courbe est raide, plus le mot est oublié rapidement',
+        'Entraînez plus souvent les mots avec une courbe raide',
+      ],
+      tips: [
+        'La courbe se met à jour après chaque session d\'entraînement',
+        'Les mots verts sont bien mémorisés, les rouges nécessitent une révision',
+      ],
+    },
+    library: {
+      title: 'Bibliothèque',
+      steps: [
+        'Choisissez une nouvelle de Tchekhov dans la liste',
+        'Cliquez sur n\'importe quel mot du texte pour voir sa traduction',
+        'Cliquez sur "Au vocabulaire" pour commencer à apprendre le mot',
+      ],
+      tips: [
+        'Changez la langue (DE/RU) avec le bouton dans l\'en-tête',
+        'Changez la taille de police avec le bouton S/M/L',
+      ],
+    },
+  },
+
+  draft: {
+    restored: 'Brouillon restauré',
+    restoredDescription: 'mots chargés depuis le brouillon',
+    saved: 'Brouillon enregistré',
+    clearAll: 'Tout effacer',
+    confirmClear: 'Supprimer tous les mots, traductions et médias générés ?',
+    confirmLeave: 'La génération des médias est encore en cours. Quitter la page ?',
   },
 };

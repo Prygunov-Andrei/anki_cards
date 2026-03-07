@@ -4,6 +4,8 @@ import { Clock } from 'lucide-react';
 interface SessionTimerProps {
   /** Duration in minutes. 0 or undefined = infinite */
   durationMinutes?: number;
+  /** Unix timestamp (ms) when session started */
+  sessionStartedAt?: number;
   /** Called when time is up */
   onTimeUp?: () => void;
   /** Whether the timer is active */
@@ -16,24 +18,40 @@ interface SessionTimerProps {
  */
 export const SessionTimer: React.FC<SessionTimerProps> = ({
   durationMinutes,
+  sessionStartedAt,
   onTimeUp,
   active = true,
 }) => {
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const startedAtRef = useRef<number>(sessionStartedAt ?? Date.now());
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasCalledTimeUp = useRef(false);
 
   useEffect(() => {
-    if (!active) return;
+    if (sessionStartedAt) {
+      startedAtRef.current = sessionStartedAt;
+      setNowMs(Date.now());
+    }
+  }, [sessionStartedAt]);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
 
     intervalRef.current = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
+      setNowMs(Date.now());
     }, 1000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [active]);
+
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((nowMs - startedAtRef.current) / 1000)
+  );
 
   // Check if time is up
   useEffect(() => {

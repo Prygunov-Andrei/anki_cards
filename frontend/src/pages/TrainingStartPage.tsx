@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trainingService } from '../services/training.service';
 import { wordsService } from '../services/words.service';
-import type { TrainingStats, WordsStats, TrainingCardCounts } from '../types';
+import type { TrainingStats, WordsStats, TrainingCardCounts, TrainingDashboard } from '../types';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import {
@@ -14,7 +14,6 @@ import {
 } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
 import { Label } from '../components/ui/label';
-import { Badge } from '../components/ui/badge';
 import {
   GraduationCap,
   Play,
@@ -25,16 +24,17 @@ import {
   TrendingUp,
   Flame,
   ArrowLeft,
-  Layers,
-  FolderTree,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuthContext } from '../contexts/AuthContext';
+import { LiterarySourceSelector } from '../components/literary-context/LiterarySourceSelector';
 
 export default function TrainingStartPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { t } = useLanguage();
+  const { user, updateUser } = useAuthContext();
 
   // Scope from URL params
   const deckId = searchParams.get('deck_id') ? parseInt(searchParams.get('deck_id')!) : undefined;
@@ -44,8 +44,8 @@ export default function TrainingStartPage() {
 
   const [stats, setStats] = useState<TrainingStats | null>(null);
   const [wordsStats, setWordsStats] = useState<WordsStats | null>(null);
+  const [dashboard, setDashboard] = useState<TrainingDashboard | null>(null);
   const [scopedCards, setScopedCards] = useState<TrainingCardCounts | null>(null);
-  const [scopeName, setScopeName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -62,47 +62,43 @@ export default function TrainingStartPage() {
     { value: '0', label: t.trainingStart.duration.unlimited },
   ];
 
-  // Determine scope label
-  const isScoped = deckId !== undefined || categoryId !== undefined;
-  const scopeLabel = deckId
-    ? t.trainingDashboard.scope.deck
-    : categoryId
-      ? t.trainingDashboard.scope.category
-      : t.trainingDashboard.scope.general;
-
   useEffect(() => {
     let cancelled = false;
     async function loadData() {
       try {
         setIsLoading(true);
-        const [statsData, wordsData] = await Promise.all([
+        const [statsData, wordsData, dashboardData] = await Promise.all([
           trainingService.getStats('day').catch(() => null),
           wordsService.getWordsStats().catch(() => null),
+          trainingService.getDashboard().catch(() => null),
         ]);
-
-        // Load scope name + scoped card counts from dashboard
-        try {
-          const dashboard = await trainingService.getDashboard();
-          if (deckId) {
-            const deck = dashboard.decks.find((d) => d.id === deckId);
-            if (deck && !cancelled) {
-              setScopeName(deck.name);
-              setScopedCards(deck.cards);
-            }
-          } else if (categoryId) {
-            const cat = dashboard.categories.find((c) => c.id === categoryId);
-            if (cat && !cancelled) {
-              setScopeName(`${cat.icon || '📂'} ${cat.name}`);
-              setScopedCards(cat.cards);
-            }
-          }
-        } catch {
-          // Dashboard is optional, fallback to global stats
-        }
 
         if (!cancelled) {
           setStats(statsData);
           setWordsStats(wordsData);
+          setDashboard(dashboardData);
+        }
+
+        // Load scope name + scoped card counts from dashboard
+        try {
+          const data = dashboardData;
+          if (!data) return;
+
+          if (deckId) {
+            const deck = data.decks.find((d) => d.id === deckId);
+            if (deck && !cancelled) {
+              setScopedCards(deck.cards);
+            }
+          } else if (categoryId) {
+            const cat = data.categories.find((c) => c.id === categoryId);
+            if (cat && !cancelled) {
+              setScopedCards(cat.cards);
+            }
+          } else if (!cancelled) {
+            setScopedCards(null);
+          }
+        } catch {
+          // Dashboard is optional, fallback to global stats
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -112,7 +108,7 @@ export default function TrainingStartPage() {
     return () => {
       cancelled = true;
     };
-  }, [deckId, categoryId, isScoped]);
+  }, [deckId, categoryId]);
 
   const handleStart = async () => {
     setIsStarting(true);
@@ -136,6 +132,7 @@ export default function TrainingStartPage() {
         state: {
           session,
           durationMinutes: durationNum,
+          sessionStartedAt: Date.now(),
         },
       });
     } catch (error) {
@@ -145,166 +142,166 @@ export default function TrainingStartPage() {
     }
   };
 
+  const quickStreak = dashboard?.quick_stats?.streak_days ?? stats?.streak_days ?? 0;
+  const quickSuccess = dashboard?.quick_stats?.success_rate ?? stats?.success_rate ?? 0;
+  const dueCount = scopedCards?.due ?? dashboard?.quick_stats?.total_due ?? 0;
+  const totalCards =
+    scopedCards?.total ??
+    (stats
+      ? (stats.cards_by_status.learning + stats.cards_by_status.review + stats.cards_by_status.new)
+      : (wordsStats?.total_words ?? 0));
+  const learningCount = scopedCards ? scopedCards.learning : stats?.cards_by_status?.learning ?? 0;
+  const reviewCount = scopedCards ? scopedCards.review : stats?.cards_by_status?.review ?? 0;
+  const newCount = scopedCards ? scopedCards.new : stats?.cards_by_status?.new ?? 0;
+
   return (
-    <div className="container mx-auto max-w-2xl px-4 py-6 pb-20">
-      {/* Back to dashboard */}
+    <div className="container mx-auto max-w-2xl px-4 py-4 pb-20">
+      {/* Back */}
       <Button
         variant="ghost"
-        size="sm"
-        className="mb-4 -ml-2"
+        size="icon"
+        className="mb-2 -ml-2"
         onClick={() => navigate('/training')}
+        aria-label={t.common.back}
       >
-        <ArrowLeft className="mr-1 h-4 w-4" />
-        {t.trainingDashboard.title}
+        <ArrowLeft className="h-5 w-5" />
       </Button>
 
-      {/* Header */}
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg">
-          <GraduationCap className="h-8 w-8 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold">{t.trainingStart.title}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t.trainingStart.subtitle}</p>
-
-        {/* Scope indicator */}
-        {isScoped && (
-          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5">
-            {deckId ? (
-              <Layers className="h-3.5 w-3.5 text-indigo-500" />
-            ) : (
-              <FolderTree className="h-3.5 w-3.5 text-indigo-500" />
-            )}
-            <span className="text-xs font-medium">{scopeLabel}</span>
-            {scopeName && (
-              <Badge variant="secondary" className="text-[10px]">
-                {scopeName}
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Quick stats */}
+      {/* Compact stats */}
       {isLoading ? (
-        <div className="mb-6 grid grid-cols-3 gap-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-xl" />
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
       ) : (
-        <div className="mb-6 grid grid-cols-3 gap-3">
-          <div className="flex flex-col items-center rounded-xl border bg-card p-4">
-            <Flame className="mb-1 h-5 w-5 text-orange-500" />
-            <span className="text-lg font-bold">{stats?.streak_days ?? 0}</span>
-            <span className="text-xs text-muted-foreground">
-              {t.trainingStart.stats.streakDays}
-            </span>
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border bg-card p-3">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <Flame className="h-4 w-4 text-orange-500" />
+                <span className="text-sm font-semibold tabular-nums">{quickStreak}</span>
+                <span className="text-xs text-muted-foreground">{t.trainingStart.stats.streakDays}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                <span className="text-sm font-semibold tabular-nums">
+                  {Math.round(quickSuccess * 100)}%
+                </span>
+                <span className="text-xs text-muted-foreground">{t.trainingStart.stats.successRate}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-blue-500" />
+                <span className="text-sm font-semibold tabular-nums">{totalCards}</span>
+                <span className="text-xs text-muted-foreground">
+                  {scopedCards ? t.trainingStart.stats.totalCards : t.trainingStart.stats.totalWords}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex flex-col items-center rounded-xl border bg-card p-4">
-            <TrendingUp className="mb-1 h-5 w-5 text-green-500" />
-            <span className="text-lg font-bold">
-              {stats ? Math.round(stats.success_rate * 100) : 0}%
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {t.trainingStart.stats.successRate}
-            </span>
-          </div>
-          <div className="flex flex-col items-center rounded-xl border bg-card p-4">
-            <BookOpen className="mb-1 h-5 w-5 text-blue-500" />
-            <span className="text-lg font-bold">
-              {scopedCards ? scopedCards.total : (wordsStats?.total_words ?? 0)}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {scopedCards ? t.trainingStart.stats.totalCards : t.trainingStart.stats.totalWords}
-            </span>
+          <div className="rounded-xl border bg-card p-3">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-orange-500" />
+                <span className="text-sm font-semibold tabular-nums text-orange-600 dark:text-orange-400">
+                  {learningCount}
+                </span>
+                <span className="text-xs text-muted-foreground">{t.trainingStart.cardsOverview.learning}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <RotateCcw className="h-4 w-4 text-green-500" />
+                <span className="text-sm font-semibold tabular-nums text-green-600 dark:text-green-400">
+                  {reviewCount}
+                </span>
+                <span className="text-xs text-muted-foreground">{t.trainingStart.cardsOverview.review}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-blue-500" />
+                <span className="text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+                  {newCount}
+                </span>
+                <span className="text-xs text-muted-foreground">{t.trainingStart.cardsOverview.new}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-indigo-500" />
+                <span className="text-sm font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
+                  {dueCount}
+                </span>
+                <span className="text-xs text-muted-foreground">{t.trainingDashboard.due}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Cards overview -- use scoped card counts when available */}
-      {!isLoading && (scopedCards || stats?.cards_by_status) && (
-        <div className="mb-6 rounded-xl border bg-card p-4">
-          <h3 className="mb-3 text-sm font-medium">{t.trainingStart.cardsOverview.title}</h3>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <span className="text-2xl font-bold text-orange-500">
-                {scopedCards ? scopedCards.learning : stats?.cards_by_status?.learning ?? 0}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t.trainingStart.cardsOverview.learning}
-              </p>
-            </div>
-            <div>
-              <span className="text-2xl font-bold text-green-500">
-                {scopedCards ? scopedCards.review : stats?.cards_by_status?.review ?? 0}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t.trainingStart.cardsOverview.review}
-              </p>
-            </div>
-            <div>
-              <span className="text-2xl font-bold text-blue-500">
-                {scopedCards ? scopedCards.new : stats?.cards_by_status?.new ?? 0}
-              </span>
-              <p className="text-xs text-muted-foreground">{t.trainingStart.cardsOverview.new}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Session settings */}
-      <div className="mb-8 space-y-4 rounded-xl border bg-card p-4">
-        <h3 className="text-sm font-medium">{t.trainingStart.sessionSettings.title}</h3>
-
-        {/* Duration */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <Label>{t.trainingStart.sessionSettings.duration}</Label>
-          </div>
-          <Select value={duration} onValueChange={setDuration}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DURATION_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Include new */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
-            <Label>{t.trainingStart.sessionSettings.includeNew}</Label>
-          </div>
-          <Switch checked={includeNew} onCheckedChange={setIncludeNew} />
-        </div>
+      {/* Literary context selector */}
+      <div className="mb-4 rounded-xl border bg-card p-3">
+        <LiterarySourceSelector
+          activeSource={user?.active_literary_source ?? null}
+          onSourceChange={(slug) => updateUser({ active_literary_source: slug })}
+        />
       </div>
 
-      {/* Start button */}
-      <Button
-        onClick={handleStart}
-        disabled={isStarting || isLoading}
-        size="lg"
-        className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-700 py-6 text-lg font-bold text-white shadow-lg transition-all hover:from-indigo-700 hover:to-purple-800 active:scale-[0.98]"
-      >
-        {isStarting ? (
-          <>
-            <RotateCcw className="mr-2 h-5 w-5 animate-spin" />
-            {t.trainingStart.startButton.loading}
-          </>
-        ) : (
-          <>
-            <Play className="mr-2 h-5 w-5" />
-            {t.trainingStart.startButton.start}
-          </>
-        )}
-      </Button>
+      <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
+        {/* Session settings */}
+        <div className="space-y-2 rounded-xl border bg-card p-3">
+
+          {/* Duration */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Label>{t.trainingStart.sessionSettings.duration}</Label>
+            </div>
+            <Select value={duration} onValueChange={setDuration}>
+              <SelectTrigger className="h-8 w-[132px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DURATION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Include new */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-muted-foreground" />
+              <Label>{t.trainingStart.sessionSettings.includeNew}</Label>
+            </div>
+            <Switch checked={includeNew} onCheckedChange={setIncludeNew} />
+          </div>
+        </div>
+
+        {/* Start button */}
+        <div className="rounded-xl border bg-card p-3">
+          <Button
+            onClick={handleStart}
+            disabled={isStarting || isLoading}
+            size="lg"
+            className="w-full rounded-xl py-5 text-base font-bold shadow-lg transition-opacity hover:opacity-95"
+            style={{
+              background: 'linear-gradient(135deg, #4338ca 0%, #7e22ce 100%)',
+              color: '#ffffff',
+            }}
+          >
+            {isStarting ? (
+              <>
+                <RotateCcw className="mr-2 h-5 w-5 animate-spin" />
+                {t.trainingStart.startButton.loading}
+              </>
+            ) : (
+              <>
+                <Play className="mr-2 h-5 w-5" />
+                {t.trainingStart.startButton.start}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

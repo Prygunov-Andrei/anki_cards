@@ -12,12 +12,15 @@ import TrainingStartPage from './pages/TrainingStartPage';
 import TrainingSessionPage from './pages/TrainingSessionPage';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import ForgettingCurvePage from './pages/ForgettingCurvePage';
+import LibraryPage from './pages/LibraryPage';
+import ReaderPage from './pages/ReaderPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TokenProvider } from './contexts/TokenContext';
+import { DraftDeckProvider } from './contexts/DraftDeckContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
@@ -33,6 +36,7 @@ function App() {
       <AuthProvider>
         <ThemeProvider>
           <TokenProvider>
+            <DraftDeckProvider>
             <LanguageProvider>
               <Routes>
                 {/* Публичные маршруты - доступны только неавторизованным */}
@@ -153,6 +157,26 @@ function App() {
                   }
                 />
                 <Route
+                  path="/library"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <LibraryPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/library/:sourceSlug/:textSlug"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <ReaderPage />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/notifications"
                   element={
                     <ProtectedRoute>
@@ -179,6 +203,7 @@ function App() {
               </Routes>
               <Toaster position="top-center" richColors />
             </LanguageProvider>
+            </DraftDeckProvider>
           </TokenProvider>
         </ThemeProvider>
       </AuthProvider>

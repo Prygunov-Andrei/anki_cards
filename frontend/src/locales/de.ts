@@ -429,10 +429,12 @@ export const de: TranslationKeys = {
   // Header
   header: {
     home: 'Startseite',
+    create: 'Erstellen',
     training: 'Training',
     words: 'Wörter',
     categories: 'Kategorien',
     decks: 'Decks',
+    library: 'Bibliothek',
     forgettingCurve: 'Vergessenskurven',
     profile: 'Profil',
     notifications: 'Benachrichtigungen',
@@ -538,6 +540,17 @@ export const de: TranslationKeys = {
     word: 'Wort',
     words: 'Wörter',
     wordsGenitive: 'Wörter',
+
+    photoExtraction: {
+      scanFromPhoto: 'Aus Foto scannen',
+      extractingWords: 'Wörter werden extrahiert...',
+      extractedWords: 'Extrahierte Wörter',
+      noWordsFound: 'Keine Wörter im Bild gefunden',
+      addExtractedWords: 'Wörter hinzufügen',
+      wordsFound: 'Wörter gefunden',
+      cancel: 'Abbrechen',
+      extractionError: 'Fehler beim Extrahieren der Wörter aus dem Foto',
+    },
   },
 
   // Navigation
@@ -915,5 +928,132 @@ export const de: TranslationKeys = {
       imageTooLarge: 'Das Bild darf nicht größer als 10MB sein',
       dragDropHint: 'Bild hierher ziehen oder klicken zum Auswählen',
     },
+  },
+
+  // Bibliothek
+  library: {
+    title: 'Bibliothek',
+    stories: 'Geschichten',
+    translated: 'übersetzt',
+    search: 'Geschichten suchen...',
+    words: 'Wörter',
+    byLength: 'Länge',
+    empty: 'Keine literarischen Quellen verfügbar',
+    addToVocabulary: 'Zum Wortschatz',
+    alreadyInVocabulary: 'Bereits im Wortschatz',
+    wordAdded: 'Wort hinzugefügt',
+  },
+
+  // Kontexthilfe
+  help: {
+    tipsTitle: 'Tipps',
+    dontShowAgain: 'Nicht mehr anzeigen',
+    create: {
+      title: 'Deck erstellen',
+      steps: [
+        'Fotografieren Sie Wörter oder geben Sie sie manuell ein',
+        'Wählen Sie ein "Cover" — den literarischen Stil der Karten',
+        'Klicken Sie auf "Auto-Übersetzen" zum Übersetzen',
+        'Klicken Sie auf "Magie" zum Generieren von Bildern und Audio',
+        'Benennen Sie das Deck und laden Sie die .apkg-Datei herunter',
+      ],
+      tips: [
+        'Ziehen Sie einen Chip auf einen anderen, um Wörter zu einer Phrase zu verbinden',
+        'Ihr Fortschritt wird automatisch gespeichert — Sie können zu anderen Seiten navigieren',
+        'Bei Unterbrechung der Generierung — klicken Sie erneut auf "Magie", bereits generierte Bilder bleiben erhalten',
+      ],
+    },
+    words: {
+      title: 'Wortkatalog',
+      steps: [
+        'Alle Ihre Wörter aus allen Decks an einem Ort',
+        'Verwenden Sie Suche und Filter zur Navigation',
+        'Klicken Sie auf ein Wort für Details und Bearbeitung',
+      ],
+      tips: [
+        'Filtern Sie nach Kategorie, um schnell die gewünschten Wörter zu finden',
+        'Wörter ohne Kategorie können auf der Detailseite zugeordnet werden',
+      ],
+    },
+    decks: {
+      title: 'Deck-Verwaltung',
+      steps: [
+        'Hier werden alle erstellten Decks angezeigt',
+        'Klicken Sie auf ein Deck zum Herunterladen der .apkg-Datei',
+        'Verwenden Sie das Deck-Menü zum Löschen oder Invertieren',
+      ],
+      tips: [
+        'Invertieren erstellt ein Deck mit umgekehrter Übersetzungsrichtung',
+        'Die heruntergeladene .apkg-Datei kann in Anki importiert werden',
+      ],
+    },
+    training: {
+      title: 'Training',
+      steps: [
+        'Wählen Sie Kategorien oder Wörter zum Trainieren',
+        'Bewerten Sie Ihr Wissen auf einer Skala von 1 bis 5',
+        'Das System zeigt Wörter, die Sie häufiger vergessen',
+      ],
+      tips: [
+        'Regelmäßige kurze Sitzungen sind effektiver als seltene lange',
+        'Nutzen Sie die Vergessenskurve zur Fortschrittsverfolgung',
+      ],
+    },
+    categories: {
+      title: 'Kategorien',
+      steps: [
+        'Organisieren Sie Wörter nach thematischen Kategorien',
+        'Erstellen Sie verschachtelte Kategorien für genauere Klassifizierung',
+        'Ziehen Sie Kategorien, um die Hierarchie zu ändern',
+      ],
+      tips: [
+        'Kategorien helfen, das Training auf bestimmte Themen zu fokussieren',
+        'Ein Wort kann mehreren Kategorien angehören',
+      ],
+    },
+    profile: {
+      title: 'Profil',
+      steps: [
+        'Richten Sie Name, Avatar und E-Mail ein',
+        'Wählen Sie Ihre Mutter- und Lernsprache',
+        'Verwalten Sie Benachrichtigungseinstellungen',
+      ],
+      tips: [
+        'Die Oberflächensprache ändert sich je nach gewählter Muttersprache',
+      ],
+    },
+    forgettingCurve: {
+      title: 'Vergessenskurve',
+      steps: [
+        'Das Diagramm zeigt, wie schnell Sie Wörter vergessen',
+        'Je steiler die Kurve, desto schneller wird das Wort vergessen',
+        'Trainieren Sie Wörter mit steiler Kurve häufiger',
+      ],
+      tips: [
+        'Die Kurve wird nach jeder Trainingseinheit aktualisiert',
+        'Grüne Wörter sind gut gemerkt, rote brauchen Wiederholung',
+      ],
+    },
+    library: {
+      title: 'Bibliothek',
+      steps: [
+        'Wählen Sie eine Tschechow-Geschichte aus der Liste',
+        'Klicken Sie auf ein beliebiges Wort im Text, um die Übersetzung zu sehen',
+        'Klicken Sie auf "Zum Wortschatz", um das Wort zum Lernen hinzuzufügen',
+      ],
+      tips: [
+        'Wechseln Sie die Sprache (DE/RU) mit der Taste in der Kopfzeile',
+        'Ändern Sie die Schriftgröße mit der S/M/L-Taste',
+      ],
+    },
+  },
+
+  draft: {
+    restored: 'Entwurf wiederhergestellt',
+    restoredDescription: 'Wörter aus dem Entwurf geladen',
+    saved: 'Entwurf gespeichert',
+    clearAll: 'Alles löschen',
+    confirmClear: 'Alle Wörter, Übersetzungen und generierte Medien löschen?',
+    confirmLeave: 'Die Mediengenerierung ist noch nicht abgeschlossen. Seite verlassen?',
   },
 };

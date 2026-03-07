@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 # Стоимость операций
 IMAGE_GENERATION_COST = 1  # По умолчанию (для OpenAI и Gemini Pro)
 AUDIO_GENERATION_COST = 1
+PHOTO_OCR_COST = 1  # Стоимость распознавания слов с фото
 
 # Стоимость для разных моделей Gemini
 GEMINI_FLASH_COST = 0.5  # Быстрая модель (gemini-2.5-flash-image)

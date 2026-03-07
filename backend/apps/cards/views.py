@@ -54,7 +54,8 @@ from .llm_utils import (
     process_german_word,
     generate_deck_name,
     detect_category,
-    select_image_style
+    select_image_style,
+    extract_words_from_photo
 )
 from .prompt_utils import get_or_create_user_prompt, reset_user_prompt_to_default
 from .token_utils import (
@@ -360,7 +361,8 @@ def generate_cards_view(request):
                 user=request.user,
                 name=deck_name,
                 target_lang=language,
-                source_lang=request.user.native_language or 'ru'
+                source_lang=request.user.native_language or 'ru',
+                literary_source=getattr(request.user, 'active_literary_source', None),
             )
             # Добавляем слова в колоду
             word_objects = Word.objects.filter(
@@ -1073,6 +1075,91 @@ def process_german_words_view(request):
         return Response({
             'error': f'Ошибка при обработке немецкого слова: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def extract_words_from_photo_view(request):
+    """
+    Извлечение слов на изучаемом языке из фотографии текста через LLM vision.
+    Стоимость: 1 токен.
+    """
+    # Валидация
+    image_file = request.FILES.get('image')
+    target_lang = request.data.get('target_lang')
+    source_lang = request.data.get('source_lang')
+
+    if not image_file:
+        return Response({'error': 'Поле image обязательно'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not target_lang or not source_lang:
+        return Response(
+            {'error': 'Поля target_lang и source_lang обязательны'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Проверяем формат файла
+    allowed_types = ['image/jpeg', 'image/png', 'image/jpg']
+    if image_file.content_type not in allowed_types:
+        return Response(
+            {'error': f'Неподдерживаемый формат файла: {image_file.content_type}. Допустимые: JPEG, PNG'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Проверяем размер (макс 10 МБ)
+    max_size = 10 * 1024 * 1024
+    if image_file.size > max_size:
+        return Response(
+            {'error': f'Файл слишком большой ({image_file.size} байт). Максимум: 10 МБ'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Проверяем баланс токенов
+    from .token_utils import PHOTO_OCR_COST
+    balance = check_balance(request.user)
+    if balance < PHOTO_OCR_COST:
+        return Response(
+            {'error': f'Недостаточно токенов. Требуется: {PHOTO_OCR_COST}, доступно: {balance}'},
+            status=status.HTTP_402_PAYMENT_REQUIRED
+        )
+
+    try:
+        # Списываем токены
+        token, success = spend_tokens(
+            request.user,
+            PHOTO_OCR_COST,
+            description=f"Распознавание слов с фото ({target_lang} → {source_lang})"
+        )
+
+        if not success:
+            return Response(
+                {'error': 'Не удалось списать токены'},
+                status=status.HTTP_402_PAYMENT_REQUIRED
+            )
+
+        # Читаем байты изображения
+        image_data = image_file.read()
+
+        # Извлекаем слова
+        words = extract_words_from_photo(
+            image_data=image_data,
+            target_lang=target_lang,
+            source_lang=source_lang,
+        )
+
+        return Response({'words': words}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        # Возвращаем токены при ошибке
+        refund_tokens(
+            request.user,
+            PHOTO_OCR_COST,
+            description=f"Возврат за ошибку распознавания слов с фото"
+        )
+        return Response(
+            {'error': f'Ошибка при извлечении слов из фото: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 # ========== ЭТАП 7: Управление колодами и карточками ==========

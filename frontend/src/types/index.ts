@@ -18,6 +18,8 @@ export interface User {
   image_provider?: 'openai' | 'gemini' | 'nano-banana'; // Провайдер генерации изображений
   gemini_model?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'; // Модель Gemini для генерации изображений (deprecated, используется image_provider)
   audio_provider?: 'openai' | 'gtts'; // Провайдер генерации аудио
+  image_style?: 'minimalistic' | 'balanced' | 'creative'; // Стиль генерации изображений
+  active_literary_source?: string | null; // Активный литературный контекст (slug)
 }
 
 // ========== WORD ==========
@@ -68,7 +70,16 @@ export interface Word {
   stickers: string[];  // ["❤️", "⭐"]
   learning_status: LearningStatus;
   categories?: Array<{ id: number; name: string; icon: string }>;
-  
+  literary_context?: {
+    source_slug: string;
+    hint_text: string;
+    sentences: Array<{ text: string; source: string }>;
+    scene_description: string;
+    match_method: string;
+    is_fallback: boolean;
+    image_url: string | null;
+  } | null;
+
   created_at: string;
   updated_at: string;
 }

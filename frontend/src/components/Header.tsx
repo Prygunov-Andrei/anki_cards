@@ -4,8 +4,9 @@ import { useAuthContext } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTokenContext } from '../contexts/TokenContext';
 import { useTranslation } from '../contexts/LanguageContext';
+import { useDraftDeck } from '../contexts/DraftDeckContext';
 import { getUserAvatarUrl } from '../utils/url-helpers';
-import { Menu, X, User, LogOut, UserCircle, Plus, Layers, BookOpen, FolderTree, GraduationCap, Sun, Moon, Bell, TrendingDown } from 'lucide-react';
+import { Menu, X, User, LogOut, UserCircle, Plus, Layers, BookOpen, FolderTree, GraduationCap, Sun, Moon, Bell, TrendingDown, Wand2, Library } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const t = useTranslation();
+  const { hasDraft } = useDraftDeck();
 
   const handleLogout = async () => {
     await logout();
@@ -42,10 +44,12 @@ export const Header: React.FC = () => {
   };
 
   const navLinks = [
+    { to: '/', label: t.header.create, icon: Wand2, badge: hasDraft },
     { to: '/training', label: t.header.training, icon: GraduationCap },
     { to: '/words', label: t.header.words, icon: BookOpen },
     { to: '/categories', label: t.header.categories, icon: FolderTree },
     { to: '/decks', label: t.header.decks, icon: Layers },
+    { to: '/library', label: t.header.library || 'Library', icon: Library },
     { to: '/forgetting-curve', label: t.header.forgettingCurve, icon: TrendingDown },
   ];
 
@@ -104,9 +108,6 @@ export const Header: React.FC = () => {
               alt="ANKI Generator Logo"
               className="h-20 w-20 rounded-xl object-cover relative top-1 -left-1 md:top-0 md:left-0"
             />
-            <span className="hidden text-xl font-semibold sm:inline-block dark:text-gray-100">
-              ANKI Generator
-            </span>
           </Link>
 
           {/* Desktop навигация */}
@@ -117,7 +118,7 @@ export const Header: React.FC = () => {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`flex items-center space-x-2 rounded-lg px-4 py-2 transition-all ${
+                  className={`relative flex items-center space-x-2 rounded-lg px-4 py-2 transition-all ${
                     isActive(link.to)
                       ? 'bg-blue-50 text-blue-600 shadow-sm dark:bg-blue-950/50 dark:text-blue-400'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'
@@ -125,6 +126,9 @@ export const Header: React.FC = () => {
                 >
                   <Icon className="h-5 w-5" />
                   <span>{link.label}</span>
+                  {link.badge && (
+                    <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-orange-500 ring-2 ring-white dark:ring-gray-950" />
+                  )}
                 </Link>
               );
             })}
@@ -252,7 +256,7 @@ export const Header: React.FC = () => {
                           key={link.to}
                           to={link.to}
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className={`flex items-center space-x-3 rounded-lg px-4 py-3 transition-all ${
+                          className={`relative flex items-center space-x-3 rounded-lg px-4 py-3 transition-all ${
                             isActive(link.to)
                               ? 'bg-blue-50 text-blue-600 shadow-sm dark:bg-blue-950/50 dark:text-blue-400'
                               : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
@@ -260,6 +264,9 @@ export const Header: React.FC = () => {
                         >
                           <Icon className="h-5 w-5" />
                           <span>{link.label}</span>
+                          {link.badge && (
+                            <span className="ml-auto h-2.5 w-2.5 rounded-full bg-orange-500" />
+                          )}
                         </Link>
                       );
                     })}

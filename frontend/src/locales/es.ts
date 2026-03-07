@@ -411,10 +411,12 @@ export const es: TranslationKeys = {
 
   header: {
     home: 'Inicio',
+    create: 'Crear',
     training: 'Entrenamiento',
     words: 'Palabras',
     categories: 'Categorías',
     decks: 'Mazos',
+    library: 'Biblioteca',
     forgettingCurve: 'Curvas de olvido',
     profile: 'Perfil',
     notifications: 'Notificaciones',
@@ -518,6 +520,17 @@ export const es: TranslationKeys = {
     word: 'palabra',
     words: 'palabras',
     wordsGenitive: 'palabras',
+
+    photoExtraction: {
+      scanFromPhoto: 'Escanear desde foto',
+      extractingWords: 'Extrayendo palabras...',
+      extractedWords: 'Palabras extraídas',
+      noWordsFound: 'No se encontraron palabras en esta imagen',
+      addExtractedWords: 'Agregar palabras',
+      wordsFound: 'palabras encontradas',
+      cancel: 'Cancelar',
+      extractionError: 'Error al extraer palabras de la foto',
+    },
   },
 
   nav: {
@@ -852,5 +865,130 @@ export const es: TranslationKeys = {
       imageTooLarge: 'La imagen no debe superar los 10MB',
       dragDropHint: 'Arrastra una imagen aquí o haz clic para seleccionar',
     },
+  },
+
+  library: {
+    title: 'Biblioteca',
+    stories: 'historias',
+    translated: 'traducidas',
+    search: 'Buscar historias...',
+    words: 'palabras',
+    byLength: 'Longitud',
+    empty: 'No hay fuentes literarias disponibles',
+    addToVocabulary: 'Al vocabulario',
+    alreadyInVocabulary: 'Ya en el vocabulario',
+    wordAdded: 'Palabra añadida',
+  },
+
+  help: {
+    tipsTitle: 'Consejos',
+    dontShowAgain: 'No mostrar más',
+    create: {
+      title: 'Crear un mazo',
+      steps: [
+        'Fotografíe palabras o escríbalas manualmente',
+        'Elija una "portada" — el estilo literario de las tarjetas',
+        'Haga clic en "Traducción automática" para traducir las palabras',
+        'Haga clic en "Magia" para generar imágenes y audio',
+        'Nombre el mazo y descargue el archivo .apkg',
+      ],
+      tips: [
+        'Arrastre un chip sobre otro para combinar palabras en una frase',
+        'Su progreso se guarda automáticamente — puede navegar a otras páginas',
+        'Si la generación se interrumpió — haga clic en "Magia" de nuevo, las imágenes ya generadas no se perderán',
+      ],
+    },
+    words: {
+      title: 'Catálogo de palabras',
+      steps: [
+        'Todas sus palabras de todos los mazos en un solo lugar',
+        'Use la búsqueda y los filtros para navegar',
+        'Haga clic en una palabra para ver detalles y editar',
+      ],
+      tips: [
+        'Filtre por categoría para encontrar rápidamente las palabras deseadas',
+        'Las palabras sin categoría se pueden asignar en la página de detalles',
+      ],
+    },
+    decks: {
+      title: 'Gestión de mazos',
+      steps: [
+        'Todos los mazos creados se muestran aquí',
+        'Haga clic en un mazo para descargar el archivo .apkg',
+        'Use el menú del mazo para eliminar o invertir',
+      ],
+      tips: [
+        'Invertir crea un mazo con dirección de traducción invertida',
+        'El archivo .apkg descargado se puede importar en Anki',
+      ],
+    },
+    training: {
+      title: 'Entrenamiento',
+      steps: [
+        'Seleccione categorías o palabras para entrenar',
+        'Califique su conocimiento en una escala del 1 al 5',
+        'El sistema mostrará las palabras que olvida con más frecuencia',
+      ],
+      tips: [
+        'Las sesiones cortas regulares son más efectivas que las largas ocasionales',
+        'Use la curva de olvido para seguir su progreso',
+      ],
+    },
+    categories: {
+      title: 'Categorías',
+      steps: [
+        'Organice palabras por categorías temáticas',
+        'Cree categorías anidadas para una clasificación más precisa',
+        'Arrastre categorías para cambiar la jerarquía',
+      ],
+      tips: [
+        'Las categorías ayudan a enfocar el entrenamiento en temas específicos',
+        'Una palabra puede pertenecer a varias categorías',
+      ],
+    },
+    profile: {
+      title: 'Perfil',
+      steps: [
+        'Configure su nombre, avatar y correo electrónico',
+        'Elija su idioma nativo y el idioma de aprendizaje',
+        'Gestione la configuración de notificaciones',
+      ],
+      tips: [
+        'El idioma de la interfaz cambia según el idioma nativo seleccionado',
+      ],
+    },
+    forgettingCurve: {
+      title: 'Curva de olvido',
+      steps: [
+        'El gráfico muestra qué tan rápido olvida las palabras',
+        'Cuanto más empinada la curva, más rápido se olvida la palabra',
+        'Entrene con más frecuencia las palabras con curva empinada',
+      ],
+      tips: [
+        'La curva se actualiza después de cada sesión de entrenamiento',
+        'Las palabras verdes están bien memorizadas, las rojas necesitan repaso',
+      ],
+    },
+    library: {
+      title: 'Biblioteca',
+      steps: [
+        'Elige un cuento de Chéjov de la lista',
+        'Haz clic en cualquier palabra del texto para ver su traducción',
+        'Haz clic en "Al vocabulario" para empezar a aprender la palabra',
+      ],
+      tips: [
+        'Cambia el idioma (DE/RU) con el botón en el encabezado',
+        'Cambia el tamaño de fuente con el botón S/M/L',
+      ],
+    },
+  },
+
+  draft: {
+    restored: 'Borrador restaurado',
+    restoredDescription: 'palabras cargadas del borrador',
+    saved: 'Borrador guardado',
+    clearAll: 'Borrar todo',
+    confirmClear: '¿Eliminar todas las palabras, traducciones y medios generados?',
+    confirmLeave: 'La generación de medios aún está en progreso. ¿Abandonar la página?',
   },
 };

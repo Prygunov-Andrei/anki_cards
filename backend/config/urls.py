@@ -38,6 +38,7 @@ urlpatterns = [
     path('api/words/', include('apps.words.urls')),
     path('api/cards/', include('apps.cards.urls')),
     path('api/training/', include('apps.training.urls')),
+    path('api/literary-context/', include('apps.literary_context.urls')),
     path('api/media/', include((media_urlpatterns, 'media'), namespace='media')),
     path('api/user/', include((prompt_urlpatterns, 'prompts'), namespace='prompts')),
     path('api/cards/', include((analysis_urlpatterns, 'analysis'), namespace='analysis')),

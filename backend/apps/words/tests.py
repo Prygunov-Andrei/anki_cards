@@ -1589,3 +1589,131 @@ class TestWordsCatalogAPI:
         assert 'cards_count' in word_data
         assert 'categories' in word_data
         assert 'decks' in word_data
+
+
+# ═══════════════════════════════════════════════════════════════
+# BULK-CREATE & CHECK-MEDIA TESTS
+# ═══════════════════════════════════════════════════════════════
+
+@pytest.mark.django_db
+class TestBulkCreate:
+    """Tests for POST /api/words/bulk-create/"""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='bulkuser', email='bulk@test.com', password='pass123'
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_new_words(self):
+        payload = {
+            'words': [
+                {'original_word': 'Haus', 'translation': 'дом', 'language': 'de'},
+                {'original_word': 'Katze', 'translation': 'кошка', 'language': 'de'},
+            ]
+        }
+        response = self.client.post('/api/words/bulk-create/', payload, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['words']) == 2
+        assert response.data['words'][0]['is_new'] is True
+        assert response.data['words'][0]['original_word'] == 'Haus'
+        assert response.data['words'][1]['original_word'] == 'Katze'
+        assert Word.objects.filter(user=self.user).count() == 2
+
+    def test_deduplication(self):
+        Word.objects.create(
+            user=self.user, original_word='Haus', translation='дом', language='de'
+        )
+        payload = {
+            'words': [
+                {'original_word': 'Haus', 'translation': 'дом', 'language': 'de'},
+                {'original_word': 'Katze', 'translation': 'кошка', 'language': 'de'},
+            ]
+        }
+        response = self.client.post('/api/words/bulk-create/', payload, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['words'][0]['is_new'] is False
+        assert response.data['words'][1]['is_new'] is True
+        assert Word.objects.filter(user=self.user).count() == 2
+
+    def test_updates_empty_translation(self):
+        word = Word.objects.create(
+            user=self.user, original_word='Haus', translation='', language='de'
+        )
+        payload = {
+            'words': [{'original_word': 'Haus', 'translation': 'дом', 'language': 'de'}]
+        }
+        response = self.client.post('/api/words/bulk-create/', payload, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        word.refresh_from_db()
+        assert word.translation == 'дом'
+
+    def test_has_media_flags(self):
+        Word.objects.create(
+            user=self.user, original_word='Haus', translation='дом', language='de',
+            image_file='images/haus.png',
+        )
+        payload = {
+            'words': [{'original_word': 'Haus', 'language': 'de'}]
+        }
+        response = self.client.post('/api/words/bulk-create/', payload, format='json')
+        assert response.data['words'][0]['has_image'] is True
+        assert response.data['words'][0]['has_audio'] is False
+        assert response.data['words'][0]['image_url'] is not None
+
+    def test_unauthorized(self):
+        client = APIClient()
+        response = client.post('/api/words/bulk-create/', {'words': []}, format='json')
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_empty_words_list(self):
+        response = self.client.post('/api/words/bulk-create/', {'words': []}, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestCheckMedia:
+    """Tests for POST /api/words/check-media/"""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='mediauser', email='media@test.com', password='pass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='otheruser', email='other@test.com', password='pass123'
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_check_media_returns_status(self):
+        w1 = Word.objects.create(
+            user=self.user, original_word='Haus', translation='дом', language='de',
+            image_file='images/haus.png',
+        )
+        w2 = Word.objects.create(
+            user=self.user, original_word='Katze', translation='кошка', language='de',
+        )
+        payload = {'word_ids': [w1.id, w2.id]}
+        response = self.client.post('/api/words/check-media/', payload, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['words']) == 2
+
+        by_id = {w['id']: w for w in response.data['words']}
+        assert by_id[w1.id]['has_image'] is True
+        assert by_id[w1.id]['has_audio'] is False
+        assert by_id[w2.id]['has_image'] is False
+
+    def test_filters_by_user(self):
+        other_word = Word.objects.create(
+            user=self.other_user, original_word='Haus', translation='дом', language='de',
+        )
+        payload = {'word_ids': [other_word.id]}
+        response = self.client.post('/api/words/check-media/', payload, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['words']) == 0
+
+    def test_unauthorized(self):
+        client = APIClient()
+        response = client.post('/api/words/check-media/', {'word_ids': [1]}, format='json')
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

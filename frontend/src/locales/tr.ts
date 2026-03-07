@@ -231,6 +231,8 @@ export const tr: TranslationKeys = {
     deleteImage: 'Görsel',
     deleteAudio: 'Ses',
     editImage: 'Görseli düzenle',
+    enterWordsPlaceholder: 'Kelimeleri girin:',
+    commaSeparated: '(noktalı virgül, yeni satır veya Enter)',
     mixinPlaceholder: 'Örneğin: daha koyu yap, gülümseme ekle',
     mixinExample: 'Neyi değiştirmek istediğinizi açıklayın',
     edit: 'Düzenle',
@@ -447,10 +449,12 @@ export const tr: TranslationKeys = {
   // Başlık
   header: {
     home: 'Ana sayfa',
+    create: 'Oluştur',
     training: 'Eğitim',
     words: 'Kelimeler',
     categories: 'Kategoriler',
     decks: 'Desteler',
+    library: 'Kütüphane',
     forgettingCurve: 'Unutma eğrileri',
     profile: 'Profil',
     notifications: 'Bildirimler',
@@ -566,6 +570,17 @@ export const tr: TranslationKeys = {
     word: 'kelime',
     words: 'kelime',
     wordsGenitive: 'kelime',
+
+    photoExtraction: {
+      scanFromPhoto: 'Fotodan tara',
+      extractingWords: 'Kelimeler ayiklanıyor...',
+      extractedWords: 'Ayıklanan kelimeler',
+      noWordsFound: 'Resimde kelime bulunamadı',
+      addExtractedWords: 'Kelimeleri ekle',
+      wordsFound: 'kelime bulundu',
+      cancel: 'İptal',
+      extractionError: 'Fotodan kelime ayıklama hatası',
+    },
   },
 
   // Navigasyon
@@ -937,5 +952,130 @@ export const tr: TranslationKeys = {
       imageTooLarge: 'Resim 10MB\'den küçük olmalıdır',
       dragDropHint: 'Bir resmi buraya sürükleyin veya seçmek için tıklayın',
     },
+  },
+
+  library: {
+    title: 'Kütüphane',
+    stories: 'hikaye',
+    translated: 'çevrilmiş',
+    search: 'Hikaye ara...',
+    words: 'kelime',
+    byLength: 'Uzunluk',
+    empty: 'Edebi kaynak bulunamadı',
+    addToVocabulary: 'Sözlüğe ekle',
+    alreadyInVocabulary: 'Zaten sözlükte',
+    wordAdded: 'Kelime eklendi',
+  },
+
+  help: {
+    tipsTitle: 'İpuçları',
+    dontShowAgain: 'Bir daha gösterme',
+    create: {
+      title: 'Deste Oluşturma',
+      steps: [
+        'Kelimelerin fotoğrafını çekin veya elle girin',
+        'Bir "kapak" seçin — kartların edebi stili',
+        '"Otomatik çevir"e tıklayarak kelimeleri çevirin',
+        '"Sihir"e tıklayarak görsel ve ses oluşturun',
+        'Desteye ad verin ve .apkg dosyasını indirin',
+      ],
+      tips: [
+        'Kelimeleri birleştirmek için bir çipi diğerinin üzerine sürükleyin',
+        'İlerlemeniz otomatik olarak kaydedilir — diğer sayfalara geçebilirsiniz',
+        'Oluşturma kesildiyse — "Sihir"e tekrar tıklayın, hazır görseller kaybolmaz',
+      ],
+    },
+    words: {
+      title: 'Kelime Kataloğu',
+      steps: [
+        'Tüm destelerinizdeki tüm kelimeler tek yerde',
+        'Gezinmek için arama ve filtreleri kullanın',
+        'Ayrıntıları görüntülemek için bir kelimeye tıklayın',
+      ],
+      tips: [
+        'İstediğiniz kelimeleri hızlıca bulmak için kategoriye göre filtreleyin',
+        'Kategorisi olmayan kelimeler detay sayfasında atanabilir',
+      ],
+    },
+    decks: {
+      title: 'Deste Yönetimi',
+      steps: [
+        'Oluşturulan tüm desteler burada gösterilir',
+        '.apkg dosyasını indirmek için bir desteye tıklayın',
+        'Silmek veya ters çevirmek için deste menüsünü kullanın',
+      ],
+      tips: [
+        'Ters çevirme, ters çeviri yönüne sahip bir deste oluşturur',
+        'İndirilen .apkg dosyası Anki\'ye aktarılabilir',
+      ],
+    },
+    training: {
+      title: 'Eğitim',
+      steps: [
+        'Eğitmek için kategori veya kelime seçin',
+        'Bilginizi 1-5 arası puanlayın',
+        'Sistem daha sık unuttuğunuz kelimeleri gösterecek',
+      ],
+      tips: [
+        'Düzenli kısa oturumlar nadir uzun oturumlardan daha etkilidir',
+        'İlerlemenizi takip etmek için unutma eğrisini kullanın',
+      ],
+    },
+    categories: {
+      title: 'Kategoriler',
+      steps: [
+        'Kelimeleri tematik kategorilere göre düzenleyin',
+        'Daha hassas sınıflandırma için iç içe kategoriler oluşturun',
+        'Hiyerarşiyi değiştirmek için kategorileri sürükleyin',
+      ],
+      tips: [
+        'Kategoriler eğitimi belirli konulara odaklamaya yardımcı olur',
+        'Bir kelime birden fazla kategoriye ait olabilir',
+      ],
+    },
+    profile: {
+      title: 'Profil',
+      steps: [
+        'Adınızı, avatarınızı ve e-postanızı ayarlayın',
+        'Ana dilinizi ve öğrendiğiniz dili seçin',
+        'Bildirim ayarlarını yönetin',
+      ],
+      tips: [
+        'Arayüz dili seçilen ana dile göre değişir',
+      ],
+    },
+    forgettingCurve: {
+      title: 'Unutma Eğrisi',
+      steps: [
+        'Grafik kelimeleri ne kadar çabuk unuttuğunuzu gösterir',
+        'Eğri ne kadar dik olursa kelime o kadar çabuk unutulur',
+        'Dik eğrili kelimeleri daha sık çalışın',
+      ],
+      tips: [
+        'Eğri her eğitim oturumundan sonra güncellenir',
+        'Yeşil kelimeler iyi hatırlanmış, kırmızılar tekrar gerektirir',
+      ],
+    },
+    library: {
+      title: 'Kütüphane',
+      steps: [
+        'Listeden bir Çehov hikayesi seçin',
+        'Çevirisini görmek için metindeki herhangi bir kelimeye tıklayın',
+        'Kelimeyi öğrenmeye başlamak için "Sözlüğe ekle" ye tıklayın',
+      ],
+      tips: [
+        'Başlıktaki düğmeyle dili değiştirin (DE/RU)',
+        'S/M/L düğmesiyle yazı boyutunu değiştirin',
+      ],
+    },
+  },
+
+  draft: {
+    restored: 'Taslak geri yüklendi',
+    restoredDescription: 'taslaktan yüklenen kelimeler',
+    saved: 'Taslak kaydedildi',
+    clearAll: 'Tümünü temizle',
+    confirmClear: 'Tüm kelimeler, çeviriler ve oluşturulan medya silinsin mi?',
+    confirmLeave: 'Medya oluşturma hâlâ devam ediyor. Sayfadan ayrılmak istiyor musunuz?',
   },
 };

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,135 +12,64 @@ import {
 import { Button } from '../ui/button';
 import {
   MoreVertical,
-  BookOpen,
-  MessageSquare,
-  Lightbulb,
-  Users,
-  Image,
-  Mic,
-  Upload,
+  RefreshCw,
+  ArrowRight,
+  ImageIcon,
+  Volume2,
   Trash2,
-  ExternalLink,
+  Wand2,
   Loader2,
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { aiGenerationService } from '../../services/ai-generation.service';
 import { deckService } from '../../services/deck.service';
+import { wordsService } from '../../services/words.service';
+import { ImageEditModal } from '../ImageEditModal';
 import type { CardListItem } from '../../types';
 import type { WordDetail } from './TrainingCard';
 
 interface TrainingCardMenuProps {
   card: CardListItem;
-  wordDetail: WordDetail | null;
-  onUpdateWordDetail: (cardId: number, updates: Partial<WordDetail>) => void;
+  wordDetail?: WordDetail | null;
+  availableDecks?: Array<{ id: number; name: string }>;
+  onDeleteWord: (wordId: number) => Promise<void>;
+  onMoveToDeck: (wordId: number, deckId: number, deckName: string) => Promise<void>;
   onUpdateCardMedia: (cardId: number, updates: { image_file?: string; audio_file?: string }) => void;
-  onStartRecording: () => void;
-  onStartImageUpload: () => void;
+  onUpdateWordDetail?: (cardId: number, updates: Partial<WordDetail>) => void;
 }
 
 type GeneratingState = {
-  etymology?: boolean;
-  sentences?: boolean;
-  hint?: boolean;
-  synonym?: boolean;
   image?: boolean;
   audio?: boolean;
+  imageEdit?: boolean;
+  deletingWord?: boolean;
 };
 
 /**
- * Меню "три точки" на тренировочной карточке.
- * Позволяет генерировать/перегенерировать контент, загружать медиа, записывать аудио.
+ * Лаконичное меню "три точки" на тренировочной карточке:
+ * Перегенерировать (изображение/аудио), изменить картинку, удалить (слово/изобр./аудио), переместить в колоду.
  */
 export const TrainingCardMenu: React.FC<TrainingCardMenuProps> = ({
   card,
   wordDetail,
-  onUpdateWordDetail,
+  availableDecks,
+  onDeleteWord,
+  onMoveToDeck,
   onUpdateCardMedia,
-  onStartRecording,
-  onStartImageUpload,
+  onUpdateWordDetail,
 }) => {
   const { t } = useLanguage();
-  const navigate = useNavigate();
   const [generating, setGenerating] = useState<GeneratingState>({});
+  const [movingDeckId, setMovingDeckId] = useState<number | null>(null);
+  const [isImageEditOpen, setIsImageEditOpen] = useState(false);
 
   const setGen = (key: keyof GeneratingState, val: boolean) => {
     setGenerating((prev) => ({ ...prev, [key]: val }));
   };
 
-  const hasEtymology = !!wordDetail?.etymology;
-  const hasSentences = wordDetail?.sentences && wordDetail.sentences.length > 0;
-  const hasHint = !!wordDetail?.hint_text;
   const hasImage = !!card.image_file || !!wordDetail?.image_file || !!wordDetail?.image_url;
   const hasAudio = !!card.audio_file;
 
-  // --- Handlers ---
-
-  const handleGenerateEtymology = async () => {
-    setGen('etymology', true);
-    try {
-      const res = await aiGenerationService.generateEtymology({
-        word_id: card.word_id,
-        force_regenerate: hasEtymology,
-      });
-      onUpdateWordDetail(card.id, { etymology: res.etymology });
-    } catch {
-      // Could show a toast here
-    } finally {
-      setGen('etymology', false);
-    }
-  };
-
-  const handleGenerateSentences = async () => {
-    setGen('sentences', true);
-    try {
-      const res = await aiGenerationService.generateSentences({
-        word_id: card.word_id,
-        count: 2,
-      });
-      const newSentences = res.sentences.map((s: string) => ({ text: s, source: 'ai' }));
-      onUpdateWordDetail(card.id, {
-        sentences: [...(wordDetail?.sentences || []), ...newSentences],
-      });
-    } catch {
-      // Could show a toast here
-    } finally {
-      setGen('sentences', false);
-    }
-  };
-
-  const handleGenerateHint = async () => {
-    setGen('hint', true);
-    try {
-      const res = await aiGenerationService.generateHint({
-        word_id: card.word_id,
-        force_regenerate: hasHint,
-      });
-      onUpdateWordDetail(card.id, {
-        hint_text: res.hint_text,
-        hint_audio: res.hint_audio_url ?? undefined,
-      });
-    } catch {
-      // Could show a toast here
-    } finally {
-      setGen('hint', false);
-    }
-  };
-
-  const handleGenerateSynonym = async () => {
-    setGen('synonym', true);
-    try {
-      await aiGenerationService.generateSynonym({
-        word_id: card.word_id,
-        create_card: true,
-      });
-    } catch {
-      // Could show a toast here
-    } finally {
-      setGen('synonym', false);
-    }
-  };
-
-  const handleGenerateImage = async (provider: 'openai' | 'gemini') => {
+  const handleGenerateImage = async () => {
     setGen('image', true);
     try {
       const lang = wordDetail?.language || 'en';
@@ -150,12 +78,11 @@ export const TrainingCardMenu: React.FC<TrainingCardMenuProps> = ({
         translation: card.word_translation,
         language: lang,
         image_style: 'balanced',
-        provider,
         word_id: card.word_id,
       });
       const newUrl = res.image_url;
       onUpdateCardMedia(card.id, { image_file: newUrl });
-      onUpdateWordDetail(card.id, { image_file: newUrl, image_url: newUrl });
+      onUpdateWordDetail?.(card.id, { image_file: newUrl, image_url: newUrl });
     } catch {
       // Could show a toast here
     } finally {
@@ -163,24 +90,38 @@ export const TrainingCardMenu: React.FC<TrainingCardMenuProps> = ({
     }
   };
 
+  const handleEditImage = async (mixin: string) => {
+    setGen('imageEdit', true);
+    try {
+      const res = await deckService.editImage({
+        word_id: card.word_id,
+        mixin,
+      });
+      const newUrl = res.image_url;
+      onUpdateCardMedia(card.id, { image_file: newUrl });
+      onUpdateWordDetail?.(card.id, { image_file: newUrl, image_url: newUrl });
+    } finally {
+      setGen('imageEdit', false);
+    }
+  };
+
   const handleDeleteImage = async () => {
     try {
-      // Set image to empty to clear it visually; backend update is via word
+      await wordsService.updateWord(card.word_id, { image_file: null });
       onUpdateCardMedia(card.id, { image_file: '' });
-      onUpdateWordDetail(card.id, { image_file: undefined, image_url: undefined });
+      onUpdateWordDetail?.(card.id, { image_file: undefined, image_url: undefined });
     } catch {
       // Silent
     }
   };
 
-  const handleGenerateAudio = async (provider: 'openai' | 'gtts') => {
+  const handleGenerateAudio = async () => {
     setGen('audio', true);
     try {
       const lang = wordDetail?.language || 'en';
       const res = await deckService.generateAudio({
         word: card.word_text,
         language: lang,
-        provider,
         word_id: card.word_id,
       });
       const newUrl = res.audio_url;
@@ -194,165 +135,146 @@ export const TrainingCardMenu: React.FC<TrainingCardMenuProps> = ({
 
   const handleDeleteAudio = async () => {
     try {
+      await wordsService.updateWord(card.word_id, { audio_file: null });
       onUpdateCardMedia(card.id, { audio_file: '' });
     } catch {
       // Silent
     }
   };
 
-  const handleOpenWord = () => {
-    navigate(`/words/${card.word_id}`);
+  const handleMoveToDeck = async (deckId: number, deckName: string) => {
+    setMovingDeckId(deckId);
+    try {
+      await onMoveToDeck(card.word_id, deckId, deckName);
+    } finally {
+      setMovingDeckId(null);
+    }
+  };
+
+  const handleDeleteWord = async () => {
+    setGen('deletingWord', true);
+    try {
+      await onDeleteWord(card.word_id);
+    } finally {
+      setGen('deletingWord', false);
+    }
   };
 
   const isAnyGenerating = Object.values(generating).some(Boolean);
 
+  const wordsText = t.words;
   const menu = t.trainingCard?.menu;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 flex-shrink-0"
+          variant="secondary"
+          size="sm"
+          className="h-10 w-10 flex-shrink-0 rounded-full p-0 shadow-lg"
           onClick={(e) => e.preventDefault()}
         >
           {isAnyGenerating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
-            <MoreVertical className="h-4 w-4" />
+            <MoreVertical className="h-5 w-5" />
           )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        {/* Etymology */}
-        <DropdownMenuItem
-          onClick={handleGenerateEtymology}
-          disabled={generating.etymology}
-        >
-          <BookOpen className="mr-2 h-4 w-4" />
-          {generating.etymology
-            ? (menu?.generating || 'Generating...')
-            : hasEtymology
-              ? (menu?.regenerateEtymology || 'Regenerate etymology')
-              : (menu?.generateEtymology || 'Generate etymology')}
-        </DropdownMenuItem>
+        {/* Regenerate submenu */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger disabled={generating.image || generating.audio}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            {wordsText?.regenerate || 'Regenerate'}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onClick={handleGenerateImage} disabled={generating.image}>
+              <ImageIcon className="mr-2 h-4 w-4" />
+              {wordsText?.regenerateImage || 'Regenerate image'}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleGenerateAudio} disabled={generating.audio}>
+              <Volume2 className="mr-2 h-4 w-4" />
+              {wordsText?.regenerateAudio || 'Regenerate audio'}
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
-        {/* Sentences */}
-        <DropdownMenuItem
-          onClick={handleGenerateSentences}
-          disabled={generating.sentences}
-        >
-          <MessageSquare className="mr-2 h-4 w-4" />
-          {generating.sentences
-            ? (menu?.generating || 'Generating...')
-            : (menu?.sentences || 'Generate examples')}
-        </DropdownMenuItem>
+        {hasImage && (
+          <DropdownMenuItem
+            onClick={() => setIsImageEditOpen(true)}
+            disabled={generating.imageEdit}
+          >
+            <Wand2 className="mr-2 h-4 w-4" />
+            {wordsText?.editImage || 'Edit image'}
+          </DropdownMenuItem>
+        )}
 
-        {/* Hint */}
-        <DropdownMenuItem
-          onClick={handleGenerateHint}
-          disabled={generating.hint}
-        >
-          <Lightbulb className="mr-2 h-4 w-4" />
-          {generating.hint
-            ? (menu?.generating || 'Generating...')
-            : hasHint
-              ? (menu?.hints || 'Regenerate hint')
-              : (menu?.hints || 'Generate hint')}
-        </DropdownMenuItem>
-
-        {/* Synonym */}
-        <DropdownMenuItem
-          onClick={handleGenerateSynonym}
-          disabled={generating.synonym}
-        >
-          <Users className="mr-2 h-4 w-4" />
-          {generating.synonym
-            ? (menu?.generating || 'Generating...')
-            : (menu?.synonyms || 'Generate synonym')}
-        </DropdownMenuItem>
+        {/* Move to deck submenu */}
+        {availableDecks && availableDecks.length > 0 && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={movingDeckId !== null}>
+              <ArrowRight className="mr-2 h-4 w-4" />
+              {wordsText?.moveToDeck || 'Move to deck'}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {availableDecks.map((deck) => (
+                <DropdownMenuItem
+                  key={deck.id}
+                  onClick={() => handleMoveToDeck(deck.id, deck.name)}
+                  disabled={movingDeckId !== null}
+                >
+                  {deck.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
 
         <DropdownMenuSeparator />
 
-        {/* Image submenu */}
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger disabled={generating.image}>
-            <Image className="mr-2 h-4 w-4" />
-            {generating.image
-              ? (menu?.generating || 'Generating...')
-              : (menu?.image || 'Image')}
+          <DropdownMenuSubTrigger className="text-destructive focus:text-destructive">
+            <Trash2 className="mr-2 h-4 w-4" />
+            {wordsText?.delete || 'Delete'}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            <DropdownMenuItem onClick={() => handleGenerateImage('openai')}>
-              {menu?.generateImage || 'Generate'} (OpenAI)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleGenerateImage('gemini')}>
-              {menu?.generateImage || 'Generate'} (Gemini)
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onStartImageUpload}>
-              <Upload className="mr-2 h-4 w-4" />
-              {menu?.uploadImage || 'Upload image'}
+            <DropdownMenuItem
+              onClick={handleDeleteWord}
+              disabled={!!generating.deletingWord}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {wordsText?.word || 'Word'}
             </DropdownMenuItem>
             {hasImage && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleDeleteImage}
-                  className="text-destructive"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  {menu?.deleteImage || 'Delete image'}
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem
+                onClick={handleDeleteImage}
+                className="text-destructive focus:text-destructive"
+              >
+                <ImageIcon className="mr-2 h-4 w-4" />
+                {wordsText?.deleteImage || menu?.deleteImage || 'Delete image'}
+              </DropdownMenuItem>
             )}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-
-        {/* Audio submenu */}
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger disabled={generating.audio}>
-            <Mic className="mr-2 h-4 w-4" />
-            {generating.audio
-              ? (menu?.generating || 'Generating...')
-              : (menu?.audio || 'Audio')}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem onClick={() => handleGenerateAudio('openai')}>
-              {menu?.generateAudio || 'Generate'} (OpenAI)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleGenerateAudio('gtts')}>
-              {menu?.generateAudio || 'Generate'} (gTTS)
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onStartRecording}>
-              <Mic className="mr-2 h-4 w-4" />
-              {menu?.recordAudio || 'Record from microphone'}
-            </DropdownMenuItem>
             {hasAudio && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleDeleteAudio}
-                  className="text-destructive"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  {menu?.deleteAudio || 'Delete audio'}
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem
+                onClick={handleDeleteAudio}
+                className="text-destructive focus:text-destructive"
+              >
+                <Volume2 className="mr-2 h-4 w-4" />
+                {wordsText?.deleteAudio || menu?.deleteAudio || 'Delete audio'}
+              </DropdownMenuItem>
             )}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-
-        <DropdownMenuSeparator />
-
-        {/* Open word detail */}
-        <DropdownMenuItem onClick={handleOpenWord}>
-          <ExternalLink className="mr-2 h-4 w-4" />
-          {menu?.openWord || 'Open word'}
-        </DropdownMenuItem>
       </DropdownMenuContent>
+
+      <ImageEditModal
+        isOpen={isImageEditOpen}
+        onClose={() => setIsImageEditOpen(false)}
+        onSubmit={handleEditImage}
+        word={card.word_text}
+      />
     </DropdownMenu>
   );
 };

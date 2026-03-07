@@ -12,19 +12,35 @@ interface AnswerButtonsProps {
 const ANSWER_CONFIG = [
   {
     quality: 0 as AnswerQuality,
-    color: 'bg-red-500 hover:bg-red-600 text-white',
+    style: {
+      backgroundColor: '#fecdd3',
+      color: '#7f1d1d',
+      borderColor: '#fda4af',
+    },
   },
   {
     quality: 1 as AnswerQuality,
-    color: 'bg-yellow-400 hover:bg-yellow-500 text-gray-900 dark:bg-yellow-500 dark:hover:bg-yellow-600 dark:text-gray-900',
+    style: {
+      backgroundColor: '#fde68a',
+      color: '#78350f',
+      borderColor: '#fcd34d',
+    },
   },
   {
     quality: 2 as AnswerQuality,
-    color: 'bg-emerald-300 hover:bg-emerald-400 text-gray-900 dark:bg-emerald-500 dark:hover:bg-emerald-600 dark:text-white',
+    style: {
+      backgroundColor: '#d9f99d',
+      color: '#365314',
+      borderColor: '#bef264',
+    },
   },
   {
     quality: 3 as AnswerQuality,
-    color: 'bg-green-500 hover:bg-green-600 text-white',
+    style: {
+      backgroundColor: '#a7f3d0',
+      color: '#065f46',
+      borderColor: '#6ee7b7',
+    },
   },
 ];
 
@@ -66,9 +82,10 @@ export const AnswerButtons: React.FC<AnswerButtonsProps> = ({
           key={cfg.quality}
           onClick={() => onAnswer(cfg.quality)}
           disabled={disabled}
+          variant="ghost"
+          style={cfg.style}
           className={cn(
-            'flex items-center justify-center py-3 h-auto rounded-xl font-semibold text-sm shadow-md transition-all active:scale-95',
-            cfg.color
+            'flex items-center justify-center py-3 h-auto rounded-xl border font-semibold text-sm shadow-sm transition-colors active:scale-95'
           )}
         >
           {answerLabels[cfg.quality]}

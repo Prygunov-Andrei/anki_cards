@@ -123,7 +123,11 @@ docker image prune -f || true
 docker system prune -f || true
 
 echo "Удаляю старые образы проекта..."
-docker images | grep -E 'anki_cards|anki-cards' | awk '{print \$3}' | xargs -r docker rmi -f || true
+# Используем форматированный вывод, чтобы случайно не подхватить колонку SIZE (например "914MB")
+docker images --format '{{.Repository}} {{.ID}}' \
+  | grep -E '^(anki_cards|anki-cards)' \
+  | awk '{print \$2}' \
+  | xargs -r docker rmi -f || true
 EOF
 
 echo -e "${GREEN}✅ Старые контейнеры остановлены, образы удалены${NC}"
@@ -243,16 +247,19 @@ EOF
 echo -e "${GREEN}✅ Миграции применены${NC}"
 
 # Шаг 11: Восстановление данных (если есть бэкап)
+# Важно: по умолчанию НЕ восстанавливаем данные автоматически, чтобы не повредить продовую БД.
+# В неинтерактивном режиме (например CI/IDE) шаг всегда пропускаем, чтобы не зависать на read().
 if [ -n "$LATEST_BACKUP" ] && [ -f "$LATEST_BACKUP" ]; then
-    echo -e "\n${BLUE}📥 Шаг 11: Восстановление данных из бэкапа...${NC}"
-    echo -e "${YELLOW}⚠️  ВНИМАНИЕ: Это перезапишет существующие данные!${NC}"
-    REPLY=""
-    read -p "Восстановить данные из бэкапа? (y/N): " -n 1 -r || true
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        eval "$SCP_CMD" "$LATEST_BACKUP" "$SERVER:/tmp/"
-        BACKUP_NAME=$(basename "$LATEST_BACKUP")
-        eval "$SSH_CMD" "$SERVER" <<EOF
+    if [ -t 0 ]; then
+        echo -e "\n${BLUE}📥 Шаг 11: Восстановление данных из бэкапа...${NC}"
+        echo -e "${YELLOW}⚠️  ВНИМАНИЕ: Это перезапишет существующие данные!${NC}"
+        REPLY=""
+        read -p "Восстановить данные из бэкапа? (y/N): " -n 1 -r || true
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            eval "$SCP_CMD" "$LATEST_BACKUP" "$SERVER:/tmp/"
+            BACKUP_NAME=$(basename "$LATEST_BACKUP")
+            eval "$SSH_CMD" "$SERVER" <<EOF
 set -e
 cd ${REMOTE_PATH}
 if [ -f "./scripts/restore_data.sh" ]; then
@@ -263,9 +270,12 @@ else
     echo "⚠️  Скрипт restore_data.sh не найден, пропускаем восстановление"
 fi
 EOF
-        echo -e "${GREEN}✅ Данные восстановлены${NC}"
+            echo -e "${GREEN}✅ Данные восстановлены${NC}"
+        else
+            echo -e "${YELLOW}⏭️  Восстановление данных пропущено${NC}"
+        fi
     else
-        echo -e "${YELLOW}⏭️  Восстановление данных пропущено${NC}"
+        echo -e "\n${YELLOW}⏭️  Шаг 11 пропущен: неинтерактивный режим (восстановление бэкапа отключено по умолчанию)${NC}"
     fi
 fi
 

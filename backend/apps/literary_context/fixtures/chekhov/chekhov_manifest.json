@@ -1,0 +1,576 @@
+[
+  {
+    "slug": "mylife",
+    "filename": "mylife.txt",
+    "title_ru": "Моя жизнь",
+    "chars": 185460,
+    "status": "translated"
+  },
+  {
+    "slug": "skuka",
+    "filename": "skuka.txt",
+    "title_ru": "Скучная история",
+    "chars": 121131,
+    "status": "translated"
+  },
+  {
+    "slug": "step",
+    "filename": "step.txt",
+    "title_ru": "Степь",
+    "chars": 189268,
+    "status": "translated"
+  },
+  {
+    "slug": "svidanie",
+    "filename": "svidanie.txt",
+    "title_ru": "\"Свидание хотя и состоялось, но...\"",
+    "chars": 10084,
+    "status": "translated"
+  },
+  {
+    "slug": "anna-na-shee",
+    "filename": "r_anna.txt",
+    "title_ru": "Анна на шее",
+    "chars": 26189,
+    "status": "translated"
+  },
+  {
+    "slug": "barynya",
+    "filename": "barynya.txt",
+    "title_ru": "Барыня",
+    "chars": 38550,
+    "status": "translated"
+  },
+  {
+    "slug": "guest",
+    "filename": "guest.txt",
+    "title_ru": "Беспокойный гость",
+    "chars": 11318,
+    "status": "translated"
+  },
+  {
+    "slug": "blag",
+    "filename": "blag.txt",
+    "title_ru": "Благодарный",
+    "chars": 4339,
+    "status": "translated"
+  },
+  {
+    "slug": "brother",
+    "filename": "brother.txt",
+    "title_ru": "Братец",
+    "chars": 3333,
+    "status": "translated"
+  },
+  {
+    "slug": "vagon",
+    "filename": "vagon.txt",
+    "title_ru": "В вагоне",
+    "chars": 11080,
+    "status": "translated"
+  },
+  {
+    "slug": "vesna",
+    "filename": "vesna.txt",
+    "title_ru": "Встреча весны (рассуждение)",
+    "chars": 7155,
+    "status": "translated"
+  },
+  {
+    "slug": "francuz",
+    "filename": "r_francuz.txt",
+    "title_ru": "Глупый француз",
+    "chars": 6251,
+    "status": "translated"
+  },
+  {
+    "slug": "speak",
+    "filename": "speak.txt",
+    "title_ru": "Говорить или молчать",
+    "chars": 7002,
+    "status": "translated"
+  },
+  {
+    "slug": "toledo",
+    "filename": "toledo.txt",
+    "title_ru": "Грешник из Толедо",
+    "chars": 12133,
+    "status": "translated"
+  },
+  {
+    "slug": "d",
+    "filename": "d.txt",
+    "title_ru": "Дама с собачкой",
+    "chars": 33160,
+    "status": "translated"
+  },
+  {
+    "slug": "dach",
+    "filename": "dach.txt",
+    "title_ru": "Дачники",
+    "chars": 3487,
+    "status": "translated"
+  },
+  {
+    "slug": "two",
+    "filename": "two.txt",
+    "title_ru": "Два скандала",
+    "chars": 21752,
+    "status": "translated"
+  },
+  {
+    "slug": "dvadcat-devyatogo-avgusta",
+    "filename": "2906.txt",
+    "title_ru": "Двадцать девятое июня",
+    "chars": 14564,
+    "status": "translated"
+  },
+  {
+    "slug": "deletz",
+    "filename": "deletz.txt",
+    "title_ru": "Делец",
+    "chars": 1791,
+    "status": "translated"
+  },
+  {
+    "slug": "day",
+    "filename": "day.txt",
+    "title_ru": "День за городом",
+    "chars": 11614,
+    "status": "translated"
+  },
+  {
+    "slug": "zn",
+    "filename": "zn.txt",
+    "title_ru": "Добрый знакомый",
+    "chars": 2548,
+    "status": "translated"
+  },
+  {
+    "slug": "znakomy",
+    "filename": "znakomy.txt",
+    "title_ru": "Добрый знакомый",
+    "chars": 3494,
+    "status": "translated"
+  },
+  {
+    "slug": "dop",
+    "filename": "dop.txt",
+    "title_ru": "Дополнительные вопросы к личным картам статистической переписи, предлагаемые Антошей Чехонте",
+    "chars": 1437,
+    "status": "translated"
+  },
+  {
+    "slug": "dram",
+    "filename": "dram.txt",
+    "title_ru": "Драматург",
+    "chars": 3647,
+    "status": "translated"
+  },
+  {
+    "slug": "dushechka",
+    "filename": "dushechka.txt",
+    "title_ru": "Душечка",
+    "chars": 24850,
+    "status": "translated"
+  },
+  {
+    "slug": "duel",
+    "filename": "duel.txt",
+    "title_ru": "Дуэль",
+    "chars": 207201,
+    "status": "translated"
+  },
+  {
+    "slug": "sredstvo",
+    "filename": "sredstvo.txt",
+    "title_ru": "Единственное средство",
+    "chars": 5095,
+    "status": "translated"
+  },
+  {
+    "slug": "zhenih",
+    "filename": "zhenih.txt",
+    "title_ru": "Жених",
+    "chars": 2618,
+    "status": "translated"
+  },
+  {
+    "slug": "happiness",
+    "filename": "happiness.txt",
+    "title_ru": "Женское счастье",
+    "chars": 7316,
+    "status": "translated"
+  },
+  {
+    "slug": "wives",
+    "filename": "wives.txt",
+    "title_ru": "Жены артистов (перевод...с португальского)",
+    "chars": 26483,
+    "status": "translated"
+  },
+  {
+    "slug": "tovar",
+    "filename": "tovar.txt",
+    "title_ru": "Живой товар",
+    "chars": 22049,
+    "status": "translated"
+  },
+  {
+    "slug": "zhivoy",
+    "filename": "zhivoy.txt",
+    "title_ru": "Живой товар",
+    "chars": 22125,
+    "status": "translated"
+  },
+  {
+    "slug": "life",
+    "filename": "life.txt",
+    "title_ru": "Жизнь в вопросах и восклицаниях",
+    "chars": 6547,
+    "status": "translated"
+  },
+  {
+    "slug": "zhletz",
+    "filename": "zhletz.txt",
+    "title_ru": "Жилец",
+    "chars": 8953,
+    "status": "translated"
+  },
+  {
+    "slug": "nevzgody",
+    "filename": "nevzgody.txt",
+    "title_ru": "Житейские невзгоды",
+    "chars": 7475,
+    "status": "translated"
+  },
+  {
+    "slug": "zay",
+    "filename": "zay.txt",
+    "title_ru": "За двумя зайцами погонишься, ни одного не поймаешь",
+    "chars": 9611,
+    "status": "translated"
+  },
+  {
+    "slug": "apples",
+    "filename": "apples.txt",
+    "title_ru": "За яблочки",
+    "chars": 13377,
+    "status": "translated"
+  },
+  {
+    "slug": "forget",
+    "filename": "forget.txt",
+    "title_ru": "Забыл!!",
+    "chars": 8365,
+    "status": "translated"
+  },
+  {
+    "slug": "zadachi",
+    "filename": "zadachi.txt",
+    "title_ru": "Задачи сумасшедшего математика",
+    "chars": 2561,
+    "status": "translated"
+  },
+  {
+    "slug": "kosa",
+    "filename": "kosa.txt",
+    "title_ru": "Зеленая коса",
+    "chars": 30053,
+    "status": "translated"
+  },
+  {
+    "slug": "tose2",
+    "filename": "tose2.txt",
+    "title_ru": "И то и се",
+    "chars": 3976,
+    "status": "translated"
+  },
+  {
+    "slug": "tose1",
+    "filename": "tose1.txt",
+    "title_ru": "И то и се (письма и телеграммы)",
+    "chars": 5080,
+    "status": "translated"
+  },
+  {
+    "slug": "iddilia",
+    "filename": "iddilia.txt",
+    "title_ru": "Идиллия - увы и ах!",
+    "chars": 5238,
+    "status": "translated"
+  },
+  {
+    "slug": "idealist",
+    "filename": "idealist.txt",
+    "title_ru": "Из воспоминаний идеалиста",
+    "chars": 7415,
+    "status": "translated"
+  },
+  {
+    "slug": "kashtanka-22",
+    "filename": "22.txt",
+    "title_ru": "Именины",
+    "chars": 64900,
+    "status": "translated"
+  },
+  {
+    "slug": "ispoved",
+    "filename": "ispoved.txt",
+    "title_ru": "Исповедь, или Оля, Женя, Зоя (письмо)",
+    "chars": 13540,
+    "status": "translated"
+  },
+  {
+    "slug": "kazak",
+    "filename": "r_kazak.txt",
+    "title_ru": "Казак",
+    "chars": 9277,
+    "status": "translated"
+  },
+  {
+    "slug": "works",
+    "filename": "works.txt",
+    "title_ru": "Каникулярные работы институтки Наденьки",
+    "chars": 4604,
+    "status": "translated"
+  },
+  {
+    "slug": "kashtanka",
+    "filename": "kashtanka.txt",
+    "title_ru": "Каштанка",
+    "chars": 39334,
+    "status": "translated"
+  },
+  {
+    "slug": "kleveta",
+    "filename": "r_kleveta.txt",
+    "title_ru": "Клевета",
+    "chars": 7297,
+    "status": "translated"
+  },
+  {
+    "slug": "knyaginya",
+    "filename": "r_knyaginya.txt",
+    "title_ru": "Княгиня",
+    "chars": 24590,
+    "status": "translated"
+  },
+  {
+    "slug": "reclam",
+    "filename": "reclam.txt",
+    "title_ru": "Комические рекламы и объявления (сообщил Антоша Чехонте)",
+    "chars": 4599,
+    "status": "translated"
+  },
+  {
+    "slug": "kontora",
+    "filename": "kontora.txt",
+    "title_ru": "Контора объявлений Антоши Ч.",
+    "chars": 6975,
+    "status": "translated"
+  },
+  {
+    "slug": "kontrabas",
+    "filename": "kontrabas.txt",
+    "title_ru": "Контрабас и флейта",
+    "chars": 9019,
+    "status": "translated"
+  },
+  {
+    "slug": "korrespondent",
+    "filename": "r_korrespondent.txt",
+    "title_ru": "Корреспондент",
+    "chars": 33162,
+    "status": "translated"
+  },
+  {
+    "slug": "kotoraya-iz-nih",
+    "filename": "r_which.txt",
+    "title_ru": "Который из трех?",
+    "chars": 12888,
+    "status": "translated"
+  },
+  {
+    "slug": "krasavitsy",
+    "filename": "krasavitsy.txt",
+    "title_ru": "Красавицы",
+    "chars": 16570,
+    "status": "translated"
+  },
+  {
+    "slug": "kross",
+    "filename": "kross.txt",
+    "title_ru": "Крест",
+    "chars": 813,
+    "status": "translated"
+  },
+  {
+    "slug": "gnezdo",
+    "filename": "gnezdo.txt",
+    "title_ru": "Кулачье гнездо",
+    "chars": 6509,
+    "status": "translated"
+  },
+  {
+    "slug": "ostrova",
+    "filename": "ostrova.txt",
+    "title_ru": "Летающие острова",
+    "chars": 13726,
+    "status": "translated"
+  },
+  {
+    "slug": "lishnie",
+    "filename": "lishnie.txt",
+    "title_ru": "Лишние люди",
+    "chars": 11996,
+    "status": "translated"
+  },
+  {
+    "slug": "loshad",
+    "filename": "loshad.txt",
+    "title_ru": "Лошадиная фамилия",
+    "chars": 6649,
+    "status": "translated"
+  },
+  {
+    "slug": "maria",
+    "filename": "maria.txt",
+    "title_ru": "Марья Ивановна",
+    "chars": 5546,
+    "status": "translated"
+  },
+  {
+    "slug": "mest",
+    "filename": "mest.txt",
+    "title_ru": "Месть",
+    "chars": 7694,
+    "status": "translated"
+  },
+  {
+    "slug": "dreams",
+    "filename": "dreams.txt",
+    "title_ru": "Мечты",
+    "chars": 17004,
+    "status": "translated"
+  },
+  {
+    "slug": "ubiley",
+    "filename": "ubiley.txt",
+    "title_ru": "Мой юбилей",
+    "chars": 2910,
+    "status": "translated"
+  },
+  {
+    "slug": "mstitel",
+    "filename": "r_mstitel.txt",
+    "title_ru": "Мститель",
+    "chars": 9397,
+    "status": "translated"
+  },
+  {
+    "slug": "wolf",
+    "filename": "wolf.txt",
+    "title_ru": "На волчьей садке",
+    "chars": 10152,
+    "status": "translated"
+  },
+  {
+    "slug": "nail",
+    "filename": "ch_nail.txt",
+    "title_ru": "На гвозде",
+    "chars": 3185,
+    "status": "translated"
+  },
+  {
+    "slug": "na-ezhenedelnoy-besede",
+    "filename": "r_ch_week.txt",
+    "title_ru": "На страстной неделе",
+    "chars": 9287,
+    "status": "translated"
+  },
+  {
+    "slug": "narval",
+    "filename": "narval.txt",
+    "title_ru": "Нарвался",
+    "chars": 4950,
+    "status": "translated"
+  },
+  {
+    "slug": "narvalsya",
+    "filename": "narvalsya.txt",
+    "title_ru": "Нарвался",
+    "chars": 4949,
+    "status": "translated"
+  },
+  {
+    "slug": "nahl",
+    "filename": "ch_nahl.txt",
+    "title_ru": "Нахлебники",
+    "chars": 11246,
+    "status": "translated"
+  },
+  {
+    "slug": "nothing",
+    "filename": "ch_nothing.txt",
+    "title_ru": "От нечего делать",
+    "chars": 10620,
+    "status": "translated"
+  },
+  {
+    "slug": "palata-6",
+    "filename": "6.txt",
+    "title_ru": "Палата No 6",
+    "chars": 109040,
+    "status": "translated"
+  },
+  {
+    "slug": "pismo",
+    "filename": "r_letter.txt",
+    "title_ru": "Письмо к ученому соседу",
+    "chars": 8996,
+    "status": "translated"
+  },
+  {
+    "slug": "pari",
+    "filename": "r_pari.txt",
+    "title_ru": "Пари",
+    "chars": 14545,
+    "status": "translated"
+  },
+  {
+    "slug": "poceluy",
+    "filename": "r_poceluj.txt",
+    "title_ru": "Поцелуй",
+    "chars": 37889,
+    "status": "translated"
+  },
+  {
+    "slug": "maska",
+    "filename": "maska.txt",
+    "title_ru": "Рассказы",
+    "chars": 220755,
+    "status": "translated"
+  },
+  {
+    "slug": "student",
+    "filename": "r_student.txt",
+    "title_ru": "Студент",
+    "chars": 7521,
+    "status": "translated"
+  },
+  {
+    "slug": "hameleon",
+    "filename": "r_hameleon.txt",
+    "title_ru": "Хамелеон",
+    "chars": 6270,
+    "status": "translated"
+  },
+  {
+    "slug": "what",
+    "filename": "what.txt",
+    "title_ru": "Что лучше?",
+    "chars": 943,
+    "status": "translated"
+  }
+]

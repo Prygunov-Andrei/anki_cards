@@ -2,11 +2,58 @@ from rest_framework import serializers
 from .models import Word, WordRelation, Category
 
 
-class WordSerializer(serializers.ModelSerializer):
+class LiteraryContextOverlayMixin:
+    """Mixin to add literary context overlay to Word serializers."""
+
+    def get_literary_context(self, obj):
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            return None
+
+        source = getattr(request.user, 'active_literary_source', None)
+        if not source:
+            return None
+
+        from apps.literary_context.models import WordContextMedia
+        try:
+            ctx = WordContextMedia.objects.select_related(
+                'source', 'anchor'
+            ).get(word=obj, source=source)
+        except WordContextMedia.DoesNotExist:
+            return None
+
+        if ctx.is_fallback:
+            return None
+
+        return {
+            'source_slug': ctx.source.slug,
+            'hint_text': ctx.hint_text,
+            'sentences': ctx.sentences,
+            'scene_description': ctx.anchor.scene_description if ctx.anchor else '',
+            'match_method': ctx.match_method,
+            'is_fallback': ctx.is_fallback,
+            'image_url': ctx.anchor.image_file.url if ctx.anchor and ctx.anchor.image_file else None,
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        ctx = data.get('literary_context')
+        if ctx and not ctx.get('is_fallback'):
+            if ctx.get('hint_text'):
+                data['hint_text'] = ctx['hint_text']
+            if ctx.get('sentences'):
+                data['sentences'] = ctx['sentences']
+            if ctx.get('image_url'):
+                data['image_file'] = ctx['image_url']
+        return data
+
+
+class WordSerializer(LiteraryContextOverlayMixin, serializers.ModelSerializer):
     """Сериализатор слова (полный)"""
-    
+
     categories = serializers.SerializerMethodField()
-    
+    literary_context = serializers.SerializerMethodField()
+
     class Meta:
         model = Word
         fields = [
@@ -27,12 +74,13 @@ class WordSerializer(serializers.ModelSerializer):
             'stickers',
             'learning_status',
             'categories',
+            'literary_context',
             # Timestamps
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-    
+
     def get_categories(self, obj):
         """Список категорий (компактный)"""
         return [
@@ -43,6 +91,7 @@ class WordSerializer(serializers.ModelSerializer):
             }
             for cat in obj.categories.all()
         ]
+
 
 
 class WordListSerializer(serializers.ModelSerializer):
@@ -184,12 +233,13 @@ class WordRelationCreateSerializer(serializers.Serializer):
         return value
 
 
-class WordWithRelationsSerializer(serializers.ModelSerializer):
+class WordWithRelationsSerializer(LiteraryContextOverlayMixin, serializers.ModelSerializer):
     """Сериализатор слова с включёнными связями"""
-    
+
     synonyms = serializers.SerializerMethodField()
     antonyms = serializers.SerializerMethodField()
-    
+    literary_context = serializers.SerializerMethodField()
+
     class Meta:
         model = Word
         fields = [
@@ -210,6 +260,7 @@ class WordWithRelationsSerializer(serializers.ModelSerializer):
             'learning_status',
             'synonyms',
             'antonyms',
+            'literary_context',
             'created_at',
             'updated_at',
         ]
@@ -395,6 +446,53 @@ class WordsStatsSerializer(serializers.Serializer):
     with_sentences = serializers.IntegerField()
     total_cards = serializers.IntegerField()
     due_for_review = serializers.IntegerField()
+
+
+class BulkCreateWordSerializer(serializers.Serializer):
+    """Сериализатор для одного слова в bulk-create запросе"""
+    original_word = serializers.CharField(max_length=200)
+    translation = serializers.CharField(max_length=200, required=False, default='')
+    language = serializers.ChoiceField(choices=Word.LANGUAGE_CHOICES, default='de')
+
+
+class BulkCreateRequestSerializer(serializers.Serializer):
+    """Сериализатор для POST /api/words/bulk-create/"""
+    words = serializers.ListField(
+        child=BulkCreateWordSerializer(),
+        min_length=1,
+        max_length=200,
+    )
+
+
+class BulkCreateResponseWordSerializer(serializers.Serializer):
+    """Один элемент ответа bulk-create"""
+    id = serializers.IntegerField()
+    original_word = serializers.CharField()
+    translation = serializers.CharField()
+    is_new = serializers.BooleanField()
+    has_image = serializers.BooleanField()
+    has_audio = serializers.BooleanField()
+    image_url = serializers.CharField(allow_null=True)
+    audio_url = serializers.CharField(allow_null=True)
+
+
+class CheckMediaRequestSerializer(serializers.Serializer):
+    """Сериализатор для POST /api/words/check-media/"""
+    word_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1,
+        max_length=200,
+    )
+
+
+class CheckMediaResponseWordSerializer(serializers.Serializer):
+    """Один элемент ответа check-media"""
+    id = serializers.IntegerField()
+    original_word = serializers.CharField()
+    has_image = serializers.BooleanField()
+    has_audio = serializers.BooleanField()
+    image_url = serializers.CharField(allow_null=True)
+    audio_url = serializers.CharField(allow_null=True)
 
 
 class BulkActionRequestSerializer(serializers.Serializer):

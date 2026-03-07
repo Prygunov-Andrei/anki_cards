@@ -1,4 +1,5 @@
 import { Card } from '../components/ui/card';
+import { PageHelpButton } from '../components/PageHelpButton';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -11,6 +12,7 @@ import { useState, useEffect } from 'react';
 import { AvatarUpload } from '../components/AvatarUpload';
 import { LanguageSelector, isValidNativeLanguage, isValidLearningLanguage } from '../components/LanguageSelector';
 import { MediaModelSelector, MediaModel, mediaModelToBackend, backendToMediaModel } from '../components/MediaModelSelector';
+import { ImageStyleSelector, ImageStyle } from '../components/ImageStyleSelector';
 import { profileService } from '../services/profile.service';
 import { X, Volume2, Sparkles } from 'lucide-react';
 import { translations, SupportedLocale } from '../locales';
@@ -38,6 +40,7 @@ export default function ProfilePage() {
       (user?.gemini_model || 'gemini-2.5-flash-image') as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
     ),
     audio_provider: (user?.audio_provider || 'openai') as 'openai' | 'gtts',
+    image_style: (user?.image_style || 'balanced') as ImageStyle,
   });
 
   // Синхронизируем форму с данными пользователя
@@ -48,12 +51,13 @@ export default function ProfilePage() {
         last_name: user.last_name || '',
         email: user.email || '',
         native_language: languageBackendToCode(user.native_language || 'ru'),
-        learning_language: languageBackendToCode(user.learning_language || 'de'), // де по умолчанию, так как en не поддерживается для learning_language
+        learning_language: languageBackendToCode(user.learning_language || 'de'),
         media_model: backendToMediaModel(
           (user.image_provider || 'openai') as 'openai' | 'gemini',
           (user.gemini_model || 'gemini-2.5-flash-image') as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
         ),
         audio_provider: (user.audio_provider || 'openai') as 'openai' | 'gtts',
+        image_style: (user.image_style || 'balanced') as ImageStyle,
       });
     }
   }, [user]);
@@ -131,7 +135,8 @@ export default function ProfilePage() {
         learning_language: formData.learning_language,
         image_provider: backendFormat.image_provider,
         gemini_model: backendFormat.gemini_model,
-        audio_provider: formData.audio_provider, // Добавляем провайдер аудио
+        audio_provider: formData.audio_provider,
+        image_style: formData.image_style,
       };
 
       // Логируем данные перед отправкой
@@ -254,12 +259,13 @@ export default function ProfilePage() {
         last_name: user.last_name || '',
         email: user.email || '',
         native_language: languageBackendToCode(user.native_language || 'ru'),
-        learning_language: languageBackendToCode(user.learning_language || 'de'), // де по умолчанию, так как en не поддерживается для learning_language
+        learning_language: languageBackendToCode(user.learning_language || 'de'),
         media_model: backendToMediaModel(
           (user.image_provider || 'openai') as 'openai' | 'gemini',
           (user.gemini_model || 'gemini-2.5-flash-image') as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
         ),
         audio_provider: (user.audio_provider || 'openai') as 'openai' | 'gtts',
+        image_style: (user.image_style || 'balanced') as ImageStyle,
       });
     }
     setAvatarFile(null);
@@ -286,6 +292,7 @@ export default function ProfilePage() {
       formData.learning_language !== languageBackendToCode(user.learning_language || 'de') || // де по умолчанию, так как en не поддерживается для learning_language
       formData.media_model !== currentMediaModel ||
       formData.audio_provider !== (user.audio_provider || 'openai') ||
+      formData.image_style !== (user.image_style || 'balanced') ||
       avatarFile !== null ||
       shouldRemoveAvatar
     );
@@ -402,6 +409,17 @@ export default function ProfilePage() {
               value={formData.media_model}
               onChange={(model) =>
                 setFormData((prev) => ({ ...prev, media_model: model }))
+              }
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Стиль изображений */}
+          <div className="mb-6">
+            <ImageStyleSelector
+              value={formData.image_style}
+              onChange={(style) =>
+                setFormData((prev) => ({ ...prev, image_style: style }))
               }
               disabled={isLoading}
             />
@@ -539,6 +557,8 @@ export default function ProfilePage() {
           </p>
         )}
       </form>
+
+      <PageHelpButton pageKey="profile" />
     </div>
   );
 }

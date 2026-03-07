@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import type { CardListItem } from '../../types';
 import { cn } from '../ui/utils';
-import { useLanguage } from '../../contexts/LanguageContext';
 import { getAbsoluteUrl } from '../../utils/url-helpers';
+import { LiteraryContextBadge } from '../literary-context/LiteraryContextBadge';
 
 export interface WordDetail {
   etymology?: string;
@@ -12,6 +12,10 @@ export interface WordDetail {
   image_file?: string;
   image_url?: string;
   language?: string;
+  literary_context?: {
+    source_slug: string;
+    match_method: string;
+  } | null;
 }
 
 interface TrainingCardProps {
@@ -27,7 +31,7 @@ interface TrainingCardProps {
 /**
  * Компонент тренировочной карточки с анимацией переворота.
  * Лицевая сторона: картинка + слово (минималистично).
- * Оборотная сторона: картинка + перевод + hint/etymology/sentences.
+ * Оборотная сторона: только картинка + перевод.
  * Все сервисные элементы (аудио, подсказка, изучение) вынесены в TrainingSessionPage.
  */
 export const TrainingCard: React.FC<TrainingCardProps> = ({
@@ -37,19 +41,9 @@ export const TrainingCard: React.FC<TrainingCardProps> = ({
   wordDetail,
   menuElement,
 }) => {
-  const { t } = useLanguage();
-  const [animating, setAnimating] = useState(false);
-
-  // Reset animation state on card change
-  useEffect(() => {
-    setAnimating(false);
-  }, [card.id]);
-
   const handleFlip = () => {
     if (isFlipped) return;
-    setAnimating(true);
     onFlip();
-    setTimeout(() => setAnimating(false), 400);
   };
 
   // Keyboard: space/enter to flip
@@ -74,12 +68,21 @@ export const TrainingCard: React.FC<TrainingCardProps> = ({
 
   return (
     <div
-      className="perspective-1000 w-full cursor-pointer select-none"
+      className="perspective-1000 relative h-full w-full cursor-pointer select-none"
       onClick={handleFlip}
     >
+      {isFlipped && menuElement && (
+        <div
+          className="z-20"
+          style={{ position: 'absolute', top: 12, right: 12 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {menuElement}
+        </div>
+      )}
       <div
         className={cn(
-          'relative w-full transition-transform duration-500 transform-style-3d',
+          'relative h-full w-full transition-transform duration-500 transform-style-3d',
           isFlipped && 'rotate-y-180'
         )}
         style={{
@@ -90,19 +93,18 @@ export const TrainingCard: React.FC<TrainingCardProps> = ({
       >
         {/* FRONT */}
         <div
-          className="relative w-full rounded-2xl border bg-card shadow-lg p-6 min-h-[320px] flex flex-col items-center justify-center"
+          className="relative h-full w-full min-h-0 rounded-2xl border bg-card p-3 shadow-lg sm:p-4 flex flex-col items-center justify-center"
           style={{ backfaceVisibility: 'hidden' }}
         >
-          {/* Three-dots menu */}
-          {menuElement && (
-            <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
-              {menuElement}
-            </div>
-          )}
-
           {/* Image (large) */}
           {imageUrl && (
-            <div className="mb-5 w-64 h-64 sm:w-80 sm:h-80 rounded-xl overflow-hidden shadow-md">
+            <div
+              className="mb-3 rounded-xl overflow-hidden shadow-md"
+              style={{
+                width: 'min(58vw, 52vh, 420px)',
+                height: 'min(58vw, 52vh, 420px)',
+              }}
+            >
               <img
                 src={imageUrl}
                 alt={card.word_text}
@@ -112,29 +114,41 @@ export const TrainingCard: React.FC<TrainingCardProps> = ({
           )}
 
           {/* Word text (large font) */}
-          <h2 className="text-4xl sm:text-5xl font-bold text-center break-words">
+          <h2
+            className="font-bold text-center break-words leading-tight"
+            style={{ fontSize: 'clamp(1.6rem, 3.8vh, 2.9rem)' }}
+          >
             {frontText}
           </h2>
+
+          {/* Literary context badge */}
+          {wordDetail?.literary_context && (
+            <div className="mt-2">
+              <LiteraryContextBadge
+                sourceSlug={wordDetail.literary_context.source_slug}
+                matchMethod={wordDetail.literary_context.match_method}
+              />
+            </div>
+          )}
         </div>
 
         {/* BACK */}
         <div
-          className="absolute inset-0 w-full rounded-2xl border bg-card shadow-lg p-6 min-h-[320px] flex flex-col overflow-y-auto"
+          className="absolute inset-0 h-full w-full min-h-0 rounded-2xl border bg-card p-3 shadow-lg sm:p-4 flex flex-col items-center justify-center"
           style={{
             backfaceVisibility: 'hidden',
             transform: 'rotateY(180deg)',
           }}
         >
-          {/* Three-dots menu on back too */}
-          {menuElement && (
-            <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
-              {menuElement}
-            </div>
-          )}
-
-          {/* Image on back too */}
+          {/* Image on back too (same size as front) */}
           {imageUrl && (
-            <div className="mb-4 w-48 h-48 sm:w-56 sm:h-56 rounded-xl overflow-hidden shadow-md mx-auto">
+            <div
+              className="mb-3 rounded-xl overflow-hidden shadow-md"
+              style={{
+                width: 'min(58vw, 52vh, 420px)',
+                height: 'min(58vw, 52vh, 420px)',
+              }}
+            >
               <img
                 src={imageUrl}
                 alt={card.word_text}
@@ -144,55 +158,13 @@ export const TrainingCard: React.FC<TrainingCardProps> = ({
           )}
 
           {/* Translation text (large font) */}
-          <h2 className="text-3xl sm:text-4xl font-bold text-center break-words mb-4">
+          <h2
+            className="font-bold text-center break-words leading-tight"
+            style={{ fontSize: 'clamp(1.45rem, 3.2vh, 2.5rem)' }}
+          >
             {backText}
           </h2>
 
-          {/* Extra info */}
-          <div className="space-y-3 text-sm flex-1">
-            {/* Hint */}
-            {wordDetail?.hint_text && (
-              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3">
-                <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">
-                  {t.training.card.hint}
-                </p>
-                <p className="text-blue-900 dark:text-blue-200">
-                  {wordDetail.hint_text}
-                </p>
-              </div>
-            )}
-
-            {/* Etymology */}
-            {wordDetail?.etymology && (
-              <div className="rounded-lg bg-purple-50 dark:bg-purple-950/30 p-3">
-                <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">
-                  {t.training.card.etymology}
-                </p>
-                <p className="text-purple-900 dark:text-purple-200 text-xs leading-relaxed">
-                  {wordDetail.etymology}
-                </p>
-              </div>
-            )}
-
-            {/* Sentences */}
-            {wordDetail?.sentences && wordDetail.sentences.length > 0 && (
-              <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-3">
-                <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">
-                  {t.training.card.examples}
-                </p>
-                <ul className="space-y-1">
-                  {wordDetail.sentences.slice(0, 2).map((s, i) => (
-                    <li
-                      key={i}
-                      className="text-green-900 dark:text-green-200 text-xs"
-                    >
-                      {s.text}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>

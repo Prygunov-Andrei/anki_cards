@@ -9,7 +9,9 @@ import { HintGenerator } from '../components/ai/HintGenerator';
 import { SentenceGenerator } from '../components/ai/SentenceGenerator';
 import { SynonymGenerator } from '../components/ai/SynonymGenerator';
 import { WordCategoryManager } from '../components/words/WordCategoryManager';
+import { LiteraryContextSection } from '../components/literary-context/LiteraryContextSection';
 import { useTranslation } from '../contexts/LanguageContext';
+import { useAuthContext } from '../contexts/AuthContext';
 import { Word, WordSentence } from '../types';
 import { deckService } from '../services/deck.service';
 import { wordsService } from '../services/words.service';
@@ -24,11 +26,30 @@ const WordDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const t = useTranslation();
+  const { user } = useAuthContext();
   const [word, setWord] = useState<Word | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Получаем deckId из state навигации
-  const { deckId, word: wordFromState, translation: translationFromState } = location.state || {};
+  const navState = (location.state || {}) as {
+    deckId?: number;
+    word?: string;
+    translation?: string;
+    fromTraining?: boolean;
+    trainingState?: unknown;
+  };
+  const { deckId, word: wordFromState, translation: translationFromState } = navState;
+
+  const handleBack = () => {
+    if (navState.fromTraining && navState.trainingState) {
+      navigate('/training/session', {
+        state: navState.trainingState,
+        replace: true,
+      });
+      return;
+    }
+    navigate(-1);
+  };
 
   // Загрузка слова из API
   useEffect(() => {
@@ -194,15 +215,15 @@ const WordDetailPage: React.FC = () => {
       <div className="mb-6">
         <Button
           variant="ghost"
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           className="mb-4"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           {t.common.back}
         </Button>
         
-        <div className="rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 p-6 text-white shadow-lg">
-          <h1 className="mb-2 text-3xl font-bold">{word.original_word}</h1>
+        <div className="rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 p-4 sm:p-6 text-white shadow-lg">
+          <h1 className="mb-2 text-2xl sm:text-3xl font-bold">{word.original_word}</h1>
           <p className="text-xl opacity-90">{word.translation}</p>
           {word.part_of_speech && (
             <p className="mt-2 text-sm opacity-75">
@@ -214,7 +235,7 @@ const WordDetailPage: React.FC = () => {
 
       {/* Табы */}
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5">
           <TabsTrigger value="basic">Основное</TabsTrigger>
           <TabsTrigger value="etymology">Этимология</TabsTrigger>
           <TabsTrigger value="sentences">Примеры</TabsTrigger>
@@ -256,6 +277,13 @@ const WordDetailPage: React.FC = () => {
               />
             </CardContent>
           </Card>
+
+          {/* Literary Context */}
+          <LiteraryContextSection
+            wordId={word.id}
+            activeSource={user?.active_literary_source ?? null}
+            literaryContext={word.literary_context}
+          />
         </TabsContent>
 
         {/* Таб: Этимология */}

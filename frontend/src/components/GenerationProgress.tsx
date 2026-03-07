@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Loader2, ImageIcon, Volume2, Package, X, AlertTriangle } from 'lucide-react';
 
-export type GenerationStatus = 'idle' | 'generating_images' | 'generating_audio' | 'creating_deck' | 'complete';
+export type GenerationStatus = 'idle' | 'generating_images' | 'generating_audio' | 'creating_deck' | 'generating_literary_context' | 'complete';
 
 interface GenerationProgressProps {
   status: GenerationStatus;
@@ -50,6 +50,15 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
             ? `Создаём аудио для "${currentWord}"...`
             : 'Подготовка аудиофайлов...',
           color: 'from-pink-500 to-rose-500',
+        };
+      case 'generating_literary_context':
+        return {
+          icon: <Package className="h-5 w-5 text-amber-500" />,
+          title: 'Литературный контекст',
+          description: currentWord
+            ? `Генерация контекста для "${currentWord}"...`
+            : 'Генерация литературного контекста...',
+          color: 'from-amber-500 to-yellow-500',
         };
       case 'creating_deck':
         return {
@@ -107,7 +116,13 @@ export const GenerationProgress: React.FC<GenerationProgressProps> = ({
         )}
 
         {/* Информационное сообщение */}
-        {status === 'generating_images' || status === 'generating_audio' ? (
+        {status === 'generating_literary_context' ? (
+          <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+            <p>
+              📚 Подбираем литературные фрагменты и генерируем контекст...
+            </p>
+          </div>
+        ) : status === 'generating_images' || status === 'generating_audio' ? (
           <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
             <p>
               ⏱️ Генерация {status === 'generating_images' ? 'изображений' : 'аудио'} может занять{' '}

@@ -57,6 +57,12 @@ class User(AbstractUser):
         ('openai', 'OpenAI TTS'),
         ('gtts', 'Google TTS (gTTS)'),
     ]
+
+    IMAGE_STYLE_CHOICES = [
+        ('minimalistic', 'Минималистичный'),
+        ('balanced', 'Сбалансированный'),
+        ('creative', 'Креативный'),
+    ]
     
     GEMINI_MODEL_CHOICES = [
         ('gemini-2.5-flash-image', 'Gemini Flash (быстрая, 0.5 токена)'),
@@ -139,7 +145,23 @@ class User(AbstractUser):
         default='openai',
         verbose_name='Провайдер генерации аудио'
     )
-    
+
+    image_style = models.CharField(
+        max_length=20,
+        choices=IMAGE_STYLE_CHOICES,
+        default='balanced',
+        verbose_name='Стиль генерации изображений'
+    )
+
+    active_literary_source = models.ForeignKey(
+        'literary_context.LiterarySource',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name='Активный литературный контекст',
+        help_text='Если выбран, медиа слов будут из литературного источника'
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='Дата регистрации'

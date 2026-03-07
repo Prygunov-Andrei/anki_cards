@@ -369,6 +369,32 @@ class DeckService {
   }
 
   /**
+   * Извлечение слов из фотографии текста через LLM vision
+   * @param data - Файл изображения + языки
+   * @returns Promise со списком извлечённых слов
+   */
+  async extractWordsFromPhoto(data: {
+    image: File;
+    target_lang: string;
+    source_lang: string;
+  }): Promise<{ words: string[] }> {
+    const formData = new FormData();
+    formData.append('image', data.image);
+    formData.append('target_lang', data.target_lang);
+    formData.append('source_lang', data.source_lang);
+
+    const response = await api.post<{ words: string[] }>(
+      API_ENDPOINTS.EXTRACT_WORDS_FROM_PHOTO,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000,
+      }
+    );
+    return response.data;
+  }
+
+  /**
    * Генерация изображения для слова
    * @param data - Данные для генерации изображения
    * @param signal - AbortSignal для отмены запроса

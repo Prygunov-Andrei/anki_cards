@@ -29,6 +29,10 @@
 - **OpenAI TTS-1-HD:** 1 токен
 - **Google TTS (gTTS):** 0 токенов (бесплатно)
 
+### Распознавание слов с фото
+
+- **GPT-4o-mini Vision:** 1 токен
+
 ## API
 
 ### GET `/api/tokens/balance/`

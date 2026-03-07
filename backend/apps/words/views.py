@@ -24,6 +24,8 @@ from .serializers import (
     WordsStatsSerializer,
     BulkActionRequestSerializer,
     BulkActionResponseSerializer,
+    BulkCreateRequestSerializer,
+    CheckMediaRequestSerializer,
 )
 from apps.cards.models import Card
 from apps.cards.serializers import (
@@ -365,7 +367,7 @@ def word_detail_view(request, word_id):
     word = get_object_or_404(Word, id=word_id, user=request.user)
     
     if request.method == 'GET':
-        serializer = WordWithRelationsSerializer(word)
+        serializer = WordWithRelationsSerializer(word, context={'request': request})
         return Response(serializer.data)
     
     elif request.method == 'PATCH':
@@ -384,7 +386,7 @@ def word_detail_view(request, word_id):
         update_word_learning_status(word)
         
         # Возвращаем обновлённое слово
-        response_serializer = WordWithRelationsSerializer(word)
+        response_serializer = WordWithRelationsSerializer(word, context={'request': request})
         return Response(response_serializer.data)
     
     elif request.method == 'DELETE':
@@ -845,6 +847,80 @@ def word_enter_learning_view(request, word_id):
         'cards_updated': updated_count,
         'learning_status': word.learning_status
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def words_bulk_create_view(request):
+    """
+    POST /api/words/bulk-create/
+    Создание слов пачкой с дедупликацией (get_or_create по user+original_word+language).
+    Возвращает id, статус медиа и флаг is_new для каждого слова.
+    """
+    serializer = BulkCreateRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    results = []
+    for item in serializer.validated_data['words']:
+        word, created = Word.objects.get_or_create(
+            user=request.user,
+            original_word=item['original_word'],
+            language=item.get('language', 'de'),
+            defaults={'translation': item.get('translation', '')},
+        )
+        # Если слово уже существовало и пришёл непустой перевод — обновляем
+        if not created and item.get('translation') and not word.translation:
+            word.translation = item['translation']
+            word.save(update_fields=['translation'])
+
+        has_image = bool(word.image_file)
+        has_audio = bool(word.audio_file)
+        results.append({
+            'id': word.id,
+            'original_word': word.original_word,
+            'translation': word.translation,
+            'is_new': created,
+            'has_image': has_image,
+            'has_audio': has_audio,
+            'image_url': word.image_file.url if has_image else None,
+            'audio_url': word.audio_file.url if has_audio else None,
+        })
+
+    return Response({'words': results}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def words_check_media_view(request):
+    """
+    POST /api/words/check-media/
+    Проверка наличия медиа для списка слов по ID.
+    Возвращает has_image/has_audio + URL для каждого слова.
+    """
+    serializer = CheckMediaRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    words = Word.objects.filter(
+        id__in=serializer.validated_data['word_ids'],
+        user=request.user,
+    )
+
+    results = []
+    for word in words:
+        has_image = bool(word.image_file)
+        has_audio = bool(word.audio_file)
+        results.append({
+            'id': word.id,
+            'original_word': word.original_word,
+            'has_image': has_image,
+            'has_audio': has_audio,
+            'image_url': word.image_file.url if has_image else None,
+            'audio_url': word.audio_file.url if has_audio else None,
+        })
+
+    return Response({'words': results}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])

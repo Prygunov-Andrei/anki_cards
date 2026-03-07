@@ -152,6 +152,29 @@ def detect_part_of_speech(
         }
 
 
+def clean_word_for_image_prompt(text: str) -> str:
+    """
+    Очищает слово от грамматических форм для промпта генерации изображений.
+
+    Примеры:
+        "essen (isst/gegessen)" → "essen"
+        "essen - isst/gegessen" → "essen"
+        "kaufen (kauft/gekauft)" → "kaufen"
+        "der Hund (die Hunde)" → "der Hund"
+        "есть" → "есть"
+    """
+    if not text:
+        return text
+    # Убираем содержимое скобок (включая сами скобки)
+    cleaned = re.sub(r'\s*\([^)]*\)', '', text).strip()
+    # Берём только первую часть до разделителей форм
+    for sep in [' - ', ' — ', ' / ', ' | ']:
+        if sep in cleaned:
+            cleaned = cleaned.split(sep)[0].strip()
+            break
+    return cleaned or text
+
+
 def generate_image_prompts_batch(
     words_translations: List[Dict[str, str]],
     user=None,
@@ -184,7 +207,8 @@ def generate_image_prompts_batch(
     # Для инвертированных слов 'word' = само слово на изучении, 'translation' = исходное слово
     # Формат: "слово (перевод)" - чтобы LLM понимал контекст без смешивания языков в инструкциях
     words_list_text = "\n".join([
-        f"- {item['word']} ({item.get('translation', '')})" for item in words_translations
+        f"- {clean_word_for_image_prompt(item['word'])} ({clean_word_for_image_prompt(item.get('translation', ''))})"
+        for item in words_translations
     ])
     
     # Создаем системный промпт на основе шаблона
@@ -214,6 +238,7 @@ def generate_image_prompts_batch(
 ВАЖНО: В JSON используй только само слово (без перевода в скобках) в качестве ключа.
 {format_instruction}
 СТРОГО БЕЗ упоминаний текста, букв, цифр, символов, надписей, знаков, книг, экранов, плакатов.
+ВАЖНО: Создай ОДНУ цельную сцену. НЕ разделяй изображение на части, секции или панели. Никаких коллажей.
 Начни сразу с описания сцены."""
     
     result_text = None
@@ -1313,25 +1338,25 @@ def detect_category(
 def select_image_style(category: str) -> str:
     """
     Подбирает стиль изображения на основе категории
-    
+
     Args:
         category: Категория слов
-    
+
     Returns:
         Стиль изображения: 'minimalistic', 'balanced', или 'creative'
     """
     # Маппинг категорий на стили
     category_lower = category.lower()
-    
+
     # Категории, для которых лучше подходит минималистичный стиль
     minimalistic_categories = ['числа', 'цвета', 'алфавит', 'базовые', 'простые']
-    
+
     # Категории, для которых лучше подходит творческий стиль
     creative_categories = [
         'животные', 'природа', 'еда', 'спорт', 'хобби', 'искусство',
         'музыка', 'путешествия', 'праздники', 'эмоции'
     ]
-    
+
     if any(cat in category_lower for cat in minimalistic_categories):
         return 'minimalistic'
     elif any(cat in category_lower for cat in creative_categories):
@@ -1339,3 +1364,94 @@ def select_image_style(category: str) -> str:
     else:
         # По умолчанию сбалансированный стиль
         return 'balanced'
+
+
+def extract_words_from_photo(
+    image_data: bytes,
+    target_lang: str,
+    source_lang: str,
+) -> List[str]:
+    """
+    Извлекает слова на изучаемом языке из фотографии текста через GPT-4o-mini vision.
+
+    Args:
+        image_data: Байты изображения (JPEG/PNG)
+        target_lang: Код изучаемого языка (de, en, fr, ...)
+        source_lang: Код родного языка (ru, en, ...) — слова на этом языке игнорируются
+
+    Returns:
+        Список уникальных слов на изучаемом языке
+    """
+    import base64
+    from .language_utils import get_language_name
+
+    client = get_openai_client()
+
+    base64_image = base64.b64encode(image_data).decode('utf-8')
+
+    target_lang_name = get_language_name(target_lang)
+    source_lang_name = get_language_name(source_lang)
+
+    prompt = (
+        f"Look at this image containing text. Extract ALL words and phrases "
+        f"that are in {target_lang_name} language. "
+        f"IMPORTANT RULES:\n"
+        f"- Keep multi-word expressions together (e.g. \"der Hund\", \"sich freuen auf\", \"guten Morgen\").\n"
+        f"- For {target_lang_name} nouns, ALWAYS include the article (e.g. \"der Hund\", not \"Hund\").\n"
+        f"- Keep phrasal verbs and collocations as single entries.\n"
+        f"- Preserve the text as written on the image — do NOT split phrases into individual words.\n"
+        f"- Ignore any words in {source_lang_name} language.\n"
+        f"- Ignore numbers, punctuation, and non-word symbols.\n"
+        f"- Return unique entries only (no duplicates).\n"
+        f"Return as JSON: {{\"words\": [\"der Hund\", \"sich freuen auf\", ...]}}"
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You extract foreign language words from photos of text. Return only valid JSON."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+            max_tokens=2000
+        )
+
+        result_text = response.choices[0].message.content.strip()
+        result = json.loads(result_text)
+        words = result.get("words", [])
+
+        # Убираем дубликаты, сохраняя порядок
+        seen = set()
+        unique_words = []
+        for w in words:
+            w_lower = w.lower()
+            if w_lower not in seen:
+                seen.add(w_lower)
+                unique_words.append(w)
+
+        logger.info(f"[PhotoOCR] Извлечено {len(unique_words)} слов ({target_lang_name}) из фото")
+        return unique_words
+
+    except json.JSONDecodeError as e:
+        logger.error(f"[PhotoOCR] Ошибка парсинга JSON: {str(e)}")
+        return []
+    except Exception as e:
+        logger.error(f"[PhotoOCR] Ошибка при извлечении слов из фото: {str(e)}")
+        raise

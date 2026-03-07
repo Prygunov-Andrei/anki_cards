@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageHelpButton } from '../components/PageHelpButton';
 import { Deck } from '../types';
 import { deckService } from '../services/deck.service';
 import { DeckCard } from '../components/DeckCard';
@@ -498,6 +499,8 @@ export default function DecksPage() {
           setSelectedDeckForInvert(null);
         }}
       />
+
+      <PageHelpButton pageKey="decks" />
     </div>
   );
 }

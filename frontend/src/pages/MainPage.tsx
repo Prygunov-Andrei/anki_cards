@@ -1,26 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { WordChipsInput } from '../components/WordChipsInput';
+import { PhotoWordExtractor } from '../components/PhotoWordExtractor';
 import { TranslationTable, WordTranslationPair } from '../components/TranslationTable';
 import { GeneratedWordsGrid } from '../components/GeneratedWordsGrid';
 import { InsufficientTokensModal } from '../components/InsufficientTokensModal';
-import { ImageStyleSelector, ImageStyle } from '../components/ImageStyleSelector';
-import { ImageProviderDropdown } from '../components/ImageProviderDropdown';
-import { AudioProviderDropdown } from '../components/AudioProviderDropdown';
+import { ImageStyle } from '../components/ImageStyleSelector';
 import { GenerationProgress, GenerationStatus } from '../components/GenerationProgress';
 import { GenerationSuccess } from '../components/GenerationSuccess';
+import { TokenCostBadge } from '../components/TokenCostBadge';
+import { CompactLiterarySourceSelector } from '../components/literary-context/CompactLiterarySourceSelector';
 import { useTokenContext } from '../contexts/TokenContext';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useTranslation } from '../contexts/LanguageContext';
+import { useDraftDeck } from '../contexts/DraftDeckContext';
 import { deckService } from '../services/deck.service';
+import { wordsService } from '../services/words.service';
 import { showSuccess, showError, showInfo } from '../utils/toast-helpers';
-import { getLanguageName } from '../utils/language-helpers';
 import { getCardImageUrl, getAudioUrl, getRelativePath } from '../utils/url-helpers';
-import { getTotalMediaCost, formatTokensWithText } from '../utils/token-formatting';
+import { getTotalMediaCost } from '../utils/token-formatting';
 import { Download, Loader2, Sparkles, ImageIcon, Volume2 } from 'lucide-react';
+import { literaryContextService } from '../services/literary-context.service';
+import { LiterarySource } from '../types/literary-context';
+import { PageHelpButton } from '../components/PageHelpButton';
 
 /**
  * Главная страница - быстрая генерация карточек
@@ -29,20 +35,35 @@ import { Download, Loader2, Sparkles, ImageIcon, Volume2 } from 'lucide-react';
 export default function MainPage() {
   const t = useTranslation();
   const { balance, checkBalance, refreshBalance } = useTokenContext();
-  const { user } = useAuthContext();
+  const { user, updateUser } = useAuthContext();
 
-  // Состояние формы
-  const [deckName, setDeckName] = useState(t.decks.newDeck);
-  const [words, setWords] = useState<string[]>([]);
-  const [translations, setTranslations] = useState<WordTranslationPair[]>([]);
+  // Персистентное состояние формы (выживает навигацию и refresh)
+  const {
+    words, setWords,
+    translations: draftTranslations, setTranslations: setDraftTranslations,
+    wordIds, setWordIds,
+    generatedImages, setGeneratedImages, updateGeneratedImages,
+    generatedAudio, setGeneratedAudio, updateGeneratedAudio,
+    deckName, setDeckName,
+    generateImages, setGenerateImages,
+    generateAudio, setGenerateAudio,
+    clearDraft,
+  } = useDraftDeck();
 
-  // Медиа настройки
-  const [generateImages, setGenerateImages] = useState(true);
-  const [generateAudio, setGenerateAudio] = useState(true);
-  const [imageStyle, setImageStyle] = useState<ImageStyle>('balanced');
-  const [imageProvider, setImageProvider] = useState<'auto' | 'openai' | 'gemini' | 'nano-banana'>('auto');
-  const [audioProvider, setAudioProvider] = useState<'auto' | 'openai' | 'gtts'>('auto');
-  const [geminiModel, setGeminiModel] = useState<GeminiModel>('gemini-2.5-flash-image');
+  // Адаптер: DraftTranslationPair[] <-> WordTranslationPair[] (TranslationTable требует WordTranslationPair)
+  const translations: WordTranslationPair[] = draftTranslations;
+  const setTranslations = (pairs: WordTranslationPair[]) => {
+    setDraftTranslations(pairs.map(p => ({ word: p.word, translation: p.translation })));
+  };
+
+  // Литературные источники для auto-naming
+  const [literarySources, setLiterarySources] = useState<LiterarySource[]>([]);
+
+  // Провайдеры берутся из профиля пользователя
+  const imageStyle: ImageStyle = (user?.image_style as ImageStyle) || 'balanced';
+  const imageProvider = user?.image_provider || 'openai';
+  const audioProvider = user?.audio_provider || 'openai';
+  const geminiModel = user?.gemini_model || 'gemini-2.5-flash-image';
 
   // Состояния UI
   const [isGenerating, setIsGenerating] = useState(false);
@@ -60,18 +81,104 @@ export default function MainPage() {
   // Все колоды теперь автоматически сохраняются в "Мои колоды"
   const [savedDeckId, setSavedDeckId] = useState<number | null>(null);
 
-  // Медиа-файлы для предпросмотра
-  const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({});
-  const [generatedAudio, setGeneratedAudio] = useState<Record<string, string>>({});
-
   // Ref для очистки таймера сброса формы при размонтировании
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     return () => {
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     };
   }, []);
+
+  // Автоматический перевод при появлении непереведённых слов
+  const autoTranslateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (isTranslating || isProcessingWords || isGenerating) return;
+    if (translations.length === 0) return;
+    const hasUntranslated = translations.some(p => p.word.trim() && !p.translation.trim());
+    if (!hasUntranslated) return;
+
+    // Debounce: ждём 500мс после последнего изменения, чтобы не дёргать API на каждый чип
+    if (autoTranslateTimerRef.current) clearTimeout(autoTranslateTimerRef.current);
+    autoTranslateTimerRef.current = setTimeout(() => {
+      handleAutoTranslate();
+    }, 500);
+
+    return () => {
+      if (autoTranslateTimerRef.current) clearTimeout(autoTranslateTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translations, isTranslating, isProcessingWords, isGenerating]);
+
+  // Защита от закрытия вкладки во время генерации
+  useEffect(() => {
+    if (!isGenerating) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isGenerating]);
+
+  // Блокировка навигации через перехват кликов по ссылкам во время генерации
+  // (useBlocker требует data router, а приложение использует BrowserRouter)
+  // beforeunload выше уже защищает от закрытия вкладки/обновления страницы
+  // Данные всё равно персистятся в localStorage, так что навигация безопасна
+
+  // При восстановлении черновика с wordIds — проверяем медиа на сервере
+  useEffect(() => {
+    const ids = Object.values(wordIds);
+    if (ids.length === 0) return;
+    wordsService.checkMedia(ids).then(result => {
+      const images: Record<string, string> = {};
+      const audio: Record<string, string> = {};
+      for (const w of result.words) {
+        if (w.has_image && w.image_url) images[w.original_word] = w.image_url;
+        if (w.has_audio && w.audio_url) audio[w.original_word] = w.audio_url;
+      }
+      if (Object.keys(images).length > 0) updateGeneratedImages(prev => ({ ...prev, ...images }));
+      if (Object.keys(audio).length > 0) updateGeneratedAudio(prev => ({ ...prev, ...audio }));
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Только при маунте
+
+  // Уведомление о восстановлении черновика
+  const draftNotifiedRef = useRef(false);
+  useEffect(() => {
+    if (draftNotifiedRef.current) return;
+    if (words.length > 0) {
+      draftNotifiedRef.current = true;
+      showInfo(t.draft.restored, {
+        description: `${words.length} ${t.draft.restoredDescription}`,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Только при маунте
+
+  // Загружаем литературные источники для авто-названия
+  useEffect(() => {
+    literaryContextService
+      .getSources()
+      .then(setLiterarySources)
+      .catch(() => {});
+  }, []);
+
+  // Авто-название колоды
+  const getDefaultDeckName = () => {
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    if (user?.active_literary_source && literarySources.length > 0) {
+      const src = literarySources.find(s => s.slug === user.active_literary_source);
+      return src ? `${src.name}_${date}` : `Deck_${date}`;
+    }
+    return `${t.decks.newDeck}_${date}`;
+  };
+
+  // Инициализируем deckName при изменении источника
+  useEffect(() => {
+    if (!deckName) {
+      setDeckName(getDefaultDeckName());
+    }
+  }, [user?.active_literary_source, literarySources]);
 
   // Языки берем из профиля пользователя
   const targetLang = user?.learning_language || 'en';
@@ -81,32 +188,19 @@ export default function MainPage() {
    * Вспомогательная функция для конвертации imageProvider в формат бекенда
    * nano-banana это на самом деле Gemini с моделью nano-banana-pro-preview
    */
-  const getProviderParams = (provider: typeof imageProvider) => {
-    if (provider === 'auto') {
-      return { provider: undefined, gemini_model: undefined };
-    }
-    if (provider === 'openai') {
+  const getProviderParams = () => {
+    if (imageProvider === 'openai') {
       return { provider: 'openai' as const, gemini_model: undefined };
     }
-    if (provider === 'gemini') {
-      return { provider: 'gemini' as const, gemini_model: 'gemini-2.5-flash-image' as const };
+    if (imageProvider === 'gemini') {
+      return { provider: 'gemini' as const, gemini_model: geminiModel as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview' };
     }
-    if (provider === 'nano-banana') {
+    if (imageProvider === 'nano-banana') {
       return { provider: 'gemini' as const, gemini_model: 'nano-banana-pro-preview' as const };
     }
-    return { provider: undefined, gemini_model: undefined };
+    return { provider: 'openai' as const, gemini_model: undefined };
   };
 
-  /**
-   * Обновление названия колоды при изменении языка интерфейса
-   */
-  useEffect(() => {
-    // Обновляем название колоды только если оно пустое или равно предыдущему дефолтному значению
-    if (!deckName || deckName === 'Новая колода' || deckName === 'New Deck' || deckName === 'Neues Deck' || 
-        deckName === 'Nuevo mazo' || deckName === 'Novo baralho' || deckName === 'Nouveau jeu' || deckName === 'Nuovo mazzo') {
-      setDeckName(t.decks.newDeck);
-    }
-  }, [t.decks.newDeck]);
 
   /**
    * Обработка изменения слов из WordChipsInput
@@ -173,14 +267,10 @@ export default function MainPage() {
     }
     
     // Создаем или обновляем массив переводов
-    // ВАЖНО: Используем функциональную форму setTranslations для корректной работы с асинхронными операциями
-    setTranslations(prevTranslations => {
-      return processedWords.map((word) => {
-        // Ищем существующий перевод в предыдущем состоянии
-        const existing = prevTranslations.find((t) => t.word === word);
-        return existing || { word, translation: '' };
-      });
-    });
+    setTranslations(processedWords.map((word) => {
+      const existing = translations.find((t) => t.word === word);
+      return existing || { word, translation: '' };
+    }));
   };
 
   /**
@@ -190,6 +280,17 @@ export default function MainPage() {
     setTranslations(pairs);
     // Синхронизируем массив words с парами переводов
     setWords(pairs.map(pair => pair.word));
+  };
+
+  /**
+   * Обработка слов, извлечённых из фото
+   */
+  const handlePhotoWordsExtracted = (photoWords: string[]) => {
+    const existingLower = new Set(words.map((w) => w.toLowerCase()));
+    const newWords = photoWords.filter((w) => !existingLower.has(w.toLowerCase()));
+    if (newWords.length > 0) {
+      handleWordsChange([...words, ...newWords]);
+    }
   };
 
   /**
@@ -311,24 +412,20 @@ export default function MainPage() {
         return null;
       };
 
-      // ВАЖНО: Используем функциональную форму setTranslations для работы с актуальным состоянием
-      setTranslations(prevTranslations => {
-        console.log('🔄 [setTranslations] prevTranslations:', prevTranslations);
-        
-        return prevTranslations.map((pair) => {
-          if (!pair.translation.trim()) {
-            const translation = findTranslation(pair.word);
-            
-            if (translation) {
-              console.log(`✅ Перевод применен: ${pair.word} -> ${translation}`);
-              return { ...pair, translation };
-            } else {
-              console.warn(`⚠️ Перевод не найден для: ${pair.word}`);
-            }
+      const updatedTranslations = translations.map((pair) => {
+        if (!pair.translation.trim()) {
+          const translation = findTranslation(pair.word);
+
+          if (translation) {
+            console.log(`✅ Перевод применен: ${pair.word} -> ${translation}`);
+            return { ...pair, translation };
+          } else {
+            console.warn(`⚠️ Перевод не найден для: ${pair.word}`);
           }
-          return pair;
-        });
+        }
+        return pair;
       });
+      setTranslations(updatedTranslations);
 
       // Подсчитываем переведенные слова для уведомления
       const translatedCount = Object.keys(allTranslationsDict).length;
@@ -341,6 +438,31 @@ export default function MainPage() {
       const stillUntranslated = wordsToTranslate.filter(word => !findTranslation(word));
       if (stillUntranslated.length > 0) {
         console.warn(`⚠️ Не удалось перевести ${stillUntranslated.length} слов:`, stillUntranslated);
+      }
+
+      // Сохраняем слова на бэкенде (bulk-create) и запоминаем их ID
+      try {
+        const language = user?.learning_language || 'de';
+        const bulkPayload = updatedTranslations
+          .filter(p => p.word.trim())
+          .map(p => ({ original_word: p.word, translation: p.translation, language }));
+        if (bulkPayload.length > 0) {
+          const result = await wordsService.bulkCreate(bulkPayload);
+          const ids: Record<string, number> = {};
+          const images: Record<string, string> = {};
+          const audio: Record<string, string> = {};
+          for (const w of result.words) {
+            ids[w.original_word] = w.id;
+            if (w.has_image && w.image_url) images[w.original_word] = w.image_url;
+            if (w.has_audio && w.audio_url) audio[w.original_word] = w.audio_url;
+          }
+          setWordIds(ids);
+          // Восстанавливаем уже существующие медиа
+          if (Object.keys(images).length > 0) updateGeneratedImages(prev => ({ ...prev, ...images }));
+          if (Object.keys(audio).length > 0) updateGeneratedAudio(prev => ({ ...prev, ...audio }));
+        }
+      } catch (err) {
+        console.warn('bulk-create failed (non-critical):', err);
       }
 
     } catch (error) {
@@ -365,7 +487,7 @@ export default function MainPage() {
         description: `Создаём новое изображение для "${word}"`,
       });
 
-      const providerParams = getProviderParams(imageProvider);
+      const providerParams = getProviderParams();
       
       const { image_url } = await deckService.generateImage({
         word: pair.word,
@@ -378,7 +500,7 @@ export default function MainPage() {
       // Преобразуем в абсолютный URL и сохраняем в state для предпросмотра
       const absoluteUrl = getCardImageUrl(image_url);
       if (absoluteUrl) {
-        setGeneratedImages(prev => ({ ...prev, [pair.word]: absoluteUrl }));
+        updateGeneratedImages(prev => ({ ...prev, [pair.word]: absoluteUrl }));
       }
 
       showSuccess('Изображение обновлено!', {
@@ -404,7 +526,7 @@ export default function MainPage() {
         description: `Создаём новое аудио для "${word}"`,
       });
 
-      const provider = audioProvider === 'auto' ? undefined : audioProvider;
+      const provider = audioProvider;
 
       const { audio_url } = await deckService.generateAudio({
         word: pair.word,
@@ -415,7 +537,7 @@ export default function MainPage() {
       // Преобразуем в абсолютный URL и сохраняем в state для предпросмотра
       const absoluteUrl = getAudioUrl(audio_url);
       if (absoluteUrl) {
-        setGeneratedAudio(prev => ({ ...prev, [pair.word]: absoluteUrl }));
+        updateGeneratedAudio(prev => ({ ...prev, [pair.word]: absoluteUrl }));
       }
 
       showSuccess('Аудио обновлено!', {
@@ -513,13 +635,16 @@ export default function MainPage() {
     // Валидация
     if (!validateTranslations()) return;
 
-    // Проверка токенов
+    // Проверка токенов (учитываем уже сгенерированные медиа)
+    const wordsNeedingImages = generateImages ? translations.filter(p => !generatedImages[p.word]).length : 0;
+    const wordsNeedingAudio = generateAudio ? translations.filter(p => !generatedAudio[p.word]).length : 0;
+    const wordsToGenerate = Math.max(wordsNeedingImages, wordsNeedingAudio);
     const requiredTokens = getTotalMediaCost(
-      translations.length,
-      generateImages,
-      generateAudio,
-      imageProvider === 'auto' ? (user?.image_provider || 'openai') : imageProvider,
-      imageProvider === 'gemini' ? geminiModel : (user?.gemini_model || 'gemini-2.5-flash-image')
+      wordsToGenerate,
+      generateImages && wordsNeedingImages > 0,
+      generateAudio && wordsNeedingAudio > 0,
+      imageProvider === 'nano-banana' ? 'gemini' : (imageProvider as 'openai' | 'gemini'),
+      geminiModel as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
     );
     const hasEnoughTokens = await checkBalance(requiredTokens);
 
@@ -539,21 +664,23 @@ export default function MainPage() {
       let failedImageWords: string[] = [];
       
       if (generateImages) {
+        // Фильтруем слова без готовых изображений
+        const pairsNeedingImages = translations.filter(p => !generatedImages[p.word]);
         setGenerationStatus('generating_images');
-        setGenerationProgress({ current: 0, total: translations.length, currentWord: '' });
+        setGenerationProgress({ current: 0, total: pairsNeedingImages.length, currentWord: '' });
 
-        for (let i = 0; i < translations.length; i++) {
+        for (let i = 0; i < pairsNeedingImages.length; i++) {
           // Проверяем, не отменена ли генерация
           if (controller.signal.aborted) {
             throw new Error('Generation cancelled');
           }
-          
-          const pair = translations[i];
-          
+
+          const pair = pairsNeedingImages[i];
+
           // Обновляем прогресс
           setGenerationProgress({
             current: i + 1,
-            total: translations.length,
+            total: pairsNeedingImages.length,
             currentWord: pair.word,
           });
 
@@ -563,7 +690,7 @@ export default function MainPage() {
               setTimeout(() => reject(new Error('Image generation timeout')), 60000);
             });
 
-            const providerParams = getProviderParams(imageProvider);
+            const providerParams = getProviderParams();
             
             const imagePromise = deckService.generateImage({
               word: pair.word,
@@ -577,7 +704,7 @@ export default function MainPage() {
             const absoluteUrl = getCardImageUrl(image_url);
             
             if (absoluteUrl) {
-              setGeneratedImages(prev => ({ ...prev, [pair.word]: absoluteUrl }));
+              updateGeneratedImages(prev => ({ ...prev, [pair.word]: absoluteUrl }));
             }
           } catch (error) {
             // Если ошибка - отмена, прекращаем цикл
@@ -602,21 +729,23 @@ export default function MainPage() {
       let failedAudioWords: string[] = [];
       
       if (generateAudio) {
+        // Фильтруем слова без готового аудио
+        const pairsNeedingAudio = translations.filter(p => !generatedAudio[p.word]);
         setGenerationStatus('generating_audio');
-        setGenerationProgress({ current: 0, total: translations.length, currentWord: '' });
+        setGenerationProgress({ current: 0, total: pairsNeedingAudio.length, currentWord: '' });
 
-        for (let i = 0; i < translations.length; i++) {
+        for (let i = 0; i < pairsNeedingAudio.length; i++) {
           // Проверяем, не отменена ли генерация
           if (controller.signal.aborted) {
             throw new Error('Generation cancelled');
           }
-          
-          const pair = translations[i];
-          
+
+          const pair = pairsNeedingAudio[i];
+
           // Обновляем прогресс
           setGenerationProgress({
             current: i + 1,
-            total: translations.length,
+            total: pairsNeedingAudio.length,
             currentWord: pair.word,
           });
 
@@ -626,7 +755,7 @@ export default function MainPage() {
               setTimeout(() => reject(new Error('Audio generation timeout')), 45000);
             });
 
-            const provider = audioProvider === 'auto' ? undefined : audioProvider;
+            const provider = audioProvider;
 
             const audioPromise = deckService.generateAudio({
               word: pair.word,
@@ -639,7 +768,7 @@ export default function MainPage() {
             // Преобразуем в абсолютный URL и сохраняем в state для предпросмотра
             const absoluteUrl = getAudioUrl(audio_url);
             if (absoluteUrl) {
-              setGeneratedAudio(prev => ({ ...prev, [pair.word]: absoluteUrl }));
+              updateGeneratedAudio(prev => ({ ...prev, [pair.word]: absoluteUrl }));
             }
           } catch (error) {
             // Если ошибка - отмена, прекращаем цикл
@@ -712,15 +841,14 @@ export default function MainPage() {
                 translation: pair.translation,
                 language: targetLang,
                 image_style: imageStyle,
-                provider: imageProvider === 'auto' ? undefined : imageProvider,
-                gemini_model: imageProvider === 'gemini' ? geminiModel : undefined,
+                ...getProviderParams(),
               }, controller.signal);
 
               const { image_url } = await Promise.race([imagePromise, timeoutPromise]);
               const absoluteUrl = getCardImageUrl(image_url);
               
               if (absoluteUrl) {
-                setGeneratedImages(prev => ({ ...prev, [pair.word]: absoluteUrl }));
+                updateGeneratedImages(prev => ({ ...prev, [pair.word]: absoluteUrl }));
                 console.log(`✅ Retry successful for image: "${word}"`);
               }
             } catch (error) {
@@ -759,7 +887,7 @@ export default function MainPage() {
                 setTimeout(() => reject(new Error('Audio generation timeout')), 45000);
               });
 
-              const provider = audioProvider === 'auto' ? undefined : audioProvider;
+              const provider = audioProvider;
 
               const audioPromise = deckService.generateAudio({
                 word: pair.word,
@@ -771,7 +899,7 @@ export default function MainPage() {
               const absoluteUrl = getAudioUrl(audio_url);
               
               if (absoluteUrl) {
-                setGeneratedAudio(prev => ({ ...prev, [pair.word]: absoluteUrl }));
+                updateGeneratedAudio(prev => ({ ...prev, [pair.word]: absoluteUrl }));
                 console.log(`✅ Retry successful for audio: "${word}"`);
               }
             } catch (error) {
@@ -1048,14 +1176,10 @@ export default function MainPage() {
 
       // Сброс формы через небольшую задержку, чтобы показать "complete"
       resetTimerRef.current = setTimeout(() => {
-        setWords([]);
-        setTranslations([]);
-        setDeckName(t.decks.newDeck);
-        setSavedDeckId(null); // Сброс сохранённого ID
+        clearDraft();
+        setSavedDeckId(null);
         setGenerationStatus('idle');
         setGenerationProgress({ current: 0, total: 0, currentWord: '' });
-        setGeneratedImages({}); // Сброс медиа
-        setGeneratedAudio({});
       }, 2000);
     } catch (error) {
       console.error('Error generating cards:', error);
@@ -1075,237 +1199,196 @@ export default function MainPage() {
     translations.length,
     generateImages,
     generateAudio,
-    imageProvider === 'auto' ? (user?.image_provider || 'openai') : imageProvider,
-    imageProvider === 'gemini' ? geminiModel : (user?.gemini_model || 'gemini-2.5-flash-image')
+    imageProvider === 'nano-banana' ? 'gemini' : (imageProvider as 'openai' | 'gemini'),
+    geminiModel as 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
   );
 
+  const hasMedia = Object.keys(generatedImages).length > 0 || Object.keys(generatedAudio).length > 0;
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 pb-24">
-      {/* Форма генерации */}
-      <div className="space-y-6">
-        {/* Ввод слов с названием колоды */}
-        <WordChipsInput
-          words={words}
-          onChange={handleWordsChange}
+    <div className="mx-auto max-w-4xl space-y-4 p-4 pb-24">
+      {/* 1. Photo button — hero position */}
+      <div className="flex items-center gap-2">
+        <PhotoWordExtractor
+          targetLang={targetLang}
+          sourceLang={sourceLang}
+          onWordsExtracted={handlePhotoWordsExtracted}
           disabled={isGenerating}
-          deckName={deckName}
-          onDeckNameChange={setDeckName}
-          isProcessing={isProcessingWords}
         />
+      </div>
 
-        {/* Кнопка автоперевода */}
-        {words.length > 0 && (
-          <div className="flex justify-end">
-            <Button
-              onClick={handleAutoTranslate}
-              disabled={isTranslating || isGenerating}
-              variant="outline"
-              size="default"
-              className="min-w-[140px] border-pink-200 bg-gradient-to-r from-pink-50 to-purple-50 hover:from-pink-100 hover:to-purple-100 dark:border-pink-800 dark:from-pink-950/30 dark:to-purple-950/30 dark:hover:from-pink-950/50 dark:hover:to-purple-950/50"
-            >
-              {isTranslating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t.words.translating}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  {t.words.autoTranslate}
-                </>
-              )}
-            </Button>
-          </div>
-        )}
+      {/* 2. Word chips input (no deck name) */}
+      <WordChipsInput
+        words={words}
+        onChange={handleWordsChange}
+        disabled={isGenerating}
+        isProcessing={isProcessingWords}
+      />
 
-        {/* Таблица переводов */}
-        {words.length > 0 && (
-          <TranslationTable
-            words={words}
-            translations={translations}
-            onTranslationsChange={handleTranslationsChange}
-            targetLang={targetLang}
-            sourceLang={sourceLang}
-            disabled={isGenerating}
-            imageFiles={generatedImages}
-            audioFiles={generatedAudio}
-          />
-        )}
-
-        {/* Сетка готовых карточек с медиа */}
-        {words.length > 0 && (
-          <GeneratedWordsGrid
-            words={translations}
-            imageFiles={generatedImages}
-            audioFiles={generatedAudio}
-            onDeleteWord={(word) => {
-              // Удаляем слово из списка
-              const newTranslations = translations.filter((t) => t.word !== word);
-              setTranslations(newTranslations);
-              setWords(newTranslations.map((t) => t.word));
-              // Удаляем медиа для этого слова
-              const newImages = { ...generatedImages };
-              delete newImages[word];
-              setGeneratedImages(newImages);
-              const newAudio = { ...generatedAudio };
-              delete newAudio[word];
-              setGeneratedAudio(newAudio);
+      {/* 2.5. Clear draft button */}
+      {words.length > 0 && !isGenerating && (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => {
+              if (window.confirm(t.draft.confirmClear)) {
+                clearDraft();
+                setSavedDeckId(null);
+                setGenerationStatus('idle');
+                setGenerationProgress({ current: 0, total: 0, currentWord: '' });
+              }
             }}
-            onRegenerateImage={handleRegenerateImage}
-            onRegenerateAudio={handleRegenerateAudio}
-            disabled={isGenerating}
-          />
-        )}
+          >
+            {t.draft.clearAll}
+          </Button>
+        </div>
+      )}
 
-        {/* Настройки медиа */}
-        {translations.length > 0 && (
-          <Card className="p-6">
-            <h2 className="mb-6 flex items-center gap-2 text-gray-900 dark:text-gray-100">
-              <ImageIcon className="h-5 w-5 text-blue-500" />
-              {t.generation.mediaSettings}
-            </h2>
-
-            <div className="space-y-6">
-              {/* Чекбоксы для медиа */}
-              <div className="space-y-4">
-                {/* Генерация изображений */}
-                <div className="flex items-center space-x-3">
-                  <Checkbox
-                    id="generate-images"
-                    checked={generateImages}
-                    onCheckedChange={setGenerateImages}
-                    disabled={isGenerating}
-                  />
-                  <Label
-                    htmlFor="generate-images"
-                    className="flex cursor-pointer items-center gap-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    <ImageIcon className="h-4 w-4 text-cyan-500" />
-                    {t.generation.generateImages}
-                  </Label>
-                </div>
-
-                {/* Генерация аудио */}
-                <div className="flex items-center space-x-3">
-                  <Checkbox
-                    id="generate-audio"
-                    checked={generateAudio}
-                    onCheckedChange={setGenerateAudio}
-                    disabled={isGenerating}
-                  />
-                  <Label
-                    htmlFor="generate-audio"
-                    className="flex cursor-pointer items-center gap-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    <Volume2 className="h-4 w-4 text-pink-500" />
-                    {t.generation.generateAudio}
-                  </Label>
-                </div>
-              </div>
-
-              {/* Селектор стиля изображений */}
-              {generateImages && (
-                <div className="pt-2 space-y-4">
-                  <ImageStyleSelector
-                    value={imageStyle}
-                    onChange={setImageStyle}
-                    disabled={isGenerating}
-                  />
-                  
-                  {/* Селектор провайдера изображений */}
-                  <ImageProviderDropdown
-                    value={imageProvider}
-                    onChange={setImageProvider}
-                    disabled={isGenerating}
-                  />
-                </div>
-              )}
-              
-              {/* Селектор провайдера аудио */}
-              {generateAudio && (
-                <div className="pt-2 space-y-4">
-                  <AudioProviderDropdown
-                    value={audioProvider}
-                    onChange={setAudioProvider}
-                    disabled={isGenerating}
-                  />
-                </div>
-              )}
-            </div>
-          </Card>
-        )}
-
-        {/* Прогресс генерации */}
-        <GenerationProgress
-          status={generationStatus}
-          current={generationProgress.current}
-          total={generationProgress.total}
-          currentWord={generationProgress.currentWord}
-          onCancel={handleCancelGeneration}
+      {/* 3. Compact literary source selector ("рубашка") */}
+      {words.length > 0 && (
+        <CompactLiterarySourceSelector
+          activeSource={user?.active_literary_source ?? null}
+          onSourceChange={(slug: string | null) => updateUser({ active_literary_source: slug })}
         />
+      )}
 
-        {/* Карточка успешного сохранения */}
-        {generationStatus === 'complete' && savedDeckId && (
-          <GenerationSuccess
-            deckName={deckName}
-            deckId={savedDeckId}
-            wordsCount={translations.length}
-          />
-        )}
+      {/* 4. Индикатор автоперевода */}
+      {isTranslating && (
+        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t.toast.autoTranslating}
+        </div>
+      )}
 
-        {/* Кнопка генерации */}
-        {translations.length > 0 && (
-          <Card className="p-6">
-            <div className="space-y-4">
-              {/* Информация о стоимости */}
-              <div className="flex items-center justify-between rounded-lg bg-gradient-to-r from-cyan-50 to-pink-50 p-4 dark:from-cyan-950/20 dark:to-pink-950/20">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    {t.generation.generationCost}
-                  </p>
-                  <p className="text-2xl font-semibold text-primary">
-                    {formatTokensWithText(estimatedCost, t, sourceLang)}
-                  </p>
+      {/* 5. Translation table */}
+      {words.length > 0 && (
+        <TranslationTable
+          words={words}
+          translations={translations}
+          onTranslationsChange={handleTranslationsChange}
+          targetLang={targetLang}
+          sourceLang={sourceLang}
+          disabled={isGenerating}
+          imageFiles={generatedImages}
+          audioFiles={generatedAudio}
+        />
+      )}
+
+      {/* 6. Generated words grid (with frosted glass) */}
+      {words.length > 0 && (
+        <GeneratedWordsGrid
+          words={translations}
+          imageFiles={generatedImages}
+          audioFiles={generatedAudio}
+          onDeleteWord={(word) => {
+            const newTranslations = translations.filter((t) => t.word !== word);
+            setTranslations(newTranslations);
+            setWords(newTranslations.map((t) => t.word));
+            const newImages = { ...generatedImages };
+            delete newImages[word];
+            setGeneratedImages(newImages);
+            const newAudio = { ...generatedAudio };
+            delete newAudio[word];
+            setGeneratedAudio(newAudio);
+          }}
+          onRegenerateImage={handleRegenerateImage}
+          onRegenerateAudio={handleRegenerateAudio}
+          disabled={isGenerating}
+        />
+      )}
+
+      {/* 7. Generation progress */}
+      <GenerationProgress
+        status={generationStatus}
+        current={generationProgress.current}
+        total={generationProgress.total}
+        currentWord={generationProgress.currentWord}
+        onCancel={handleCancelGeneration}
+      />
+
+      {/* 8. Success card */}
+      {generationStatus === 'complete' && savedDeckId && (
+        <GenerationSuccess
+          deckName={deckName}
+          deckId={savedDeckId}
+          wordsCount={translations.length}
+        />
+      )}
+
+      {/* 9. Action area — compact */}
+      {translations.length > 0 && (
+        <Card className="p-4">
+          <div className="space-y-3">
+            {/* Compact media toggles */}
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <Checkbox
+                  id="generate-images"
+                  checked={generateImages}
+                  onCheckedChange={setGenerateImages}
+                  disabled={isGenerating}
+                />
+                <ImageIcon className="h-3.5 w-3.5 text-cyan-500" />
+                <span>{t.generation.generateImages}</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <Checkbox
+                  id="generate-audio"
+                  checked={generateAudio}
+                  onCheckedChange={setGenerateAudio}
+                  disabled={isGenerating}
+                />
+                <Volume2 className="h-3.5 w-3.5 text-pink-500" />
+                <span>{t.generation.generateAudio}</span>
+              </label>
+            </div>
+
+            {/* Generate media button with token badge */}
+            {!hasMedia && (
+              <Button
+                onClick={handleGenerateMedia}
+                disabled={
+                  isGenerating ||
+                  balance < estimatedCost ||
+                  translations.length === 0
+                }
+                size="lg"
+                className="h-12 w-full bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    {t.generation.generatingMedia}
+                  </>
+                ) : balance < estimatedCost ? (
+                  t.generation.insufficientTokens
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5" />
+                    {t.generation.generateMedia}
+                    <TokenCostBadge cost={estimatedCost} balance={balance} />
+                  </span>
+                )}
+              </Button>
+            )}
+
+            {/* After media: deck name + create button */}
+            {hasMedia && (
+              <>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="deck-name" className="shrink-0 text-sm text-muted-foreground">
+                    {t.decks.deckName}:
+                  </Label>
+                  <Input
+                    id="deck-name"
+                    value={deckName}
+                    onChange={(e) => setDeckName(e.target.value)}
+                    className="h-9"
+                    disabled={isGenerating}
+                  />
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">{t.tokens.yourBalance}</p>
-                  <p className="text-2xl font-semibold">
-                    {formatTokensWithText(balance, t, sourceLang)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Кнопка */}
-              {/* Кнопка генерации медиа (Этап 1) */}
-              {Object.keys(generatedImages).length === 0 && Object.keys(generatedAudio).length === 0 && (
-                <Button
-                  onClick={handleGenerateMedia}
-                  disabled={
-                    isGenerating ||
-                    balance < estimatedCost ||
-                    translations.length === 0
-                  }
-                  size="lg"
-                  className="h-12 w-full bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      {t.generation.generatingMedia}
-                    </>
-                  ) : balance < estimatedCost ? (
-                    t.generation.insufficientTokens
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-5 w-5" />
-                      {t.generation.generateMedia}
-                    </>
-                  )}
-                </Button>
-              )}
-
-              {/* Кнопка создания колоды (Этап 2) - появляется ПОСЛЕ генерации медиа */}
-              {(Object.keys(generatedImages).length > 0 || Object.keys(generatedAudio).length > 0) && (
                 <Button
                   onClick={handleCreateDeck}
                   disabled={isGenerating || !deckName.trim()}
@@ -1324,19 +1407,21 @@ export default function MainPage() {
                     </>
                   )}
                 </Button>
-              )}
-            </div>
-          </Card>
-        )}
-      </div>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
-      {/* Модальное окно недостатка токенов */}
+      {/* Insufficient tokens modal */}
       <InsufficientTokensModal
         isOpen={showInsufficientTokensModal}
         onClose={() => setShowInsufficientTokensModal(false)}
         currentBalance={balance}
         requiredTokens={estimatedCost}
       />
+
+      <PageHelpButton pageKey="create" />
     </div>
   );
 }

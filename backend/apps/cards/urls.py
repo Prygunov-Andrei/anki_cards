@@ -28,6 +28,7 @@ analysis_urlpatterns = [
     path('analyze-words/', views.analyze_words_view, name='analyze-words'),
     path('translate-words/', views.translate_words_view, name='translate-words'),
     path('process-german-words/', views.process_german_words_view, name='process-german-words'),
+    path('extract-words-from-photo/', views.extract_words_from_photo_view, name='extract-words-from-photo'),
 ]
 
 # Deck management endpoints (Этап 7)

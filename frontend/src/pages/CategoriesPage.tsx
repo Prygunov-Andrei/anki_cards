@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageHelpButton } from '../components/PageHelpButton';
 import { categoriesService } from '../services/categories.service';
 import type {
   CategoryTree as CategoryTreeType,
@@ -300,7 +301,7 @@ export default function CategoriesPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex h-full items-center justify-center rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+              <div className="flex h-full items-center justify-center rounded-lg border border-dashed p-6 sm:p-12 text-center text-muted-foreground">
                 <p>{t.categories.details.selectCategory}</p>
               </div>
             )}
@@ -344,6 +345,8 @@ export default function CategoriesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PageHelpButton pageKey="categories" />
     </div>
   );
 }

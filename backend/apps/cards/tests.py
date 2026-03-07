@@ -19,7 +19,8 @@ from .llm_utils import (
     detect_word_language,
     analyze_mixed_languages,
     translate_words,
-    process_german_word
+    process_german_word,
+    extract_words_from_photo
 )
 
 User = get_user_model()
@@ -3438,6 +3439,207 @@ class TestCardAPI:
         Card.create_inverted(self.word)
         
         response = self.client.get(f'/api/words/{self.word.id}/cards/')
-        
+
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 2
+
+
+@pytest.mark.django_db
+class TestPhotoWordExtraction:
+    """Тесты для извлечения слов из фотографий"""
+
+    def setup_method(self):
+        self.user = User.objects.create_user(
+            username='photo_test_user',
+            password='testpass123',
+            email='photo@test.com'
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        # Создаём токены
+        Token.objects.create(user=self.user, balance=100)
+
+    # --- Тесты LLM-функции extract_words_from_photo ---
+
+    @patch('apps.cards.llm_utils.get_openai_client')
+    def test_extract_words_success(self, mock_client):
+        """Успешное извлечение слов из фото"""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = '{"words": ["Haus", "Schule", "lernen"]}'
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create.return_value = mock_response
+        mock_client.return_value = mock_openai
+
+        result = extract_words_from_photo(b'fake_image_data', 'de', 'ru')
+
+        assert result == ['Haus', 'Schule', 'lernen']
+        mock_openai.chat.completions.create.assert_called_once()
+
+    @patch('apps.cards.llm_utils.get_openai_client')
+    def test_extract_words_empty_image(self, mock_client):
+        """Фото без текста — пустой список"""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = '{"words": []}'
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create.return_value = mock_response
+        mock_client.return_value = mock_openai
+
+        result = extract_words_from_photo(b'fake_image_data', 'de', 'ru')
+
+        assert result == []
+
+    @patch('apps.cards.llm_utils.get_openai_client')
+    def test_extract_words_deduplication(self, mock_client):
+        """Дубликаты слов удаляются"""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = '{"words": ["Haus", "haus", "Schule", "Haus"]}'
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create.return_value = mock_response
+        mock_client.return_value = mock_openai
+
+        result = extract_words_from_photo(b'fake_image_data', 'de', 'ru')
+
+        assert len(result) == 2
+        assert result[0] == 'Haus'
+        assert result[1] == 'Schule'
+
+    @patch('apps.cards.llm_utils.get_openai_client')
+    def test_extract_words_api_error(self, mock_client):
+        """Ошибка OpenAI API — исключение пробрасывается"""
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create.side_effect = Exception("API Error")
+        mock_client.return_value = mock_openai
+
+        with pytest.raises(Exception, match="API Error"):
+            extract_words_from_photo(b'fake_image_data', 'de', 'ru')
+
+    # --- Тесты API-эндпоинта ---
+
+    @patch('apps.cards.views.extract_words_from_photo')
+    def test_api_success(self, mock_extract):
+        """POST с тестовым изображением — 200 + список слов"""
+        mock_extract.return_value = ['Haus', 'Schule', 'lernen']
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        image = SimpleUploadedFile("test.jpg", b'\xff\xd8\xff\xe0' + b'\x00' * 100, content_type="image/jpeg")
+
+        response = self.client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'image': image, 'target_lang': 'de', 'source_lang': 'ru'},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['words'] == ['Haus', 'Schule', 'lernen']
+
+    def test_api_no_image(self):
+        """POST без файла — 400"""
+        response = self.client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'target_lang': 'de', 'source_lang': 'ru'},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_api_invalid_image_format(self):
+        """POST с .txt файлом — 400"""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        txt_file = SimpleUploadedFile("test.txt", b"hello world", content_type="text/plain")
+
+        response = self.client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'image': txt_file, 'target_lang': 'de', 'source_lang': 'ru'},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_api_missing_languages(self):
+        """POST без target_lang/source_lang — 400"""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        image = SimpleUploadedFile("test.jpg", b'\xff\xd8\xff\xe0' + b'\x00' * 100, content_type="image/jpeg")
+
+        response = self.client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'image': image},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_api_unauthenticated(self):
+        """POST без авторизации — 401"""
+        unauthenticated_client = APIClient()
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        image = SimpleUploadedFile("test.jpg", b'\xff\xd8\xff\xe0' + b'\x00' * 100, content_type="image/jpeg")
+
+        response = unauthenticated_client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'image': image, 'target_lang': 'de', 'source_lang': 'ru'},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_api_insufficient_tokens(self):
+        """POST с нулевым балансом — 402"""
+        token = Token.objects.get(user=self.user)
+        token.balance = 0
+        token.save()
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        image = SimpleUploadedFile("test.jpg", b'\xff\xd8\xff\xe0' + b'\x00' * 100, content_type="image/jpeg")
+
+        response = self.client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'image': image, 'target_lang': 'de', 'source_lang': 'ru'},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_402_PAYMENT_REQUIRED
+
+    @patch('apps.cards.views.extract_words_from_photo')
+    def test_api_token_deducted(self, mock_extract):
+        """После успешного запроса баланс уменьшается на 1"""
+        mock_extract.return_value = ['Haus']
+
+        token = Token.objects.get(user=self.user)
+        initial_balance = token.balance
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        image = SimpleUploadedFile("test.jpg", b'\xff\xd8\xff\xe0' + b'\x00' * 100, content_type="image/jpeg")
+
+        response = self.client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'image': image, 'target_lang': 'de', 'source_lang': 'ru'},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        token.refresh_from_db()
+        assert token.balance == initial_balance - 1
+
+    @patch('apps.cards.views.extract_words_from_photo')
+    def test_api_token_refunded_on_error(self, mock_extract):
+        """При ошибке LLM токены возвращаются"""
+        mock_extract.side_effect = Exception("LLM Error")
+
+        token = Token.objects.get(user=self.user)
+        initial_balance = token.balance
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        image = SimpleUploadedFile("test.jpg", b'\xff\xd8\xff\xe0' + b'\x00' * 100, content_type="image/jpeg")
+
+        response = self.client.post(
+            '/api/cards/extract-words-from-photo/',
+            {'image': image, 'target_lang': 'de', 'source_lang': 'ru'},
+            format='multipart'
+        )
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        token.refresh_from_db()
+        assert token.balance == initial_balance

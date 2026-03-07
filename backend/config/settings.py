@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'apps.cards',
     'apps.anki_sync',
     'apps.training',
+    'apps.literary_context',
 ]
 
 MIDDLEWARE = [
@@ -202,7 +203,7 @@ REST_FRAMEWORK = {
 # CORS settings
 CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
-    'http://localhost:3000'
+    'http://localhost:3000,http://localhost:3001,http://localhost:3002'
 ).split(',')
 
 CORS_ALLOW_CREDENTIALS = True

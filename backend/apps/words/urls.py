@@ -57,5 +57,7 @@ urlpatterns = [
     # Действия
     path('<int:word_id>/enter-learning/', views.word_enter_learning_view, name='word-enter-learning'),
     path('bulk-action/', views.words_bulk_action_view, name='words-bulk-action'),
+    path('bulk-create/', views.words_bulk_create_view, name='words-bulk-create'),
+    path('check-media/', views.words_check_media_view, name='words-check-media'),
 ]
 

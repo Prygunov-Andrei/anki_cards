@@ -440,10 +440,12 @@ export const pt: TranslationKeys = {
   // Header
   header: {
     home: 'Início',
+    create: 'Criar',
     training: 'Treino',
     words: 'Palavras',
     categories: 'Categorias',
     decks: 'Baralhos',
+    library: 'Biblioteca',
     forgettingCurve: 'Curvas de esquecimento',
     profile: 'Perfil',
     notifications: 'Notificações',
@@ -546,6 +548,17 @@ export const pt: TranslationKeys = {
     word: 'palavra',
     words: 'palavras',
     wordsGenitive: 'palavras',
+
+    photoExtraction: {
+      scanFromPhoto: 'Digitalizar da foto',
+      extractingWords: 'Extraindo palavras...',
+      extractedWords: 'Palavras extraídas',
+      noWordsFound: 'Nenhuma palavra encontrada nesta imagem',
+      addExtractedWords: 'Adicionar palavras',
+      wordsFound: 'palavras encontradas',
+      cancel: 'Cancelar',
+      extractionError: 'Erro ao extrair palavras da foto',
+    },
   },
 
   // Navigation
@@ -869,5 +882,130 @@ export const pt: TranslationKeys = {
       imageTooLarge: 'A imagem não deve exceder 10MB',
       dragDropHint: 'Arraste uma imagem aqui ou clique para selecionar',
     },
+  },
+
+  library: {
+    title: 'Biblioteca',
+    stories: 'histórias',
+    translated: 'traduzidas',
+    search: 'Pesquisar histórias...',
+    words: 'palavras',
+    byLength: 'Comprimento',
+    empty: 'Nenhuma fonte literária disponível',
+    addToVocabulary: 'Ao vocabulário',
+    alreadyInVocabulary: 'Já no vocabulário',
+    wordAdded: 'Palavra adicionada',
+  },
+
+  help: {
+    tipsTitle: 'Dicas',
+    dontShowAgain: 'Não mostrar novamente',
+    create: {
+      title: 'Criar um baralho',
+      steps: [
+        'Fotografe palavras ou digite-as manualmente',
+        'Escolha uma "capa" — o estilo literário dos cartões',
+        'Clique em "Tradução automática" para traduzir as palavras',
+        'Clique em "Magia" para gerar imagens e áudio',
+        'Nomeie o baralho e baixe o arquivo .apkg',
+      ],
+      tips: [
+        'Arraste um chip sobre outro para combinar palavras em uma frase',
+        'Seu progresso é salvo automaticamente — você pode navegar para outras páginas',
+        'Se a geração foi interrompida — clique em "Magia" novamente, as imagens já geradas não serão perdidas',
+      ],
+    },
+    words: {
+      title: 'Catálogo de palavras',
+      steps: [
+        'Todas as suas palavras de todos os baralhos em um só lugar',
+        'Use a pesquisa e os filtros para navegar',
+        'Clique em uma palavra para ver detalhes e editar',
+      ],
+      tips: [
+        'Filtre por categoria para encontrar rapidamente as palavras desejadas',
+        'Palavras sem categoria podem ser atribuídas na página de detalhes',
+      ],
+    },
+    decks: {
+      title: 'Gerenciamento de baralhos',
+      steps: [
+        'Todos os baralhos criados são exibidos aqui',
+        'Clique em um baralho para baixar o arquivo .apkg',
+        'Use o menu do baralho para excluir ou inverter',
+      ],
+      tips: [
+        'Inverter cria um baralho com direção de tradução invertida',
+        'O arquivo .apkg baixado pode ser importado no Anki',
+      ],
+    },
+    training: {
+      title: 'Treino',
+      steps: [
+        'Selecione categorias ou palavras para treinar',
+        'Avalie seu conhecimento em uma escala de 1 a 5',
+        'O sistema mostrará palavras que você esquece com mais frequência',
+      ],
+      tips: [
+        'Sessões curtas regulares são mais eficazes do que sessões longas raras',
+        'Use a curva de esquecimento para acompanhar seu progresso',
+      ],
+    },
+    categories: {
+      title: 'Categorias',
+      steps: [
+        'Organize palavras por categorias temáticas',
+        'Crie categorias aninhadas para classificação mais precisa',
+        'Arraste categorias para alterar a hierarquia',
+      ],
+      tips: [
+        'Categorias ajudam a focar o treino em temas específicos',
+        'Uma palavra pode pertencer a várias categorias',
+      ],
+    },
+    profile: {
+      title: 'Perfil',
+      steps: [
+        'Configure seu nome, avatar e email',
+        'Escolha seu idioma nativo e o idioma de aprendizado',
+        'Gerencie as configurações de notificações',
+      ],
+      tips: [
+        'O idioma da interface muda de acordo com o idioma nativo selecionado',
+      ],
+    },
+    forgettingCurve: {
+      title: 'Curva de esquecimento',
+      steps: [
+        'O gráfico mostra quão rápido você esquece as palavras',
+        'Quanto mais íngreme a curva, mais rápido a palavra é esquecida',
+        'Treine com mais frequência palavras com curva íngreme',
+      ],
+      tips: [
+        'A curva é atualizada após cada sessão de treino',
+        'Palavras verdes estão bem memorizadas, vermelhas precisam de revisão',
+      ],
+    },
+    library: {
+      title: 'Biblioteca',
+      steps: [
+        'Escolha um conto de Tchekhov da lista',
+        'Clique em qualquer palavra no texto para ver a tradução',
+        'Clique em "Ao vocabulário" para começar a aprender a palavra',
+      ],
+      tips: [
+        'Mude o idioma (DE/RU) com o botão no cabeçalho',
+        'Mude o tamanho da fonte com o botão S/M/L',
+      ],
+    },
+  },
+
+  draft: {
+    restored: 'Rascunho restaurado',
+    restoredDescription: 'palavras carregadas do rascunho',
+    saved: 'Rascunho salvo',
+    clearAll: 'Limpar tudo',
+    confirmClear: 'Excluir todas as palavras, traduções e mídias geradas?',
+    confirmLeave: 'A geração de mídia ainda está em andamento. Sair da página?',
   },
 };

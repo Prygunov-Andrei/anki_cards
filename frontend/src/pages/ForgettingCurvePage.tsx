@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PageHelpButton } from '../components/PageHelpButton';
 import { TrendingDown, BarChart3, Brain, Zap } from 'lucide-react';
 import {
   LineChart,
@@ -86,7 +87,7 @@ export default function ForgettingCurvePage() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <TrendingDown className="h-7 w-7 text-blue-600" />
@@ -94,7 +95,7 @@ export default function ForgettingCurvePage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-xl border p-4 text-center">
           <BarChart3 className="h-6 w-6 text-blue-500 mx-auto mb-2" />
           <div className="text-2xl font-bold">{data.summary.total_reviews}</div>
@@ -120,8 +121,9 @@ export default function ForgettingCurvePage() {
         <p className="text-sm text-gray-500 mb-4">
           {t.forgettingCurve.chart.description}
         </p>
-        <ResponsiveContainer width="100%" height={350}>
-          <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+        <div className="h-[250px] sm:h-[350px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
             <XAxis
               dataKey="day"
@@ -169,6 +171,7 @@ export default function ForgettingCurvePage() {
             />
           </AreaChart>
         </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Bar Chart: Cards per Interval */}
@@ -176,8 +179,9 @@ export default function ForgettingCurvePage() {
         <h2 className="text-lg font-semibold mb-4">
           {t.forgettingCurve.barChart.title}
         </h2>
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={data.points} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+        <div className="h-[200px] sm:h-[250px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data.points} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
             <XAxis dataKey="label" />
             <YAxis />
@@ -204,10 +208,11 @@ export default function ForgettingCurvePage() {
             <Bar dataKey="successful" fill="#22c55e" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </div>
 
-      {/* Detailed Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border overflow-hidden">
+      {/* Detailed Table — desktop */}
+      <div className="hidden sm:block bg-white dark:bg-gray-800 rounded-xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
@@ -246,6 +251,34 @@ export default function ForgettingCurvePage() {
           </tbody>
         </table>
       </div>
+
+      {/* Detailed Table — mobile cards */}
+      <div className="sm:hidden space-y-2">
+        {data.points.map((p, i) => (
+          <div key={i} className="rounded-xl border bg-white dark:bg-gray-800 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium text-sm">{p.label} {t.forgettingCurve.table.days}</span>
+              <span
+                className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  p.retention_rate >= 90
+                    ? 'bg-green-100 text-green-800'
+                    : p.retention_rate >= 70
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-red-100 text-red-800'
+                }`}
+              >
+                {p.retention_rate}%
+              </span>
+            </div>
+            <div className="flex gap-4 text-xs text-gray-500">
+              <span>{t.forgettingCurve.table.cards}: <strong className="text-foreground">{p.total_cards}</strong></span>
+              <span>{t.forgettingCurve.table.successful}: <strong className="text-green-600">{p.successful}</strong></span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <PageHelpButton pageKey="forgettingCurve" />
     </div>
   );
 }

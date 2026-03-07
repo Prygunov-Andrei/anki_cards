@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { PageHelpButton } from '../components/PageHelpButton';
 import { wordsService } from '../services/words.service';
 import { categoriesService } from '../services/categories.service';
 import type {
@@ -208,10 +209,10 @@ export default function WordsPage() {
           placeholder={t.wordsCatalog.search.placeholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
+          className="w-full sm:max-w-xs"
         />
         <Select value={learningStatus} onValueChange={setLearningStatus}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder={t.wordsCatalog.filters.status} />
           </SelectTrigger>
           <SelectContent>
@@ -223,7 +224,7 @@ export default function WordsPage() {
           </SelectContent>
         </Select>
         <Select value={ordering} onValueChange={setOrdering}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full sm:w-[200px]">
             <SelectValue placeholder={t.wordsCatalog.filters.ordering} />
           </SelectTrigger>
           <SelectContent>
@@ -329,6 +330,8 @@ export default function WordsPage() {
           </div>
         </>
       )}
+
+      <PageHelpButton pageKey="words" />
     </div>
   );
 }

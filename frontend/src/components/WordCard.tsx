@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -17,6 +17,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSeparator,
 } from './ui/dropdown-menu';
+import { cn } from './ui/utils';
 import { useTranslation } from '../contexts/LanguageContext';
 import { displayWord } from '../utils/helpers';
 import { useNavigate } from 'react-router-dom';
@@ -82,6 +83,25 @@ export const WordCard: React.FC<WordCardProps> = ({
   const [regeneratingImage, setRegeneratingImage] = useState(false);
   const [regeneratingAudio, setRegeneratingAudio] = useState(false);
   const [editImageModalOpen, setEditImageModalOpen] = useState(false);
+  const [imageRevealed, setImageRevealed] = useState(true);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Show image for 8 seconds on appearance, then cover with frosted glass
+  useEffect(() => {
+    if (imageUrl) {
+      setImageRevealed(true);
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = setTimeout(() => setImageRevealed(false), 8000);
+    }
+    return () => clearTimeout(revealTimerRef.current);
+  }, [imageUrl]);
+
+  const handleRevealImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setImageRevealed(true);
+    clearTimeout(revealTimerRef.current);
+    revealTimerRef.current = setTimeout(() => setImageRevealed(false), 8000);
+  };
 
   // Фильтруем список колод - используем availableDecks если передан, иначе allDecks (все колоды минус текущую будут показаны)
   const decksToShow = availableDecks || allDecks;
@@ -371,19 +391,35 @@ export const WordCard: React.FC<WordCardProps> = ({
 
         {/* Изображение */}
         {imageUrl && !regeneratingImage && (
-          <div 
+          <div
             className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-cyan-50 to-pink-50 dark:from-cyan-950/20 dark:to-pink-950/20 cursor-pointer group"
-            onClick={handleImageClick}
+            onClick={imageRevealed ? handleImageClick : undefined}
           >
             <img
               src={imageUrl}
               alt={word}
               className="h-full w-full object-cover transition-transform group-hover:scale-105"
             />
-            {/* Overlay при наведении */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-              <ImageIcon className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+            {/* Frosted glass overlay */}
+            <div
+              className={cn(
+                "absolute inset-0 flex items-center justify-center transition-all duration-700",
+                imageRevealed
+                  ? "bg-transparent backdrop-blur-0 opacity-0 pointer-events-none"
+                  : "bg-white/30 dark:bg-black/40 backdrop-blur-md opacity-100 cursor-pointer"
+              )}
+              onClick={handleRevealImage}
+            >
+              {!imageRevealed && (
+                <ImageIcon className="h-8 w-8 text-white/70 drop-shadow" />
+              )}
             </div>
+            {/* Hover overlay (only when revealed) */}
+            {imageRevealed && (
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center pointer-events-none">
+                <ImageIcon className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
           </div>
         )}
 
@@ -395,6 +431,19 @@ export const WordCard: React.FC<WordCardProps> = ({
               <div className="w-3 h-3 rounded-full bg-[#FF6B9D] animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></div>
               <div className="w-3 h-3 rounded-full bg-[#FFD93D] animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></div>
             </div>
+          </div>
+        )}
+
+        {/* Плейсхолдер до генерации */}
+        {!imageUrl && !regeneratingImage && (
+          <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 flex flex-col items-center justify-center gap-2">
+            <ImageIcon className="h-10 w-10 text-muted-foreground/40" />
+            <span className="text-xs text-muted-foreground/60">Изображение</span>
+            {onRegenerateImage && (
+              <Button variant="ghost" size="sm" onClick={handleRegenerateImage} disabled={disabled}>
+                <RefreshCw className="mr-1 h-3 w-3" /> Сгенерировать
+              </Button>
+            )}
           </div>
         )}
 

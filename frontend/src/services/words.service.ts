@@ -80,6 +80,48 @@ class WordsService {
   }
 
   /**
+   * Создание слов пачкой с дедупликацией.
+   */
+  async bulkCreate(
+    words: Array<{ original_word: string; translation?: string; language?: string }>
+  ): Promise<{
+    words: Array<{
+      id: number;
+      original_word: string;
+      translation: string;
+      is_new: boolean;
+      has_image: boolean;
+      has_audio: boolean;
+      image_url: string | null;
+      audio_url: string | null;
+    }>;
+  }> {
+    const response = await api.post(API_ENDPOINTS.WORDS_BULK_CREATE, { words });
+    return response.data;
+  }
+
+  /**
+   * Проверка наличия медиа для списка слов по ID.
+   */
+  async checkMedia(
+    wordIds: number[]
+  ): Promise<{
+    words: Array<{
+      id: number;
+      original_word: string;
+      has_image: boolean;
+      has_audio: boolean;
+      image_url: string | null;
+      audio_url: string | null;
+    }>;
+  }> {
+    const response = await api.post(API_ENDPOINTS.WORDS_CHECK_MEDIA, {
+      word_ids: wordIds,
+    });
+    return response.data;
+  }
+
+  /**
    * Массовые действия со словами
    */
   async bulkAction(

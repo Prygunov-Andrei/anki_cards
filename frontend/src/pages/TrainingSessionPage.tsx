@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { trainingService } from '../services/training.service';
 import { wordsService } from '../services/words.service';
 import { aiGenerationService } from '../services/ai-generation.service';
+import { deckService } from '../services/deck.service';
 import type {
   CardListItem,
   TrainingSessionResponse,
@@ -10,8 +11,6 @@ import type {
 } from '../types';
 import { TrainingCard, type WordDetail } from '../components/training/TrainingCard';
 import { TrainingCardMenu } from '../components/training/TrainingCardMenu';
-import { AudioRecorder } from '../components/training/AudioRecorder';
-import { ImageUploadDialog } from '../components/training/ImageUploadDialog';
 import { getAudioUrl, getAbsoluteUrl } from '../utils/url-helpers';
 import { AnswerButtons } from '../components/training/AnswerButtons';
 import { SessionTimer } from '../components/training/SessionTimer';
@@ -26,13 +25,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { X, Trophy, ArrowRight, RotateCcw, Volume2, Lightbulb, BookOpen, Loader2 } from 'lucide-react';
+import { Trophy, ArrowRight, RotateCcw, Volume2, Lightbulb, BookOpen, Loader2, DoorOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface LocationState {
   session: TrainingSessionResponse;
   durationMinutes: number;
+  sessionStartedAt?: number;
+  currentIndex?: number;
+  isFlipped?: boolean;
+  answered?: number;
+  correct?: number;
 }
 
 export default function TrainingSessionPage() {
@@ -49,8 +53,25 @@ export default function TrainingSessionPage() {
   const [isAnswering, setIsAnswering] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
-  const [showAudioRecorder, setShowAudioRecorder] = useState(false);
-  const [showImageUpload, setShowImageUpload] = useState(false);
+  const [availableDecks, setAvailableDecks] = useState<Array<{ id: number; name: string }>>([]);
+
+  // Lock page scroll while training session is open to avoid
+  // iPad/iPhone rubber-band empty-space scrolling.
+  useEffect(() => {
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyOverscroll = document.body.style.overscrollBehavior;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.overscrollBehavior = prevBodyOverscroll;
+    };
+  }, []);
 
   // Hint generation state
   const [isGeneratingHint, setIsGeneratingHint] = useState(false);
@@ -66,6 +87,7 @@ export default function TrainingSessionPage() {
 
   // Duration
   const [durationMinutes, setDurationMinutes] = useState(0);
+  const [sessionStartedAt, setSessionStartedAt] = useState<number>(Date.now());
 
   // Word detail cache
   const [wordDetailCache, setWordDetailCache] = useState<Record<number, WordDetail>>({});
@@ -85,12 +107,36 @@ export default function TrainingSessionPage() {
     setSessionId(state.session.session_id);
     setCards(state.session.cards);
     setDurationMinutes(state.durationMinutes);
+    setSessionStartedAt(state.sessionStartedAt ?? Date.now());
+    setCurrentIndex(state.currentIndex ?? 0);
+    setIsFlipped(state.isFlipped ?? false);
     setSessionStats((prev) => ({
       ...prev,
+      answered: state.answered ?? 0,
+      correct: state.correct ?? 0,
       newCount: state.session.new_count,
       reviewCount: state.session.review_count,
       learningCount: state.session.learning_count,
     }));
+  }, [navigate, state]);
+
+  // Deck list for "move to deck" menu
+  useEffect(() => {
+    let cancelled = false;
+    const loadDecks = async () => {
+      try {
+        const decks = await deckService.getDecks();
+        if (!cancelled) {
+          setAvailableDecks(decks.map((d) => ({ id: d.id, name: d.name })));
+        }
+      } catch {
+        // Non-critical for training flow
+      }
+    };
+    loadDecks();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Preload word details for current + next card
@@ -221,6 +267,56 @@ export default function TrainingSessionPage() {
     }
   };
 
+  const buildTrainingReturnState = useCallback((): LocationState | null => {
+    if (!sessionId || cards.length === 0) {
+      return null;
+    }
+    return {
+      session: {
+        session_id: sessionId,
+        cards,
+        estimated_time: 0,
+        new_count: sessionStats.newCount,
+        review_count: sessionStats.reviewCount,
+        learning_count: sessionStats.learningCount,
+        total_count: cards.length,
+      },
+      durationMinutes,
+      sessionStartedAt,
+      currentIndex,
+      isFlipped,
+      answered: sessionStats.answered,
+      correct: sessionStats.correct,
+    };
+  }, [cards, currentIndex, durationMinutes, isFlipped, sessionId, sessionStartedAt, sessionStats]);
+
+  const handleDeleteWord = async (wordId: number) => {
+    await wordsService.deleteWord(wordId);
+    setCards((prev) => {
+      const nextCards = prev.filter((c) => c.word_id !== wordId);
+      if (nextCards.length === 0) {
+        setIsFinished(true);
+        return [];
+      }
+      const nextIndex = Math.min(currentIndex, nextCards.length - 1);
+      setCurrentIndex(nextIndex);
+      setIsFlipped(false);
+      cardStartTime.current = Date.now();
+      return nextCards;
+    });
+    toast.success(t.words.delete);
+  };
+
+  const handleMoveToDeck = async (wordId: number, deckId: number, deckName: string) => {
+    const wordCard = cards.find((c) => c.word_id === wordId);
+    if (!wordCard) return;
+    await deckService.addWordsToDeck(deckId, [{
+      word: wordCard.word_text,
+      translation: wordCard.word_translation,
+    }]);
+    toast.success(`${t.words.moveToDeck}: ${deckName}`);
+  };
+
   const handleAnswer = async (quality: AnswerQuality) => {
     if (!currentCard || isAnswering) return;
     setIsAnswering(true);
@@ -348,51 +444,65 @@ export default function TrainingSessionPage() {
 
   // Training session
   return (
-    <div className="container mx-auto max-w-lg px-4 py-2">
-      {/* Minimal top bar: only exit button */}
-      <div className="mb-2 flex items-center">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleExit}
-          className="rounded-full"
-        >
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
-
+    <div
+      className="mx-auto flex w-full max-w-lg flex-col overflow-hidden px-3 sm:px-4"
+      style={{
+        height: '100svh',
+        minHeight: '100svh',
+        maxHeight: '100svh',
+        overscrollBehavior: 'none',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.25rem)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.25rem)',
+      }}
+    >
       {/* Card */}
       {currentCard && (
-        <div className="mb-3">
-          <TrainingCard
-            card={currentCard}
-            isFlipped={isFlipped}
-            onFlip={handleFlip}
-            wordDetail={currentDetail ?? null}
-            menuElement={
-              <TrainingCardMenu
-                card={currentCard}
-                wordDetail={currentDetail ?? null}
-                onUpdateWordDetail={updateWordDetail}
-                onUpdateCardMedia={updateCardMedia}
-                onStartRecording={() => setShowAudioRecorder(true)}
-                onStartImageUpload={() => setShowImageUpload(true)}
-              />
-            }
-          />
+        <div className="mb-1 min-h-0 flex-1">
+          <div className="h-full">
+            <TrainingCard
+              card={currentCard}
+              isFlipped={isFlipped}
+              onFlip={handleFlip}
+              wordDetail={currentDetail ?? null}
+              menuElement={
+                <TrainingCardMenu
+                  card={currentCard}
+                  wordDetail={currentDetail ?? null}
+                  availableDecks={availableDecks}
+                  onDeleteWord={handleDeleteWord}
+                  onMoveToDeck={handleMoveToDeck}
+                  onUpdateWordDetail={updateWordDetail}
+                  onUpdateCardMedia={updateCardMedia}
+                />
+              }
+            />
+          </div>
         </div>
       )}
 
       {/* Service zone — thin strip below the card */}
-      <div className="mb-3 flex items-center justify-between rounded-xl border bg-card/50 px-4 py-2">
-        {/* Left: counter */}
-        <span className="text-sm font-medium text-muted-foreground">
-          {sessionStats.answered + 1}/{cards.length}
-        </span>
+      <div className="mb-1 flex shrink-0 items-center justify-between rounded-xl border bg-card/50 px-2.5 py-1.5 sm:px-3 sm:py-2">
+        {/* Left: counter + leave */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">
+            {sessionStats.answered + 1}/{cards.length}
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleExit();
+            }}
+            className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            <DoorOpen className="h-3.5 w-3.5" />
+            {t.trainingSession.exitDialog.finish}
+          </button>
+        </div>
 
         {/* Center: timer */}
         <SessionTimer
           durationMinutes={durationMinutes}
+          sessionStartedAt={sessionStartedAt}
           onTimeUp={handleTimeUp}
           active={!isFinished}
         />
@@ -437,7 +547,15 @@ export default function TrainingSessionPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/words/${currentCard.word_id}`);
+                    const trainingState = buildTrainingReturnState();
+                    navigate(`/words/${currentCard.word_id}`, {
+                      state: trainingState
+                        ? {
+                            fromTraining: true,
+                            trainingState,
+                          }
+                        : { fromTraining: true },
+                    });
                   }}
                   className="flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:hover:bg-orange-900/50 transition-colors"
                 >
@@ -450,38 +568,21 @@ export default function TrainingSessionPage() {
         </div>
       </div>
 
-      {/* Answer buttons (visible only when flipped) */}
-      {isFlipped && (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* Answer buttons zone: always reserved to keep card size stable */}
+      <div
+        className="shrink-0"
+        style={{ minHeight: 68 }}
+        aria-hidden={!isFlipped}
+      >
+        <div
+          className={isFlipped ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+        >
           <AnswerButtons
             onAnswer={handleAnswer}
-            disabled={isAnswering}
+            disabled={!isFlipped || isAnswering}
           />
         </div>
-      )}
-
-      {/* Audio recorder modal */}
-      {showAudioRecorder && currentCard && (
-        <AudioRecorder
-          wordId={currentCard.word_id}
-          onRecorded={(audioUrl) => {
-            updateCardMedia(currentCard.id, { audio_file: audioUrl });
-          }}
-          onClose={() => setShowAudioRecorder(false)}
-        />
-      )}
-
-      {/* Image upload modal */}
-      {showImageUpload && currentCard && (
-        <ImageUploadDialog
-          wordId={currentCard.word_id}
-          onUploaded={(imageUrl) => {
-            updateCardMedia(currentCard.id, { image_file: imageUrl });
-            updateWordDetail(currentCard.id, { image_file: imageUrl, image_url: imageUrl });
-          }}
-          onClose={() => setShowImageUpload(false)}
-        />
-      )}
+      </div>
 
       {/* Exit dialog */}
       <AlertDialog open={showExitDialog} onOpenChange={setShowExitDialog}>

@@ -231,6 +231,8 @@ export const en: TranslationKeys = {
     deleteImage: 'Image',
     deleteAudio: 'Audio',
     editImage: 'Edit image',
+    enterWordsPlaceholder: 'Enter words in',
+    commaSeparated: '(semicolon, newline or Enter)',
     mixinPlaceholder: 'E.g.: make it darker, add a smile',
     mixinExample: 'Describe what you want to change',
     edit: 'Edit',
@@ -392,10 +394,12 @@ export const en: TranslationKeys = {
   // Header
   header: {
     home: 'Home',
+    create: 'Create',
     training: 'Training',
     words: 'Words',
     categories: 'Categories',
     decks: 'Decks',
+    library: 'Library',
     forgettingCurve: 'Forgetting Curves',
     profile: 'Profile',
     notifications: 'Notifications',
@@ -514,6 +518,17 @@ export const en: TranslationKeys = {
     word: 'word',
     words: 'words',
     wordsGenitive: 'words',
+
+    photoExtraction: {
+      scanFromPhoto: 'Scan from photo',
+      extractingWords: 'Extracting words...',
+      extractedWords: 'Extracted words',
+      noWordsFound: 'No words found in this image',
+      addExtractedWords: 'Add words',
+      wordsFound: 'words found',
+      cancel: 'Cancel',
+      extractionError: 'Error extracting words from photo',
+    },
   },
 
   // Navigation
@@ -940,5 +955,132 @@ export const en: TranslationKeys = {
       imageTooLarge: 'Image must be less than 10MB',
       dragDropHint: 'Drag and drop an image here, or click to select',
     },
+  },
+
+  // Library
+  library: {
+    title: 'Library',
+    stories: 'stories',
+    translated: 'translated',
+    search: 'Search stories...',
+    words: 'words',
+    byLength: 'Length',
+    empty: 'No literary sources available',
+    addToVocabulary: 'Add to vocabulary',
+    alreadyInVocabulary: 'Already in vocabulary',
+    wordAdded: 'Word added',
+  },
+
+  // Contextual help
+  help: {
+    tipsTitle: 'Tips',
+    dontShowAgain: "Don't show again",
+    create: {
+      title: 'Creating a Deck',
+      steps: [
+        'Take a photo of words or type them manually into the word pen',
+        'Choose a "cover" — the literary style for your cards',
+        'Click "Auto-translate" to translate the words',
+        'Click "Magic" to generate images and audio',
+        'Name the deck and download the .apkg file',
+      ],
+      tips: [
+        'Drag one chip onto another to combine words into a phrase',
+        'Your progress is automatically saved — you can navigate to other pages',
+        'If generation was interrupted — click "Magic" again, already generated images won\'t be lost',
+      ],
+    },
+    words: {
+      title: 'Word Catalog',
+      steps: [
+        'All your words from all decks in one place',
+        'Use search and filters to navigate',
+        'Click a word to view details and edit',
+      ],
+      tips: [
+        'Filter by category to quickly find the words you need',
+        'Words without a category can be assigned on the detail page',
+      ],
+    },
+    decks: {
+      title: 'Deck Management',
+      steps: [
+        'All your created decks are shown here',
+        'Click a deck to download the .apkg file',
+        'Use the deck menu to delete or invert',
+      ],
+      tips: [
+        'Inverting creates a deck with reversed translation direction',
+        'The downloaded .apkg file can be imported into Anki',
+      ],
+    },
+    training: {
+      title: 'Training',
+      steps: [
+        'Select categories or words to train',
+        'Rate your knowledge on a scale from 1 to 5',
+        'The system will show words you forget more often',
+      ],
+      tips: [
+        'Regular short sessions are more effective than rare long ones',
+        'Use the forgetting curve to track your progress',
+      ],
+    },
+    categories: {
+      title: 'Categories',
+      steps: [
+        'Organize words by thematic categories',
+        'Create nested categories for more precise classification',
+        'Drag categories to change their hierarchy',
+      ],
+      tips: [
+        'Categories help focus training on specific topics',
+        'A word can belong to multiple categories',
+      ],
+    },
+    profile: {
+      title: 'Profile',
+      steps: [
+        'Set up your name, avatar, and email',
+        'Choose your native and learning languages',
+        'Manage notification settings',
+      ],
+      tips: [
+        'The interface language changes based on your selected native language',
+      ],
+    },
+    forgettingCurve: {
+      title: 'Forgetting Curve',
+      steps: [
+        'The chart shows how quickly you forget words',
+        'The steeper the curve, the faster the word is forgotten',
+        'Train words with steep curves more often',
+      ],
+      tips: [
+        'The curve updates after each training session',
+        'Green words are well remembered, red ones need review',
+      ],
+    },
+    library: {
+      title: 'Library',
+      steps: [
+        'Choose a Chekhov story from the list',
+        'Click any word in the text to see its translation',
+        'Click "Add to vocabulary" to start learning the word',
+      ],
+      tips: [
+        'Switch language (DE/RU) using the button in the header',
+        'Change font size with the S/M/L button',
+      ],
+    },
+  },
+
+  draft: {
+    restored: 'Draft restored',
+    restoredDescription: 'words loaded from draft',
+    saved: 'Draft saved',
+    clearAll: 'Clear all',
+    confirmClear: 'Delete all words, translations and generated media?',
+    confirmLeave: 'Media generation is still in progress. Leave the page?',
   },
 };

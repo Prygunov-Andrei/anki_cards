@@ -214,6 +214,14 @@ class Deck(models.Model):
         blank=True,
         verbose_name='Слова'
     )
+    literary_source = models.ForeignKey(
+        'literary_context.LiterarySource',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='decks',
+        verbose_name='Литературный источник'
+    )
     is_learning_active = models.BooleanField(
         default=False,
         verbose_name='Активна для тренировки',
@@ -227,7 +235,7 @@ class Deck(models.Model):
         auto_now=True,
         verbose_name='Дата обновления'
     )
-    
+
     class Meta:
         verbose_name = 'Колода'
         verbose_name_plural = 'Колоды'

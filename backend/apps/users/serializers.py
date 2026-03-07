@@ -113,14 +113,40 @@ class UserProfileSerializer(serializers.ModelSerializer):
         required=False
     )
     
+    active_literary_source = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'avatar', 'native_language', 'learning_language',
-            'theme', 'mode', 'preferred_language', 'image_provider', 'gemini_model', 'audio_provider', 'created_at'
+            'theme', 'mode', 'preferred_language', 'image_provider', 'gemini_model',
+            'audio_provider', 'image_style', 'active_literary_source', 'created_at'
         ]
         read_only_fields = ['id', 'username', 'created_at']
+
+    def get_active_literary_source(self, obj):
+        if obj.active_literary_source:
+            return obj.active_literary_source.slug
+        return None
+
+    def to_internal_value(self, data):
+        if 'active_literary_source' in data:
+            slug = data.pop('active_literary_source')
+            result = super().to_internal_value(data)
+            if slug:
+                from apps.literary_context.models import LiterarySource
+                try:
+                    result['active_literary_source'] = LiterarySource.objects.get(
+                        slug=slug, is_active=True
+                    )
+                except LiterarySource.DoesNotExist:
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({'active_literary_source': f'Source "{slug}" not found'})
+            else:
+                result['active_literary_source'] = None
+            return result
+        return super().to_internal_value(data)
     
     def validate(self, data):
         """Валидация: родной и изучаемый языки не должны совпадать"""

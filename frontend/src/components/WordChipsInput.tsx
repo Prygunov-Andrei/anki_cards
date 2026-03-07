@@ -2,7 +2,8 @@ import React, { useState, useRef, KeyboardEvent } from 'react';
 import { Card } from './ui/card';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
-import { X, AlertCircle, Loader2 } from 'lucide-react';
+import { Button } from './ui/button';
+import { X, AlertCircle, Loader2, Merge } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
 import { useAuthContext } from '../contexts/AuthContext';
 
@@ -12,10 +13,8 @@ interface WordChipsInputProps {
   disabled?: boolean;
   label?: string;
   placeholder?: string;
-  targetLang?: string; // Опционально, для будущего использования
-  deckName?: string; // Название колоды
-  onDeckNameChange?: (name: string) => void; // Callback для изменения названия
-  isProcessing?: boolean; // Индикатор обработки слов (для немецкого языка)
+  targetLang?: string;
+  isProcessing?: boolean;
 }
 
 /**
@@ -33,8 +32,6 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
   label,
   placeholder,
   targetLang,
-  deckName,
-  onDeckNameChange,
   isProcessing = false,
 }) => {
   const t = useTranslation();
@@ -43,6 +40,13 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Drag & drop state
+  const [dragSourceIndex, setDragSourceIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Mobile merge: selected chips for merge
+  const [selectedForMerge, setSelectedForMerge] = useState<Set<number>>(new Set());
   
   // Используем переводы, если не переданы явно
   const finalLabel = label || t.words.wordsForStudy;
@@ -189,6 +193,49 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
   };
 
   /**
+   * Merge two chips into one phrase
+   */
+  const handleMergeChips = (sourceIdx: number, targetIdx: number) => {
+    if (sourceIdx === targetIdx) return;
+    const merged = `${words[sourceIdx]} ${words[targetIdx]}`.trim();
+    const newWords = words.filter((_, i) => i !== sourceIdx && i !== targetIdx);
+    const insertAt = targetIdx > sourceIdx ? targetIdx - 1 : targetIdx;
+    newWords.splice(insertAt, 0, merged);
+    onChange(newWords);
+    setDragSourceIndex(null);
+    setDragOverIndex(null);
+    setSelectedForMerge(new Set());
+  };
+
+  /**
+   * Mobile: toggle chip selection for merge
+   */
+  const toggleMergeSelection = (index: number) => {
+    setSelectedForMerge((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  /**
+   * Mobile: merge selected chips
+   */
+  const mergeSelectedChips = () => {
+    if (selectedForMerge.size < 2) return;
+    const indices = Array.from(selectedForMerge).sort((a, b) => a - b);
+    const merged = indices.map((i) => words[i]).join(' ');
+    const newWords = words.filter((_, i) => !selectedForMerge.has(i));
+    newWords.splice(indices[0], 0, merged);
+    onChange(newWords);
+    setSelectedForMerge(new Set());
+  };
+
+  /**
    * Начало редактирования тега
    */
   const startEditing = (index: number) => {
@@ -231,17 +278,6 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
   return (
     <Card className="p-6">
       <div className="space-y-4">
-        {/* Поле названия колоды (опционально) */}
-        {onDeckNameChange && (
-          <Input
-            id="deck-name-input"
-            value={deckName || ''}
-            onChange={(e) => onDeckNameChange(e.target.value)}
-            placeholder={t.decks.enterDeckName}
-            disabled={disabled}
-          />
-        )}
-
         {/* Поле ввода с тегами */}
         <div
           className={`
@@ -256,10 +292,40 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
           {words.map((word, index) => {
             const isValid = validateWord(word);
             const isEditing = editingIndex === index;
+            const isDragSource = dragSourceIndex === index;
+            const isDragOver = dragOverIndex === index && dragSourceIndex !== index;
+            const isSelectedForMerge = selectedForMerge.has(index);
 
             return (
               <div
                 key={`${word}-${index}`}
+                draggable={!disabled && editingIndex === null}
+                onDragStart={(e) => {
+                  setDragSourceIndex(index);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={() => {
+                  setDragSourceIndex(null);
+                  setDragOverIndex(null);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                }}
+                onDragEnter={() => {
+                  if (dragSourceIndex !== null && dragSourceIndex !== index) {
+                    setDragOverIndex(index);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverIndex === index) setDragOverIndex(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragSourceIndex !== null) {
+                    handleMergeChips(dragSourceIndex, index);
+                  }
+                }}
                 className={`
                   flex items-center gap-1 rounded-md px-3 py-1.5 text-sm transition-all
                   ${isValid
@@ -267,6 +333,10 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
                     : 'bg-gradient-to-r from-red-100 to-orange-100 text-red-900 dark:from-red-900/30 dark:to-orange-900/30 dark:text-red-100'
                   }
                   ${!disabled && 'hover:shadow-sm'}
+                  ${isDragSource ? 'opacity-40 scale-95' : ''}
+                  ${isDragOver ? 'ring-2 ring-blue-400 scale-105 bg-blue-50 dark:bg-blue-900/50' : ''}
+                  ${isSelectedForMerge ? 'ring-2 ring-purple-400 dark:ring-purple-500' : ''}
+                  ${!disabled && editingIndex === null ? 'cursor-grab active:cursor-grabbing' : ''}
                 `}
               >
                 {isEditing ? (
@@ -286,6 +356,11 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
                   /* Обычный режим */
                   <span
                     onDoubleClick={() => startEditing(index)}
+                    onClick={() => {
+                      if (selectedForMerge.size > 0) {
+                        toggleMergeSelection(index);
+                      }
+                    }}
                     className={!disabled ? 'cursor-pointer' : ''}
                   >
                     {word}
@@ -295,6 +370,23 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
                 {/* Иконка предупреждения для невалидных слов */}
                 {!isValid && !isEditing && (
                   <AlertCircle className="h-3.5 w-3.5" />
+                )}
+
+                {/* Mobile: merge selection toggle */}
+                {!isEditing && selectedForMerge.size > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleMergeSelection(index);
+                    }}
+                    disabled={disabled}
+                    className={`
+                      rounded-sm transition-colors md:hidden
+                      ${isSelectedForMerge ? 'text-purple-600' : 'text-muted-foreground'}
+                    `}
+                  >
+                    <Merge className="h-3.5 w-3.5" />
+                  </button>
                 )}
 
                 {/* Кнопка удаления */}
@@ -331,6 +423,44 @@ export const WordChipsInput: React.FC<WordChipsInputProps> = ({
             className="flex-1 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
           />
         </div>
+
+        {/* Mobile merge controls */}
+        {words.length >= 2 && !disabled && (
+          <div className="flex items-center gap-2 md:hidden">
+            {selectedForMerge.size === 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={() => toggleMergeSelection(0)}
+              >
+                <Merge className="mr-1 h-3 w-3" />
+                {t.words.mergeWords || 'Merge words'}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={selectedForMerge.size < 2}
+                  onClick={mergeSelectedChips}
+                >
+                  <Merge className="mr-1 h-3 w-3" />
+                  {t.words.merge || 'Merge'} ({selectedForMerge.size})
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setSelectedForMerge(new Set())}
+                >
+                  {t.common.cancel || 'Cancel'}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Счетчик слов */}
         {words.length > 0 && (

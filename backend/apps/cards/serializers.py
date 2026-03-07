@@ -178,6 +178,8 @@ class ImageGenerationSerializer(serializers.Serializer):
     provider = serializers.ChoiceField(
         choices=[('auto', 'Авто (из настроек)'), ('openai', 'OpenAI DALL-E 3'), ('gemini', 'Google Gemini')],
         required=False,
+        allow_null=True,
+        allow_blank=True,
         help_text="Провайдер для генерации изображения (auto = из настроек пользователя)"
     )
     gemini_model = serializers.ChoiceField(
@@ -186,6 +188,8 @@ class ImageGenerationSerializer(serializers.Serializer):
             ('nano-banana-pro-preview', 'Nano Banana Pro (новая, 1 токен)')
         ],
         required=False,
+        allow_null=True,
+        allow_blank=True,
         help_text="Модель Gemini для генерации (по умолчанию берется из настроек пользователя)"
     )
 
@@ -420,6 +424,7 @@ class DeckSerializer(serializers.ModelSerializer):
         model = Deck
         fields = [
             'id', 'name', 'cover', 'target_lang', 'source_lang',
+            'literary_source',
             'words_count', 'unique_words_count', 'user', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

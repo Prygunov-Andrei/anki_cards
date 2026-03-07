@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageHelpButton } from '../components/PageHelpButton';
 import { trainingService } from '../services/training.service';
 import type { TrainingDashboard, TrainingDeckInfo, TrainingCategoryInfo, TrainingCardCounts } from '../types';
 import { Button } from '../components/ui/button';
@@ -252,7 +253,7 @@ export default function TrainingDashboardPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-10 w-10"
                     onClick={() => navigate(`/training/start?deck_id=${deck.id}`)}
                     title={td.train}
                   >
@@ -313,7 +314,7 @@ export default function TrainingDashboardPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-10 w-10"
                     onClick={() => navigate(`/training/start?category_id=${cat.id}`)}
                     title={td.train}
                   >
@@ -365,6 +366,8 @@ export default function TrainingDashboardPage() {
           </div>
         </div>
       )}
+
+      <PageHelpButton pageKey="training" />
     </div>
   );
 }

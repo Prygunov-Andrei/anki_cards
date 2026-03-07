@@ -3,6 +3,7 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { WordChipsInput } from './WordChipsInput';
 import { TranslationTable } from './TranslationTable';
+import { PhotoWordExtractor } from './PhotoWordExtractor';
 import { Plus, Loader2, Languages } from 'lucide-react';
 import { deckService } from '../services/deck.service';
 import { showError } from '../utils/toast-helpers';
@@ -262,6 +263,18 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
   };
 
   /**
+   * Обработка слов, извлечённых из фото
+   */
+  const handlePhotoWordsExtracted = (photoWords: string[]) => {
+    // Объединяем с существующими, убирая дубликаты
+    const existingLower = new Set(words.map((w) => w.toLowerCase()));
+    const newWords = photoWords.filter((w) => !existingLower.has(w.toLowerCase()));
+    if (newWords.length > 0) {
+      handleWordsChange([...words, ...newWords]);
+    }
+  };
+
+  /**
    * Проверка, можно ли добавить слова
    */
   const canSubmit =
@@ -283,6 +296,14 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
             disabled={isProcessing || isSubmitting}
             targetLang={targetLang}
           />
+          <div className="flex items-center gap-2">
+            <PhotoWordExtractor
+              targetLang={targetLang}
+              sourceLang={sourceLang}
+              onWordsExtracted={handlePhotoWordsExtracted}
+              disabled={isProcessing || isSubmitting}
+            />
+          </div>
           {isProcessing && (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" />
