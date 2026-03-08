@@ -7,6 +7,7 @@ import { CategoryTree } from '../categories/CategoryTree';
 import { categoriesService } from '../../services/categories.service';
 import type { CategoryTree as CategoryTreeType } from '../../types';
 import { toast } from 'sonner@2.0.3';
+import { logger } from '../../utils/logger';
 
 interface CategoryItem {
   id: number;
@@ -48,7 +49,7 @@ export const WordCategoryManager: React.FC<WordCategoryManagerProps> = ({
       const tree = await categoriesService.getTree();
       setCategoryTree(tree);
     } catch (error) {
-      console.error('Failed to load category tree:', error);
+      logger.error('Failed to load category tree:', error);
       toast.error('Ошибка загрузки категорий');
     } finally {
       setIsTreeLoading(false);
@@ -73,7 +74,7 @@ export const WordCategoryManager: React.FC<WordCategoryManagerProps> = ({
       onCategoriesChange(newCategories);
       toast.success(`Добавлено в "${category.name}"`);
     } catch (error) {
-      console.error('Failed to add category:', error);
+      logger.error('Failed to add category:', error);
       toast.error('Ошибка добавления категории');
     } finally {
       setOperationLoading(null);
@@ -88,7 +89,7 @@ export const WordCategoryManager: React.FC<WordCategoryManagerProps> = ({
       onCategoriesChange(newCategories);
       toast.success('Категория убрана');
     } catch (error) {
-      console.error('Failed to remove category:', error);
+      logger.error('Failed to remove category:', error);
       toast.error('Ошибка удаления категории');
     } finally {
       setOperationLoading(null);

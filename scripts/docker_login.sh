@@ -5,7 +5,7 @@
 
 set -e
 
-SERVER="root@72.56.83.95"
+SERVER="${DEPLOY_SERVER:-root@72.56.83.95}"
 SSH_PASSWORD="${SSH_PASSWORD:?SSH_PASSWORD environment variable must be set}"
 DOCKER_USERNAME="prygunov1979"
 

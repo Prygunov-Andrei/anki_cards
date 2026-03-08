@@ -6,8 +6,10 @@ import { TranslationTable } from './TranslationTable';
 import { PhotoWordExtractor } from './PhotoWordExtractor';
 import { Plus, Loader2, Languages } from 'lucide-react';
 import { deckService } from '../services/deck.service';
+import { germanService } from '../services/german.service';
 import { showError } from '../utils/toast-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
+import { logger } from '../utils/logger';
 
 export interface WordTranslationPair {
   word: string;
@@ -77,22 +79,22 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
           const wordParts = trimmedWord.split(/\s+/);
           if (wordParts.length > 1) {
             // Это словосочетание или предложение - возвращаем без обработки
-            console.log(`⏭️ Пропускаем словосочетание/предложение: "${word}"`);
+            logger.log(`⏭️ Пропускаем словосочетание/предложение: "${word}"`);
             return word;
           }
           
           try {
-            const { processed_word } = await deckService.processGermanWord(word);
+            const { processed_word } = await germanService.processGermanWord(word);
             return processed_word;
           } catch (error) {
-            console.error(`Error processing German word "${word}":`, error);
+            logger.error(`Error processing German word "${word}":`, error);
             return word; // Возвращаем оригинал в случае ошибки
           }
         })
       );
       return processedWords;
     } catch (error) {
-      console.error('Error processing German words:', error);
+      logger.error('Error processing German words:', error);
       return rawWords;
     } finally {
       setIsProcessing(false);
@@ -170,7 +172,7 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
 
       // Если есть непереведенные слова, делаем повторную попытку
       if (untranslatedWords.length > 0) {
-        console.log(`🔄 Повторная попытка перевода ${untranslatedWords.length} слов:`, untranslatedWords);
+        logger.log(`🔄 Повторная попытка перевода ${untranslatedWords.length} слов:`, untranslatedWords);
         
         try {
           const retryResult = await deckService.translateWords({
@@ -194,16 +196,16 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
               }
               
               if (translation) {
-                console.log(`✅ Перевод найден при повторной попытке: ${pair.word} -> ${translation}`);
+                logger.log(`✅ Перевод найден при повторной попытке: ${pair.word} -> ${translation}`);
                 return { ...pair, translation };
               } else {
-                console.warn(`⚠️ Слово не удалось перевести после повторной попытки: ${pair.word}`);
+                logger.warn(`⚠️ Слово не удалось перевести после повторной попытки: ${pair.word}`);
               }
             }
             return pair;
           });
         } catch (retryError) {
-          console.error('Error during retry translation:', retryError);
+          logger.error('Error during retry translation:', retryError);
           // Продолжаем с переводами которые удалось получить при первой попытке
         }
       }
@@ -213,11 +215,11 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
       // Проверяем сколько слов осталось непереведенными
       const finalUntranslated = updatedTranslations.filter((pair) => !pair.translation.trim());
       if (finalUntranslated.length > 0) {
-        console.warn(`⚠️ Не удалось перевести ${finalUntranslated.length} слов:`, finalUntranslated.map(p => p.word));
+        logger.warn(`⚠️ Не удалось перевести ${finalUntranslated.length} слов:`, finalUntranslated.map(p => p.word));
       }
 
     } catch (error) {
-      console.error('Error auto-translating:', error);
+      logger.error('Error auto-translating:', error);
       showError(t.words.couldNotAutoTranslate, {
         description: t.words.translateManually,
       });
@@ -256,7 +258,7 @@ export const SmartWordInput: React.FC<SmartWordInputProps> = ({
       setWords([]);
       setTranslations([]);
     } catch (error) {
-      console.error('Error adding words:', error);
+      logger.error('Error adding words:', error);
     } finally {
       setIsSubmitting(false);
     }

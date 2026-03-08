@@ -1,4 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { logger } from '@/utils/logger';
+import { TIMEOUTS } from '@/utils/timeouts';
 
 /**
  * Базовый URL для API.
@@ -26,7 +28,7 @@ const BASE_URL = getBaseUrl();
  */
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: TIMEOUTS.API_DEFAULT,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -46,7 +48,7 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('[API] Request error:', error);
+    logger.error('[API] Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -58,7 +60,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-      console.error('Не удалось подключиться к backend. Проверьте, что сервер запущен:', BASE_URL || 'текущий домен');
+      logger.error('Не удалось подключиться к backend. Проверьте, что сервер запущен:', BASE_URL || 'текущий домен');
     }
     if (error.response?.status === 401) {
       // Очищаем невалидный токен из localStorage.

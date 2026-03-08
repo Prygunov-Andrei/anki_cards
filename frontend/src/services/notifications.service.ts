@@ -1,5 +1,6 @@
 import api from '@/services/api';
 import { API_ENDPOINTS } from '@/lib/api-constants';
+import { TIMEOUTS } from '@/utils/timeouts';
 import type { NotificationSettings, NotificationCheckResponse } from '@/types';
 
 export const notificationsService = {
@@ -49,6 +50,6 @@ export const notificationsService = {
       };
     }
     // Автозакрытие через 10 секунд
-    setTimeout(() => notification.close(), 10000);
+    setTimeout(() => notification.close(), TIMEOUTS.NOTIFICATION_CLOSE);
   },
 };

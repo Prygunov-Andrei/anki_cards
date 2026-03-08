@@ -13,6 +13,7 @@ import { Button } from './ui/button';
 import { Trash2, Languages } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
 import { EditableText } from './EditableText';
+import { logger } from '../utils/logger';
 
 export interface WordTranslationPair {
   word: string;
@@ -79,7 +80,7 @@ export const TranslationTable: React.FC<TranslationTableProps> = ({
           };
         });
         
-        console.log('🔄 TranslationTable: обновление pairs', {
+        logger.log('TranslationTable: update pairs', {
           prevCount: prevPairs.length,
           newCount: updatedPairs.length,
           idsPreserved: updatedPairs.filter((p, idx) => prevPairsMap.has(`${p.word}-${idx}`)).length,

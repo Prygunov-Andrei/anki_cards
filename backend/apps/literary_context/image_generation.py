@@ -1,6 +1,6 @@
 """
 Scene image generation for literary context.
-Reuses DALL-E pattern from cards/llm_utils.py.
+Uses Gemini (gemini-2.5-flash-image) for image generation.
 """
 import io
 import uuid
@@ -8,12 +8,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import requests
 from PIL import Image
 from django.conf import settings
-from django.core.files.base import ContentFile
 
-from apps.cards.llm_utils import get_openai_client
 from .models import SceneAnchor, LiteraryContextSettings
 
 logger = logging.getLogger(__name__)
@@ -24,10 +21,10 @@ def generate_scene_image(
     config: Optional[LiteraryContextSettings] = None,
 ) -> str:
     """
-    Generate a scene image for a SceneAnchor using DALL-E.
+    Generate a scene image for a SceneAnchor using Gemini.
 
     Args:
-        anchor: SceneAnchor instance.
+        anchor: SceneAnchor instance with scene_description filled.
         config: Settings (loaded from DB if None).
 
     Returns:
@@ -47,26 +44,41 @@ def generate_scene_image(
     if anchor.mood and anchor.mood != 'neutral':
         prompt += f' Mood: {anchor.mood}.'
 
-    client = get_openai_client()
+    # Use Gemini for image generation
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        raise ValueError("google-generativeai not installed")
 
-    response = client.images.generate(
-        model='dall-e-3',
-        prompt=prompt,
-        size='1024x1024',
-        quality='standard',
-        n=1,
+    from apps.core.llm import get_gemini_client
+    get_gemini_client()  # ensures genai is configured
+
+    model = genai.GenerativeModel('gemini-3.1-flash-image-preview')
+    response = model.generate_content(
+        prompt,
+        generation_config={'temperature': 0.4},
     )
 
-    image_url = response.data[0].url
+    if not response.candidates or not response.candidates[0].content.parts:
+        raise Exception("Gemini did not return an image")
 
-    # Download image
-    image_response = requests.get(image_url)
-    image_response.raise_for_status()
+    # Extract image data from response
+    image_data = None
+    for part in response.candidates[0].content.parts:
+        if hasattr(part, 'inline_data') and part.inline_data:
+            image_data = part.inline_data.data
+            break
+        elif hasattr(part, 'image') and part.image:
+            if hasattr(part.image, 'data'):
+                image_data = part.image.data
 
-    # Validate then re-open (verify() invalidates the image object)
-    image = Image.open(io.BytesIO(image_response.content))
+    if not image_data:
+        raise Exception("Could not extract image from Gemini response")
+
+    # Validate
+    image = Image.open(io.BytesIO(image_data))
     image.verify()
-    image = Image.open(io.BytesIO(image_response.content))
+    image = Image.open(io.BytesIO(image_data))
 
     if image.mode != 'RGB':
         image = image.convert('RGB')
@@ -89,4 +101,5 @@ def generate_scene_image(
     anchor.is_generated = True
     anchor.save(update_fields=['image_file', 'image_prompt', 'is_generated'])
 
+    logger.info(f'Scene image generated for anchor {anchor.id}: {relative_path}')
     return relative_path

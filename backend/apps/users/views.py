@@ -15,6 +15,7 @@ from .serializers import (
     UserProfileSerializer,
 )
 from apps.cards.token_utils import add_tokens
+from apps.core.constants import INITIAL_TOKEN_BALANCE
 
 User = get_user_model()
 
@@ -37,16 +38,12 @@ def register_view(request):
         # Создаем токен авторизации
         token, created = Token.objects.get_or_create(user=user)
         
-        # Начисляем стартовые 100 токенов новому пользователю
-        add_tokens(user, amount=100, description="Стартовые токены при регистрации")
+        # Начисляем стартовые токены новому пользователю
+        add_tokens(user, amount=INITIAL_TOKEN_BALANCE, description="Стартовые токены при регистрации")
         
-        return Response({
-            'user_id': user.id,
-            'token': token.key,
-            'username': user.username,
-            'email': user.email,
-            'preferred_language': user.preferred_language,
-        }, status=status.HTTP_201_CREATED)
+        profile_data = UserProfileSerializer(user).data
+        profile_data['token'] = token.key
+        return Response(profile_data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -59,10 +56,9 @@ def login_view(request):
     if serializer.is_valid():
         user = serializer.validated_data['user']
         token, created = Token.objects.get_or_create(user=user)
-        return Response({
-            'token': token.key,
-            'user_id': user.id,
-        }, status=status.HTTP_200_OK)
+        profile_data = UserProfileSerializer(user).data
+        profile_data['token'] = token.key
+        return Response(profile_data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

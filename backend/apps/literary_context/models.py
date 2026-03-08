@@ -1,16 +1,10 @@
+import uuid
+
+from django.conf import settings
 from django.db import models
 from django.core.cache import cache
 
-LANGUAGE_CHOICES = [
-    ('ru', 'Russian'),
-    ('en', 'English'),
-    ('pt', 'Portuguese'),
-    ('de', 'German'),
-    ('es', 'Spanish'),
-    ('fr', 'French'),
-    ('it', 'Italian'),
-    ('tr', 'Turkish'),
-]
+from apps.core.constants import LANGUAGE_CHOICES
 
 
 class LiterarySource(models.Model):
@@ -196,6 +190,46 @@ class WordContextMedia(models.Model):
     def __str__(self):
         status = 'fallback' if self.is_fallback else self.match_method
         return f"{self.word} @ {self.source.slug} ({status})"
+
+
+JOB_STATUS_CHOICES = [
+    ('pending', 'Pending'),
+    ('running', 'Running'),
+    ('completed', 'Completed'),
+    ('failed', 'Failed'),
+]
+
+
+class DeckContextJob(models.Model):
+    """Tracks async literary context generation for a deck."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    deck = models.ForeignKey(
+        'cards.Deck', on_delete=models.CASCADE, related_name='context_jobs'
+    )
+    source = models.ForeignKey(
+        LiterarySource, on_delete=models.CASCADE, related_name='context_jobs'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='context_jobs'
+    )
+    status = models.CharField(
+        max_length=20, choices=JOB_STATUS_CHOICES, default='pending'
+    )
+    progress = models.IntegerField(default=0, help_text='0-100 percent')
+    current_word = models.CharField(max_length=200, blank=True, default='')
+    stats = models.JSONField(default=dict, blank=True)
+    unmatched_words = models.JSONField(default=list, blank=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Deck Context Job'
+        verbose_name_plural = 'Deck Context Jobs'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Job {self.id} [{self.status}] {self.deck} → {self.source.slug}"
 
 
 SETTINGS_CACHE_KEY = 'literary_context_settings'

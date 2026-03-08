@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
+import { logger } from '../utils/logger';
 import { useAuthContext } from '../contexts/AuthContext';
 import { LiterarySourceSelector } from '../components/literary-context/LiterarySourceSelector';
 
@@ -133,11 +134,12 @@ export default function TrainingStartPage() {
           session,
           durationMinutes: durationNum,
           sessionStartedAt: Date.now(),
+          deckId,
         },
       });
     } catch (error) {
       toast.error(t.trainingStart.errors.startFailed);
-      console.error(error);
+      logger.error(error);
       setIsStarting(false);
     }
   };

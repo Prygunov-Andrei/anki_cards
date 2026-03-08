@@ -137,6 +137,82 @@ class TestGenerateWordContext:
         ).count() == 1
 
 
+class TestHintAudioGeneration:
+    @patch('apps.literary_context.audio_generation.generate_literary_audio')
+    @patch('apps.literary_context.generation.get_openai_client')
+    def test_hint_audio_generated(
+        self, mock_client_fn, mock_audio, chekhov_source, fragment_de,
+        word_marktplatz, settings_obj
+    ):
+        mock_client = MagicMock()
+        mock_client_fn.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = 'A hint text'
+        mock_client.chat.completions.create.return_value = mock_response
+
+        mock_audio.return_value = 'literary_hints/test.mp3'
+
+        ctx = generate_word_context(word_marktplatz, chekhov_source, settings_obj)
+
+        assert ctx.hint_text == 'A hint text'
+        assert str(ctx.hint_audio) == 'literary_hints/test.mp3'
+        mock_audio.assert_called_once()
+
+    @patch('apps.literary_context.audio_generation.generate_literary_audio')
+    @patch('apps.literary_context.generation.get_openai_client')
+    def test_hint_audio_uses_user_voice_id(
+        self, mock_client_fn, mock_audio, chekhov_source, fragment_de,
+        word_marktplatz, settings_obj, test_user_with_settings
+    ):
+        mock_client = MagicMock()
+        mock_client_fn.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = 'hint'
+        mock_client.chat.completions.create.return_value = mock_response
+
+        mock_audio.return_value = 'literary_hints/test.mp3'
+
+        generate_word_context(
+            word_marktplatz, chekhov_source, settings_obj,
+            user=test_user_with_settings,
+        )
+
+        call_args = mock_audio.call_args
+        assert call_args.kwargs['voice_id'] == 'voice123'
+
+    @patch('apps.literary_context.generation.get_openai_client')
+    def test_skip_hint_no_audio(
+        self, mock_client_fn, chekhov_source, fragment_de, word_marktplatz, settings_obj
+    ):
+        ctx = generate_word_context(
+            word_marktplatz, chekhov_source, settings_obj, skip_hint=True
+        )
+        assert ctx.hint_text == ''
+        assert not ctx.hint_audio
+
+    @patch('apps.literary_context.audio_generation.generate_literary_audio')
+    @patch('apps.literary_context.generation.get_openai_client')
+    def test_audio_failure_doesnt_break(
+        self, mock_client_fn, mock_audio, chekhov_source, fragment_de,
+        word_marktplatz, settings_obj
+    ):
+        mock_client = MagicMock()
+        mock_client_fn.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = 'hint text'
+        mock_client.chat.completions.create.return_value = mock_response
+
+        mock_audio.side_effect = Exception('Audio API down')
+
+        ctx = generate_word_context(word_marktplatz, chekhov_source, settings_obj)
+
+        assert ctx.hint_text == 'hint text'
+        assert not ctx.hint_audio  # Failed but context still created
+
+
 class TestGenerateBatchContext:
     def test_batch_generation(
         self, chekhov_source, fragment_de, word_marktplatz, word_hund, settings_obj

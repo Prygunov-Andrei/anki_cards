@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Plus, Loader2 } from 'lucide-react';
+import { logger } from '../utils/logger';
 
 interface AddWordFormProps {
   onAddWord: (word: string, translation: string) => Promise<void>;
@@ -70,7 +71,7 @@ export const AddWordForm: React.FC<AddWordFormProps> = ({
       setTranslation('');
       setErrors({});
     } catch (error) {
-      console.error('Error adding word:', error);
+      logger.error('Error adding word:', error);
     } finally {
       setIsSubmitting(false);
     }

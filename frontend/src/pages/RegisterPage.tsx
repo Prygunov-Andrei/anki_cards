@@ -8,6 +8,7 @@ import { useAuthContext } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import authService from '../services/authService';
 import { showSuccess, showError } from '../utils/toast-helpers';
+import { logger } from '../utils/logger';
 import { LanguageSelector } from '../components/LanguageSelector';
 
 // Импортируем логотипы для светлой и темной темы
@@ -90,7 +91,7 @@ export default function RegisterPage() {
       showSuccess('Registration successful');
       navigate('/');
     } catch (error: unknown) {
-      console.error('Register error:', error);
+      logger.error('Register error:', error);
       
       // Обработка специфичных ошибок
       const errorMessage = error instanceof Error ? error.message : 'Registration error';

@@ -55,7 +55,7 @@ class TestElevenLabsAudio:
 
 
 class TestOpenAIAudio:
-    @patch('apps.cards.llm_utils.get_openai_client')
+    @patch('apps.core.llm.get_openai_client')
     def test_success(self, mock_client_fn):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client
@@ -64,7 +64,7 @@ class TestOpenAIAudio:
         result = generate_audio_openai('Hallo', 'de')
         assert result == b'openai audio'
 
-    @patch('apps.cards.llm_utils.get_openai_client')
+    @patch('apps.core.llm.get_openai_client')
     def test_failure(self, mock_client_fn):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client

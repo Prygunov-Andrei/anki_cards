@@ -121,3 +121,37 @@ def word_marktplatz(db, test_user):
         translation='площадь',
         language='de',
     )
+
+
+@pytest.fixture
+def test_user_with_settings(db):
+    """User with custom LLM settings."""
+    return User.objects.create_user(
+        username='customuser', password='testpass123',
+        learning_language='de', native_language='ru',
+        hint_generation_model='gpt-4o',
+        hint_temperature=0.5,
+        matching_model='gpt-4o',
+        elevenlabs_voice_id='voice123',
+        hint_prompt_template='Custom hint for {word}: {translation}',
+    )
+
+
+@pytest.fixture
+def deck_with_words(db, test_user, chekhov_source, fragment_de):
+    """Deck with 3 words for async job testing."""
+    from apps.cards.models import Deck
+    deck = Deck.objects.create(
+        name='Test Deck',
+        user=test_user,
+        target_lang='de',
+        source_lang='ru',
+    )
+    words = []
+    for w, t in [('Marktplatz', 'площадь'), ('Mantel', 'пальто'), ('Hund', 'собака')]:
+        word = Word.objects.create(
+            user=test_user, original_word=w, translation=t, language='de',
+        )
+        deck.words.add(word)
+        words.append(word)
+    return deck, words

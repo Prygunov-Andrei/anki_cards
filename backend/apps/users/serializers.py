@@ -121,7 +121,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name',
             'avatar', 'native_language', 'learning_language',
             'theme', 'mode', 'preferred_language', 'image_provider', 'gemini_model',
-            'audio_provider', 'image_style', 'active_literary_source', 'created_at'
+            'audio_provider', 'image_style', 'active_literary_source',
+            # Per-user LLM settings
+            'hint_generation_model', 'scene_description_model',
+            'matching_model', 'keyword_extraction_model',
+            'hint_temperature', 'scene_description_temperature',
+            'matching_temperature', 'keyword_temperature',
+            'elevenlabs_voice_id',
+            'hint_prompt_template', 'scene_description_prompt',
+            'keyword_extraction_prompt', 'image_prompt_template',
+            'created_at',
         ]
         read_only_fields = ['id', 'username', 'created_at']
 
@@ -149,14 +158,27 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
     
     def validate(self, data):
-        """Валидация: родной и изучаемый языки не должны совпадать"""
+        """Валидация: родной и изучаемый языки не должны совпадать, температуры в диапазоне"""
         native = data.get('native_language', self.instance.native_language if self.instance else None)
         learning = data.get('learning_language', self.instance.learning_language if self.instance else None)
-        
+
         if native and learning and native == learning:
             raise serializers.ValidationError({
                 'learning_language': 'Родной и изучаемый языки должны быть разными'
             })
-        
+
+        # Validate temperatures are in range [0.0, 2.0]
+        temp_fields = [
+            'hint_temperature', 'scene_description_temperature',
+            'matching_temperature', 'keyword_temperature',
+        ]
+        for field in temp_fields:
+            if field in data:
+                val = data[field]
+                if not (0.0 <= val <= 2.0):
+                    raise serializers.ValidationError({
+                        field: 'Температура должна быть от 0.0 до 2.0'
+                    })
+
         return data
 

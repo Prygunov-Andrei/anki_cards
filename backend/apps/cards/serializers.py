@@ -1,17 +1,6 @@
 from rest_framework import serializers
 from .models import UserPrompt
-
-# Константа для всех поддерживаемых языков
-LANGUAGE_CHOICES = [
-    ('ru', 'Русский'),
-    ('en', 'English'),
-    ('pt', 'Португальский'),
-    ('de', 'Немецкий'),
-    ('es', 'Испанский'),
-    ('fr', 'Французский'),
-    ('it', 'Итальянский'),
-    ('tr', 'Турецкий'),
-]
+from apps.core.constants import LANGUAGE_CHOICES
 
 
 class CardGenerationSerializer(serializers.Serializer):
@@ -185,7 +174,7 @@ class ImageGenerationSerializer(serializers.Serializer):
     gemini_model = serializers.ChoiceField(
         choices=[
             ('gemini-2.5-flash-image', 'Gemini Flash (быстрая, 0.5 токена)'),
-            ('nano-banana-pro-preview', 'Nano Banana Pro (новая, 1 токен)')
+            ('gemini-3.1-flash-image-preview', 'NanoBanana-2 (новая, 1 токен)')
         ],
         required=False,
         allow_null=True,
@@ -373,7 +362,7 @@ class GermanWordProcessingSerializer(serializers.Serializer):
 
 class WordSerializer(serializers.Serializer):
     """Сериализатор для слова в колоде (полный, включая AI-контент)"""
-    
+
     id = serializers.IntegerField(read_only=True)
     original_word = serializers.CharField(read_only=True)
     translation = serializers.CharField(read_only=True)
@@ -390,26 +379,74 @@ class WordSerializer(serializers.Serializer):
     part_of_speech = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
     stickers = serializers.JSONField(read_only=True, default=list)
     learning_status = serializers.CharField(read_only=True)
+    literary_context = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
-    
+
     def get_image_file(self, obj):
         """Возвращает URL изображения или None"""
         if obj.image_file:
             return obj.image_file.url
         return None
-    
+
     def get_audio_file(self, obj):
         """Возвращает URL аудио или None"""
         if obj.audio_file:
             return obj.audio_file.url
         return None
-    
+
     def get_hint_audio(self, obj):
         """Возвращает URL аудио подсказки или None"""
         if hasattr(obj, 'hint_audio') and obj.hint_audio:
             return obj.hint_audio.url if hasattr(obj.hint_audio, 'url') else obj.hint_audio
         return None
+
+    def get_literary_context(self, obj):
+        """Get literary context overlay for the word."""
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            return None
+
+        deck = self.context.get('deck')
+        if deck and getattr(deck, 'literary_source_override', False):
+            source = deck.literary_source
+        else:
+            source = getattr(request.user, 'active_literary_source', None)
+        if not source:
+            return None
+
+        from apps.literary_context.models import WordContextMedia
+        try:
+            ctx = WordContextMedia.objects.select_related(
+                'source', 'anchor'
+            ).get(word=obj, source=source)
+        except WordContextMedia.DoesNotExist:
+            return None
+
+        if ctx.is_fallback:
+            return None
+
+        return {
+            'source_slug': ctx.source.slug,
+            'hint_text': ctx.hint_text,
+            'sentences': ctx.sentences,
+            'scene_description': ctx.anchor.scene_description if ctx.anchor else '',
+            'match_method': ctx.match_method,
+            'is_fallback': ctx.is_fallback,
+            'image_url': ctx.anchor.image_file.url if ctx.anchor and ctx.anchor.image_file else None,
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        ctx = data.get('literary_context')
+        if ctx and not ctx.get('is_fallback'):
+            if ctx.get('hint_text'):
+                data['hint_text'] = ctx['hint_text']
+            if ctx.get('sentences'):
+                data['sentences'] = ctx['sentences']
+            if ctx.get('image_url'):
+                data['image_file'] = ctx['image_url']
+        return data
 
 
 class DeckSerializer(serializers.ModelSerializer):

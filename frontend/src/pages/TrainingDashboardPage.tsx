@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
+import { logger } from '../utils/logger';
 
 function CardCountsBadges({ cards, t }: { cards: TrainingCardCounts; t: Record<string, unknown> }) {
   const td = t as { cardStatus: { new: string; learning: string; review: string; mastered: string } };
@@ -63,7 +64,7 @@ export default function TrainingDashboardPage() {
       const data = await trainingService.getDashboard();
       setDashboard(data);
     } catch (error) {
-      console.error('Error loading dashboard:', error);
+      logger.error('Error loading dashboard:', error);
     } finally {
       setIsLoading(false);
     }

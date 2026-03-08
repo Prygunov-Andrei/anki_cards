@@ -74,4 +74,51 @@ describe('literaryContextService', () => {
       expect(result).toEqual(mockMedia);
     });
   });
+
+  describe('generateDeckContextAsync', () => {
+    it('posts async job request and returns job_id', async () => {
+      const mockResponse = { job_id: 'abc-123-def' };
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ data: mockResponse } as any);
+
+      const result = await literaryContextService.generateDeckContextAsync(5, 'chekhov');
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/literary-context/generate-deck-context-async/',
+        { deck_id: 5, source_slug: 'chekhov' },
+      );
+      expect(result).toEqual({ job_id: 'abc-123-def' });
+    });
+  });
+
+  describe('getJobStatus', () => {
+    it('fetches job status by id', async () => {
+      const mockStatus = {
+        job_id: 'abc-123',
+        status: 'completed',
+        progress: 100,
+        stats: { total: 10, generated: 8, skipped: 2, fallback: 1, errors: 0 },
+      };
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockStatus } as any);
+
+      const result = await literaryContextService.getJobStatus('abc-123');
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/literary-context/job/abc-123/status/');
+      expect(result).toEqual(mockStatus);
+    });
+
+    it('returns pending status for in-progress job', async () => {
+      const mockStatus = {
+        job_id: 'xyz-456',
+        status: 'running',
+        progress: 45,
+        stats: null,
+      };
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockStatus } as any);
+
+      const result = await literaryContextService.getJobStatus('xyz-456');
+
+      expect(result.status).toBe('running');
+      expect(result.progress).toBe(45);
+    });
+  });
 });

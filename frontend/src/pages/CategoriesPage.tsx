@@ -25,6 +25,7 @@ import {
 } from '../components/ui/alert-dialog';
 import { FolderTree, Plus, FolderOpen, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { logger } from '../utils/logger';
 
 export default function CategoriesPage() {
   const navigate = useNavigate();
@@ -56,7 +57,7 @@ export default function CategoriesPage() {
       const data = await categoriesService.getTree();
       setTree(data);
     } catch (error) {
-      console.error('Error loading categories:', error);
+      logger.error('Error loading categories:', error);
       setHasError(true);
     } finally {
       setIsLoading(false);
@@ -72,7 +73,7 @@ export default function CategoriesPage() {
         const data = await categoriesService.getTree();
         if (!cancelled) setTree(data);
       } catch (error) {
-        console.error('Error loading categories:', error);
+        logger.error('Error loading categories:', error);
         if (!cancelled) setHasError(true);
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -140,7 +141,7 @@ export default function CategoriesPage() {
       await loadTree();
     } catch (error) {
       toast.error(t.categories.errors.deleteFailed);
-      console.error(error);
+      logger.error(error);
     } finally {
       setDeleteTarget(null);
     }

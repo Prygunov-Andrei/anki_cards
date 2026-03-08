@@ -14,8 +14,10 @@ import { useTranslation } from '../contexts/LanguageContext';
 import { useAuthContext } from '../contexts/AuthContext';
 import { Word, WordSentence } from '../types';
 import { deckService } from '../services/deck.service';
+import { mediaService } from '../services/media.service';
 import { wordsService } from '../services/words.service';
 import { toast } from 'sonner@2.0.3';
+import { logger } from '../utils/logger';
 
 /**
  * Страница деталей слова с AI генерацией контента
@@ -68,18 +70,18 @@ const WordDetailPage: React.FC = () => {
           const foundWord = deck.words?.find(w => w.id === Number(id));
           
           if (foundWord) {
-            console.log('📖 [WordDetailPage] Loaded word:', foundWord);
-            console.log('  - id:', foundWord.id);
-            console.log('  - original_word:', foundWord.original_word);
-            console.log('  - etymology:', foundWord.etymology);
-            console.log('  - etymology type:', typeof foundWord.etymology);
-            console.log('  - etymology length:', foundWord.etymology?.length);
-            console.log('  - hint_text:', foundWord.hint_text);
-            console.log('  - sentences:', foundWord.sentences);
-            console.log('  - All fields:', Object.keys(foundWord));
+            logger.log('📖 [WordDetailPage] Loaded word:', foundWord);
+            logger.log('  - id:', foundWord.id);
+            logger.log('  - original_word:', foundWord.original_word);
+            logger.log('  - etymology:', foundWord.etymology);
+            logger.log('  - etymology type:', typeof foundWord.etymology);
+            logger.log('  - etymology length:', foundWord.etymology?.length);
+            logger.log('  - hint_text:', foundWord.hint_text);
+            logger.log('  - sentences:', foundWord.sentences);
+            logger.log('  - All fields:', Object.keys(foundWord));
             setWord(foundWord);
           } else {
-            console.error(`Word with id ${id} not found in deck ${deckId}`);
+            logger.error(`Word with id ${id} not found in deck ${deckId}`);
             toast.error(t.decks.wordNotFound || 'Слово не найдено');
           }
         } else {
@@ -113,7 +115,7 @@ const WordDetailPage: React.FC = () => {
           }
         }
       } catch (error) {
-        console.error('Error loading word:', error);
+        logger.error('Error loading word:', error);
         toast.error(t.common.error || 'Ошибка загрузки');
       } finally {
         setIsLoading(false);
@@ -128,7 +130,7 @@ const WordDetailPage: React.FC = () => {
     setWord({ ...word, etymology });
     try {
       if (deckId) {
-        await deckService.updateWordAIContent(deckId, word.id, { etymology });
+        await mediaService.updateWordAIContent(deckId, word.id, { etymology });
         const deck = await deckService.getDeck(deckId);
         const updatedWord = deck.words?.find(w => w.id === word.id);
         if (updatedWord) setWord(updatedWord);
@@ -138,7 +140,7 @@ const WordDetailPage: React.FC = () => {
         setWord(updated);
       }
     } catch (error) {
-      console.error('Failed to save etymology:', error);
+      logger.error('Failed to save etymology:', error);
       toast.error(t.common.error || 'Ошибка сохранения');
     }
   };
@@ -148,7 +150,7 @@ const WordDetailPage: React.FC = () => {
     setWord({ ...word, hint_text: hintText, hint_audio: hintAudio });
     try {
       if (deckId) {
-        await deckService.updateWordAIContent(deckId, word.id, {
+        await mediaService.updateWordAIContent(deckId, word.id, {
           hint_text: hintText,
           hint_audio: hintAudio,
         });
@@ -161,7 +163,7 @@ const WordDetailPage: React.FC = () => {
         setWord(updated);
       }
     } catch (error) {
-      console.error('Failed to save hint:', error);
+      logger.error('Failed to save hint:', error);
       toast.error(t.common.error || 'Ошибка сохранения');
     }
   };
@@ -171,7 +173,7 @@ const WordDetailPage: React.FC = () => {
     setWord({ ...word, sentences });
     try {
       if (deckId) {
-        await deckService.updateWordAIContent(deckId, word.id, { sentences });
+        await mediaService.updateWordAIContent(deckId, word.id, { sentences });
         const deck = await deckService.getDeck(deckId);
         const updatedWord = deck.words?.find(w => w.id === word.id);
         if (updatedWord) setWord(updatedWord);
@@ -181,7 +183,7 @@ const WordDetailPage: React.FC = () => {
         setWord(updated);
       }
     } catch (error) {
-      console.error('Failed to save sentences:', error);
+      logger.error('Failed to save sentences:', error);
       toast.error(t.common.error || 'Ошибка сохранения');
     }
   };
@@ -323,7 +325,7 @@ const WordDetailPage: React.FC = () => {
           <SynonymGenerator
             wordId={word.id}
             onSynonymCreated={(synonym) => {
-              console.log('Synonym created:', synonym);
+              logger.log('Synonym created:', synonym);
             }}
           />
           

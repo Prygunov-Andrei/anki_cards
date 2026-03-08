@@ -85,7 +85,7 @@ def generate_audio_elevenlabs(
 def generate_audio_openai(text: str, language: str) -> Optional[bytes]:
     """Generate audio via OpenAI TTS."""
     try:
-        from apps.cards.llm_utils import get_openai_client
+        from apps.core.llm import get_openai_client
         client = get_openai_client()
 
         response = client.audio.speech.create(

@@ -19,6 +19,7 @@ import { BookOpen } from 'lucide-react';
 import { getAbsoluteUrl } from '../utils/url-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
 import { displayWord } from '../utils/helpers';
+import { logger } from '../utils/logger';
 
 interface WordsTableProps {
   words?: Word[]; // Может быть undefined при загрузке
@@ -97,7 +98,7 @@ export const WordsTable: React.FC<WordsTableProps> = ({
       setIsDeleteDialogOpen(false);
       setWordToDelete(null);
     } catch (error) {
-      console.error('Error deleting word:', error);
+      logger.error('Error deleting word:', error);
     } finally {
       setDeletingWordId(null);
     }

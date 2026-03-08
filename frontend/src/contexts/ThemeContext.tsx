@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuthContext } from './AuthContext';
 import axios from 'axios';
+import { logger } from '../utils/logger';
 
 export type Theme = 'light' | 'dark';
 
@@ -102,13 +103,13 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
             },
           }
         );
-        console.log('Theme synced with server successfully');
+        logger.log('Theme synced with server successfully');
       } catch (error) {
         // Тихо обрабатываем ошибку - тема уже сохранена локально
         if (axios.isAxiosError(error)) {
           // Логируем только если это не ошибка "поле не поддерживается"
           if (error.response?.status !== 400) {
-            console.debug('Theme sync skipped:', error.response?.status);
+            logger.debug('Theme sync skipped:', error.response?.status);
           }
         }
       }

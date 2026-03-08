@@ -5,43 +5,40 @@ import logging
 from typing import Optional, Tuple
 from django.contrib.auth import get_user_model
 from .models import Token, TokenTransaction
+from apps.core.constants import (
+    IMAGE_GENERATION_COST,
+    AUDIO_GENERATION_COST,
+    PHOTO_OCR_COST,
+    GEMINI_FLASH_IMAGE_COST,
+    GEMINI_PRO_IMAGE_COST,
+)
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
-# Стоимость операций
-IMAGE_GENERATION_COST = 1  # По умолчанию (для OpenAI и Gemini Pro)
-AUDIO_GENERATION_COST = 1
-PHOTO_OCR_COST = 1  # Стоимость распознавания слов с фото
 
-# Стоимость для разных моделей Gemini
-GEMINI_FLASH_COST = 0.5  # Быстрая модель (gemini-2.5-flash-image)
-GEMINI_PRO_COST = 1.0    # Новая модель (nano-banana-pro-preview)
-
-
-def get_image_generation_cost(provider: str = 'openai', gemini_model: str = None) -> float:
+def get_image_generation_cost(provider: str = 'openai', gemini_model: str = None) -> int:
     """
-    Возвращает стоимость генерации изображения в зависимости от провайдера и модели
-    
+    Возвращает стоимость генерации изображения в зависимости от провайдера и модели.
+
     Args:
         provider: Провайдер ('openai' или 'gemini')
         gemini_model: Модель Gemini (если provider='gemini')
-    
+
     Returns:
-        Стоимость в токенах (float)
+        Стоимость в токенах (int)
     """
     if provider == 'openai':
-        return float(IMAGE_GENERATION_COST)
+        return IMAGE_GENERATION_COST
     elif provider == 'gemini':
         if gemini_model == 'gemini-2.5-flash-image':
-            return GEMINI_FLASH_COST
-        elif gemini_model == 'nano-banana-pro-preview':
-            return GEMINI_PRO_COST
+            return GEMINI_FLASH_IMAGE_COST
+        elif gemini_model == 'gemini-3.1-flash-image-preview':
+            return GEMINI_PRO_IMAGE_COST
         else:
-            # По умолчанию для Gemini - быстрая модель
-            return GEMINI_FLASH_COST
+            return GEMINI_FLASH_IMAGE_COST
     else:
-        return float(IMAGE_GENERATION_COST)
+        return IMAGE_GENERATION_COST
 
 
 def get_or_create_token(user) -> Token:

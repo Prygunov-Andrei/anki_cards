@@ -20,6 +20,7 @@ import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from './ui/sheet';
 import { VisuallyHidden } from './ui/visually-hidden';
 import { TokenBalanceWidget } from './TokenBalanceWidget';
+import { logger } from '../utils/logger';
 
 // Импортируем логотипы для светлой и темной темы
 import logoLight from 'figma:asset/d1bf380f0678c426adcf5d36e80ffe7d5981e49a.png';
@@ -88,11 +89,11 @@ export const Header: React.FC = () => {
       img.src = avatarUrl;
       // Принудительная загрузка в кэш браузера
       img.onload = () => {
-        console.log('[Header] Avatar preloaded successfully:', avatarUrl);
+        logger.log('[Header] Avatar preloaded successfully:', avatarUrl);
       };
       img.onerror = () => {
         // Тихо игнорируем ошибку - fallback аватар все равно отобразится
-        console.warn('[Header] Could not preload avatar (fallback will be used):', avatarUrl);
+        logger.warn('[Header] Could not preload avatar (fallback will be used):', avatarUrl);
       };
     }
   }, [avatarUrl]);

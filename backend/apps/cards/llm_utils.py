@@ -18,41 +18,10 @@ from .default_prompts import get_image_prompt_for_style, get_default_prompt, get
 
 logger = logging.getLogger(__name__)
 
-# Импорт Gemini API (опционально)
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-    logger.warning("google-generativeai не установлен. Gemini API недоступен.")
-
-# PartOfSpeechCache больше не используется - кэширование отключено
-
-
-def get_openai_client() -> OpenAI:
-    """
-    Создает и возвращает клиент OpenAI
-    """
-    api_key = os.getenv('OPENAI_API_KEY')
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY не установлен в переменных окружения")
-    
-    return OpenAI(api_key=api_key)
-
-
-def get_gemini_client():
-    """
-    Настраивает и возвращает клиент Gemini API
-    """
-    if not GEMINI_AVAILABLE:
-        raise ValueError("google-generativeai не установлен. Установите: pip install google-generativeai")
-    
-    api_key = os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY не установлен в переменных окружения")
-    
-    genai.configure(api_key=api_key)
-    return genai
+# Re-export from core for backwards compatibility
+from apps.core.llm.clients import get_openai_client, get_gemini_client, GEMINI_AVAILABLE  # noqa: F401
+if GEMINI_AVAILABLE:
+    import google.generativeai as genai  # noqa: F401
 
 
 def detect_part_of_speech(
@@ -405,17 +374,17 @@ def edit_image_with_gemini(
     source_image_path: Path,
     mixin: str,
     user=None,
-    model: str = 'nano-banana-pro-preview'
+    model: str = 'gemini-3.1-flash-image-preview'
 ) -> Tuple[Path, str]:
     """
     Редактирует изображение, добавляя элементы по описанию пользователя (миксин).
-    Использует nano-banana-pro-preview для image-to-image генерации.
+    Использует gemini-3.1-flash-image-preview для image-to-image генерации.
     
     Args:
         source_image_path: Путь к исходному изображению
         mixin: Текст от пользователя - что добавить/изменить (1-3 слова)
         user: Пользователь (для логирования)
-        model: Модель Gemini (по умолчанию nano-banana-pro-preview)
+        model: Модель Gemini (по умолчанию gemini-3.1-flash-image-preview)
     
     Returns:
         Кортеж (Path к новому изображению, промпт)
@@ -445,7 +414,7 @@ def edit_image_with_gemini(
         source_image.save(img_byte_arr, format='JPEG', quality=95)
         img_byte_arr.seek(0)
         
-        # Используем nano-banana-pro-preview для image-to-image
+        # Используем gemini-3.1-flash-image-preview для image-to-image
         genai_model = genai.GenerativeModel(model)
         
         # Создаем Part с изображением
@@ -528,7 +497,7 @@ def generate_image_with_gemini(
         native_language: Родной язык пользователя
         english_translation: Английский перевод (опционально)
         image_style: Стиль генерации изображения (minimalistic, balanced, creative)
-        model: Модель Gemini ('gemini-2.5-flash-image' или 'nano-banana-pro-preview')
+        model: Модель Gemini ('gemini-2.5-flash-image' или 'gemini-3.1-flash-image-preview')
                Если не указана, берется из user.gemini_model
     
     Returns:
@@ -574,7 +543,7 @@ def generate_image_with_gemini(
     try:
         # Используем выбранную модель Gemini
         # gemini-2.5-flash-image: быстрая (~4.7 сек), 0.5 токена
-        # nano-banana-pro-preview: новая (~12.6 сек), 1 токен
+        # gemini-3.1-flash-image-preview: новая (~12.6 сек), 1 токен
         genai_model = genai.GenerativeModel(model)
         
         # Генерируем изображение
@@ -666,7 +635,7 @@ def generate_image(
         english_translation: Английский перевод (опционально)
         image_style: Стиль генерации изображения (minimalistic, balanced, creative)
         provider: Провайдер ('openai' или 'gemini'). Если не указан, берется из user.image_provider
-        gemini_model: Модель Gemini ('gemini-2.5-flash-image' или 'nano-banana-pro-preview').
+        gemini_model: Модель Gemini ('gemini-2.5-flash-image' или 'gemini-3.1-flash-image-preview').
                       Если не указана, берется из user.gemini_model
         use_two_stage: Использовать двухэтапную генерацию (True) или старый способ (False)
     

@@ -1,4 +1,5 @@
 import { toast } from 'sonner@2.0.3';
+import { TOAST_DURATION } from './timeouts';
 
 /**
  * Утилиты для отображения Toast уведомлений
@@ -15,7 +16,7 @@ interface ToastOptions {
  */
 export const showSuccess = (message: string, options?: ToastOptions) => {
   return toast.success(message, {
-    duration: options?.duration || 3000,
+    duration: options?.duration || TOAST_DURATION.SUCCESS,
     description: options?.description,
   });
 };
@@ -25,7 +26,7 @@ export const showSuccess = (message: string, options?: ToastOptions) => {
  */
 export const showError = (message: string, options?: ToastOptions) => {
   return toast.error(message, {
-    duration: options?.duration || 5000,
+    duration: options?.duration || TOAST_DURATION.ERROR,
     description: options?.description,
   });
 };
@@ -35,7 +36,7 @@ export const showError = (message: string, options?: ToastOptions) => {
  */
 export const showInfo = (message: string, options?: ToastOptions) => {
   return toast.info(message, {
-    duration: options?.duration || 3000,
+    duration: options?.duration || TOAST_DURATION.INFO,
     description: options?.description,
   });
 };
@@ -45,7 +46,7 @@ export const showInfo = (message: string, options?: ToastOptions) => {
  */
 export const showWarning = (message: string, options?: ToastOptions) => {
   return toast.warning(message, {
-    duration: options?.duration || 4000,
+    duration: options?.duration || TOAST_DURATION.WARNING,
     description: options?.description,
   });
 };

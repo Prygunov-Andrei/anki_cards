@@ -9,9 +9,10 @@ import {
   DialogFooter,
 } from './ui/dialog';
 import { Camera, Loader2, X, Plus } from 'lucide-react';
-import { deckService } from '../services/deck.service';
+import { mediaService } from '../services/media.service';
 import { showError } from '../utils/toast-helpers';
 import { useTranslation } from '../contexts/LanguageContext';
+import { logger } from '../utils/logger';
 
 interface PhotoWordExtractorProps {
   targetLang: string;
@@ -52,7 +53,7 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
     setExtractedWords([]);
 
     try {
-      const result = await deckService.extractWordsFromPhoto({
+      const result = await mediaService.extractWordsFromPhoto({
         image: file,
         target_lang: targetLang,
         source_lang: sourceLang,
@@ -61,7 +62,7 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
       setExtractedWords(result.words);
       setHasResult(true);
     } catch (error: any) {
-      console.error('Error extracting words from photo:', error);
+      logger.error('Error extracting words from photo:', error);
       const message = error?.response?.data?.error || pt.extractionError;
       showError(message);
       setIsOpen(false);

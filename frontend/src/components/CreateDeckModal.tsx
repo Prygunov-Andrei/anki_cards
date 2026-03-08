@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from './ui/select';
 import { Loader2 } from 'lucide-react';
+import { logger } from '../utils/logger';
 
 interface CreateDeckModalProps {
   isOpen: boolean;
@@ -94,7 +95,7 @@ export const CreateDeckModal: React.FC<CreateDeckModalProps> = ({
       });
       handleClose();
     } catch (error) {
-      console.error('Error creating deck:', error);
+      logger.error('Error creating deck:', error);
     } finally {
       setIsLoading(false);
     }

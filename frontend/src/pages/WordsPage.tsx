@@ -23,6 +23,8 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { BookOpen, ChevronLeft, ChevronRight, FolderTree, X } from 'lucide-react';
+import { logger } from '../utils/logger';
+import { TIMEOUTS } from '../utils/timeouts';
 
 const PAGE_SIZE = 20;
 const ORDERING_VALUES = [
@@ -94,7 +96,7 @@ export default function WordsPage() {
         setNextPage(res.next);
         setPrevPage(res.previous);
       } catch (error) {
-        console.error('Error loading words:', error);
+        logger.error('Error loading words:', error);
         setHasNetworkError(true);
         setWords([]);
       } finally {
@@ -127,7 +129,7 @@ export default function WordsPage() {
         }
       } catch (error) {
         if (!cancelled) {
-          console.error('Error loading words:', error);
+          logger.error('Error loading words:', error);
           setHasNetworkError(true);
           setWords([]);
         }
@@ -168,7 +170,7 @@ export default function WordsPage() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => setSearchDebounced(search), 400);
+    const timer = setTimeout(() => setSearchDebounced(search), TIMEOUTS.SEARCH_DEBOUNCE);
     return () => clearTimeout(timer);
   }, [search]);
 

@@ -112,3 +112,53 @@ class TestContextSwitching:
         response = api_client.get('/api/auth/profile/')
         assert response.status_code == 200
         assert response.data['active_literary_source'] == 'chekhov'
+
+
+class TestProfileLLMSettings:
+    def test_patch_llm_models(self, api_client, test_user):
+        response = api_client.patch('/api/auth/profile/', {
+            'hint_generation_model': 'gpt-4o',
+        }, format='json')
+        assert response.status_code == 200
+        assert response.data['hint_generation_model'] == 'gpt-4o'
+        test_user.refresh_from_db()
+        assert test_user.hint_generation_model == 'gpt-4o'
+
+    def test_patch_temperatures(self, api_client, test_user):
+        response = api_client.patch('/api/auth/profile/', {
+            'hint_temperature': 0.5,
+            'matching_temperature': 0.1,
+        }, format='json')
+        assert response.status_code == 200
+        assert response.data['hint_temperature'] == 0.5
+        assert response.data['matching_temperature'] == 0.1
+
+    def test_invalid_temperature_rejected(self, api_client, test_user):
+        response = api_client.patch('/api/auth/profile/', {
+            'hint_temperature': 3.0,
+        }, format='json')
+        assert response.status_code == 400
+
+    def test_patch_voice_id(self, api_client, test_user):
+        response = api_client.patch('/api/auth/profile/', {
+            'elevenlabs_voice_id': 'pNInz6obpgDQGcFmaJgB',
+        }, format='json')
+        assert response.status_code == 200
+        test_user.refresh_from_db()
+        assert test_user.elevenlabs_voice_id == 'pNInz6obpgDQGcFmaJgB'
+
+    def test_patch_prompt_template(self, api_client, test_user):
+        template = 'Generate hint for {word} ({translation})'
+        response = api_client.patch('/api/auth/profile/', {
+            'hint_prompt_template': template,
+        }, format='json')
+        assert response.status_code == 200
+        test_user.refresh_from_db()
+        assert test_user.hint_prompt_template == template
+
+    def test_audio_provider_elevenlabs(self, api_client, test_user):
+        response = api_client.patch('/api/auth/profile/', {
+            'audio_provider': 'elevenlabs',
+        }, format='json')
+        assert response.status_code == 200
+        assert response.data['audio_provider'] == 'elevenlabs'

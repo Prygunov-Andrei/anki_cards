@@ -30,8 +30,10 @@ class WordsService {
   /**
    * Детали слова по id (для страницы слова из каталога)
    */
-  async getWord(id: number): Promise<Word> {
-    const response = await api.get<Word>(API_ENDPOINTS.WORD_BY_ID(id));
+  async getWord(id: number, deckId?: number): Promise<Word> {
+    const response = await api.get<Word>(API_ENDPOINTS.WORD_BY_ID(id), {
+      params: deckId ? { deck_id: deckId } : undefined,
+    });
     return response.data;
   }
 

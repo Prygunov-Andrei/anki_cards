@@ -1,18 +1,16 @@
-import os
-import uuid
 import logging
 from pathlib import Path
-from django.conf import settings
 
-logger = logging.getLogger(__name__)
+from django.conf import settings
 from django.http import FileResponse, Http404
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
 from apps.words.models import Word
 from django.shortcuts import get_object_or_404
+
 from .models import GeneratedDeck, UserPrompt, Deck, Card
 from .serializers import (
     CardGenerationSerializer,
@@ -30,58 +28,58 @@ from .serializers import (
     DeckDetailSerializer,
     DeckCreateSerializer,
     DeckUpdateSerializer,
-    DeckWordAddSerializer,
     DeckWordRemoveSerializer,
     DeckMergeSerializer,
     DeckInvertWordSerializer,
     DeckCreateEmptyCardSerializer,
-    # Этап 3: Card serializers
     CardSerializer,
     CardListSerializer,
     CardCreateClozeSerializer,
     CardReviewSerializer,
     CardAnswerSerializer,
 )
-from .utils import generate_apkg, parse_words_input
-from .llm_utils import (
-    generate_image,
-    generate_images_batch,
-    generate_audio_with_tts,
-    edit_image_with_gemini,
-    detect_word_language,
-    analyze_mixed_languages,
-    translate_words,
-    process_german_word,
-    generate_deck_name,
-    detect_category,
-    select_image_style,
-    extract_words_from_photo
-)
+from .llm_utils import analyze_mixed_languages, translate_words, process_german_word
 from .prompt_utils import get_or_create_user_prompt, reset_user_prompt_to_default
-from .token_utils import (
-    get_or_create_token,
-    add_tokens,
-    spend_tokens,
-    refund_tokens,
-    check_balance,
-    get_image_generation_cost,
-    IMAGE_GENERATION_COST,
-    AUDIO_GENERATION_COST
+from .token_utils import get_or_create_token, add_tokens, check_balance
+
+from .services.media_service import (
+    generate_image_for_word,
+    edit_image_for_word,
+    generate_audio_for_word,
+    extract_words_from_photo_service,
+    save_uploaded_file,
+    get_relative_media_path,
+    get_media_url,
+)
+from .services.generation_service import (
+    generate_cards,
+    auto_enrich_simple_mode,
+    generate_apkg_from_deck,
+)
+from .services.deck_service import (
+    add_words_to_deck,
+    update_word_in_deck,
+    merge_decks,
+    invert_all_words,
+    invert_single_word,
+    create_empty_cards_for_deck,
+    create_empty_card_for_word,
+    set_literary_source,
 )
 
+logger = logging.getLogger(__name__)
+
+
+# ========== Card Generation ==========
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_cards_view(request):
-    """
-    Генерация карточек Anki
-    """
+    """Generate Anki cards."""
     serializer = CardGenerationSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Получаем валидированные данные
+
     words_list = serializer.validated_data['words']
     language = serializer.validated_data['language']
     translations = serializer.validated_data['translations']
@@ -90,2257 +88,740 @@ def generate_cards_view(request):
     deck_name = serializer.validated_data['deck_name']
     image_style = serializer.validated_data.get('image_style', 'balanced')
     save_to_decks = serializer.validated_data.get('save_to_decks', True)
-    
-    # Проверяем режим пользователя (простой или расширенный)
+
+    # Simple mode auto-enrichment
     user_mode = getattr(request.user, 'mode', 'advanced')
-    
-    # Если простой режим, используем автоматизацию
     if user_mode == 'simple':
         try:
-            # Автоматически определяем язык изучения из профиля пользователя
-            learning_language = request.user.learning_language or language
-            native_language = request.user.native_language or 'ru'
-            
-            # Автоматически переводим слова, если переводы не предоставлены
-            if not translations or len(translations) < len(words_list):
-                auto_translations = translate_words(
-                    words_list=words_list,
-                    learning_language=learning_language,
-                    native_language=native_language,
-                    user=request.user
-                )
-                # Объединяем с существующими переводами
-                translations = {**auto_translations, **translations}
-            
-            # Автоматически генерируем название колоды
-            if not deck_name or deck_name == 'Новая колода':
-                deck_name = generate_deck_name(
-                    words_list=words_list,
-                    learning_language=learning_language,
-                    native_language=native_language,
-                    user=request.user
-                )
-            
-            # Автоматически определяем категорию и выбираем стиль изображения
-            category = detect_category(
-                words_list=words_list,
-                language=learning_language,
-                native_language=native_language,
-                user=request.user
-            )
-            image_style = select_image_style(category)
-            
+            translations, deck_name, image_style = auto_enrich_simple_mode(
+                request.user, words_list, language, translations, deck_name)
         except Exception as e:
-            logger.error(f"Ошибка в простом режиме: {str(e)}")
-            # В случае ошибки продолжаем с предоставленными данными
-    
-    # Подготавливаем данные для генерации
-    words_data = []
-    media_files = []
-    
-    logger.info(
-        "Deck generation for user=%s: %d words, name=%s",
-        request.user.username, len(words_list), deck_name
-    )
-    
-    for word in words_list:
-        # Получаем перевод с учетом возможных различий в пунктуации
-        translation = translations.get(word, '')
-        if not translation:
-            # Пробуем найти перевод по нормализованному ключу (без пунктуации в конце)
-            word_normalized = word.strip().rstrip('.,!?;:')
-            for key, trans in translations.items():
-                key_normalized = key.strip().rstrip('.,!?;:')
-                if key_normalized == word_normalized:
-                    translation = trans
-                    logger.info(f"🔍 Найден перевод для '{word}' по ключу '{key}': {translation[:50]}...")
-                    break
-        
-        # Получаем или создаем слово в БД
-        word_obj, created = Word.objects.get_or_create(
-            user=request.user,
-            original_word=word,
-            language=language,
-            defaults={
-                'translation': translation,
-            }
-        )
-        
-        # Обновляем перевод, если слово уже существовало
-        if not created and word_obj.translation != translation:
-            word_obj.translation = translation
-            word_obj.save(update_fields=['translation'])
-        
-        # Подготавливаем данные для карточки
-        word_data = {
-            'original_word': word,
-            'translation': translation,
-        }
-        
-        # Добавляем аудио, если есть
-        # Проверяем точное совпадение и также пробуем найти по ключу
-        audio_path = None
-        if word in audio_files:
-            audio_path = audio_files[word]
-        else:
-            # Пробуем найти по ключу с учетом возможных различий в пунктуации
-            word_normalized = word.strip().rstrip('.,!?;:')
-            for key, path in audio_files.items():
-                key_normalized = key.strip().rstrip('.,!?;:')
-                if key_normalized == word_normalized or key.strip() == word.strip():
-                    audio_path = path
-                    logger.info(f"🔍 Найдено аудио для '{word}' по ключу '{key}'")
-                    break
-        
-        if audio_path:
-            # Преобразуем путь в абсолютный (обрабатываем относительные пути и полные URL)
-            normalized_audio_path = None
-            if audio_path.startswith('http://') or audio_path.startswith('https://'):
-                # Полный URL - извлекаем относительный путь
-                if '/media/audio/' in audio_path:
-                    relative_path = 'audio/' + audio_path.split('/media/audio/')[-1]
-                    normalized_audio_path = Path(settings.MEDIA_ROOT) / relative_path
-                elif '/media/' in audio_path:
-                    relative_path = audio_path.split('/media/')[-1]
-                    normalized_audio_path = Path(settings.MEDIA_ROOT) / relative_path
-            elif audio_path.startswith('/media/'):
-                # Относительный путь, начинающийся с /media/
-                relative_path = audio_path.replace('/media/', '')
-                normalized_audio_path = Path(settings.MEDIA_ROOT) / relative_path
-            elif not Path(audio_path).is_absolute():
-                # Относительный путь без /media/
-                normalized_audio_path = Path(settings.MEDIA_ROOT) / audio_path
-            else:
-                # Уже абсолютный путь
-                normalized_audio_path = Path(audio_path)
-            
-            # Проверяем существование файла
-            if normalized_audio_path and normalized_audio_path.exists():
-                word_data['audio_file'] = str(normalized_audio_path)
-                if str(normalized_audio_path) not in media_files:
-                    media_files.append(str(normalized_audio_path))
-                
-                # Сохраняем аудио в модель Word (относительный путь от MEDIA_ROOT)
-                relative_audio_path = str(normalized_audio_path.relative_to(Path(settings.MEDIA_ROOT)))
-                word_obj.audio_file = relative_audio_path
-                word_obj.save(update_fields=['audio_file'])
-                
-                logger.info(f"✅ Добавлено аудио для '{word}': {normalized_audio_path} (сохранено в БД: {relative_audio_path})")
-            else:
-                logger.error(f"❌ Файл аудио не существует: {normalized_audio_path} (исходный путь: {audio_path})")
-        else:
-            # Если новое аудио не предоставлено, используем существующее из БД (если есть)
-            if word_obj.audio_file:
-                existing_audio_path = Path(settings.MEDIA_ROOT) / word_obj.audio_file.name
-                if existing_audio_path.exists():
-                    word_data['audio_file'] = str(existing_audio_path)
-                    if str(existing_audio_path) not in media_files:
-                        media_files.append(str(existing_audio_path))
-                    logger.info(f"✅ Использовано существующее аудио для '{word}': {existing_audio_path}")
-                else:
-                    logger.warning(f"⚠️ Существующее аудио не найдено: {existing_audio_path}")
-            else:
-                logger.warning(f"⚠️ Аудио не найдено для '{word}'. Доступные ключи: {list(audio_files.keys())}")
-        
-        # Добавляем изображение, если есть
-        image_path = None
-        if word in image_files:
-            image_path = image_files[word]
-        else:
-            # Пробуем найти по ключу с учетом возможных различий в пунктуации
-            word_normalized = word.strip().rstrip('.,!?;:')
-            for key, path in image_files.items():
-                key_normalized = key.strip().rstrip('.,!?;:')
-                if key_normalized == word_normalized or key.strip() == word.strip():
-                    image_path = path
-                    logger.info(f"🔍 Найдено изображение для '{word}' по ключу '{key}'")
-                    break
-        
-        if image_path:
-            # Преобразуем путь в абсолютный (обрабатываем относительные пути и полные URL)
-            normalized_image_path = None
-            if image_path.startswith('http://') or image_path.startswith('https://'):
-                # Полный URL - извлекаем относительный путь
-                if '/media/images/' in image_path:
-                    relative_path = 'images/' + image_path.split('/media/images/')[-1]
-                    normalized_image_path = Path(settings.MEDIA_ROOT) / relative_path
-                elif '/media/' in image_path:
-                    relative_path = image_path.split('/media/')[-1]
-                    normalized_image_path = Path(settings.MEDIA_ROOT) / relative_path
-            elif image_path.startswith('/media/'):
-                # Относительный путь, начинающийся с /media/
-                relative_path = image_path.replace('/media/', '')
-                normalized_image_path = Path(settings.MEDIA_ROOT) / relative_path
-            elif not Path(image_path).is_absolute():
-                # Относительный путь без /media/
-                normalized_image_path = Path(settings.MEDIA_ROOT) / image_path
-            else:
-                # Уже абсолютный путь
-                normalized_image_path = Path(image_path)
-            
-            # Проверяем существование файла
-            if normalized_image_path and normalized_image_path.exists():
-                word_data['image_file'] = str(normalized_image_path)
-                if str(normalized_image_path) not in media_files:
-                    media_files.append(str(normalized_image_path))
-                
-                # Сохраняем изображение в модель Word (относительный путь от MEDIA_ROOT)
-                relative_image_path = str(normalized_image_path.relative_to(Path(settings.MEDIA_ROOT)))
-                word_obj.image_file = relative_image_path
-                word_obj.save(update_fields=['image_file'])
-                
-                logger.info(f"✅ Добавлено изображение для '{word}': {normalized_image_path} (сохранено в БД: {relative_image_path})")
-            else:
-                logger.error(f"❌ Файл изображения не существует: {normalized_image_path} (исходный путь: {image_path})")
-        else:
-            # Если новое изображение не предоставлено, используем существующее из БД (если есть)
-            if word_obj.image_file:
-                existing_image_path = Path(settings.MEDIA_ROOT) / word_obj.image_file.name
-                if existing_image_path.exists():
-                    word_data['image_file'] = str(existing_image_path)
-                    if str(existing_image_path) not in media_files:
-                        media_files.append(str(existing_image_path))
-                    logger.info(f"✅ Использовано существующее изображение для '{word}': {existing_image_path}")
-                else:
-                    logger.warning(f"⚠️ Существующее изображение не найдено: {existing_image_path}")
-            else:
-                logger.warning(f"⚠️ Изображение не найдено для '{word}'. Доступные ключи: {list(image_files.keys())}")
-        
-        words_data.append(word_data)
-    
-    # Логируем перед генерацией
-    logger.info(f"Генерация .apkg файла:")
-    logger.info(f"  - Слов: {len(words_data)}")
-    logger.info(f"  - Медиафайлов: {len(media_files)}")
-    logger.info(f"  - Пути к медиафайлам: {media_files}")
-    for word_data in words_data:
-        logger.info(f"  - Слово '{word_data.get('original_word')}': audio={word_data.get('audio_file')}, image={word_data.get('image_file')}")
-    
-    # Генерируем .apkg файл
-    file_id = uuid.uuid4()
-    temp_dir = Path(settings.MEDIA_ROOT) / 'temp_files'
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    output_path = temp_dir / f"{file_id}.apkg"
-    
+            logger.error(f"Simple mode enrichment error: {e}")
+
     try:
-        generate_apkg(
-            words_data=words_data,
-            deck_name=deck_name,
-            media_files=media_files if media_files else None,
-            output_path=output_path
-        )
-        
-        # Сохраняем информацию о колоде
-        generated_deck = GeneratedDeck.objects.create(
-            id=file_id,
+        result = generate_cards(
             user=request.user,
+            words_list=words_list,
+            language=language,
+            translations=translations,
+            audio_files=audio_files,
+            image_files=image_files,
             deck_name=deck_name,
-            file_path=str(output_path),
-            cards_count=len(words_data) * 2  # Двусторонние карточки
+            image_style=image_style,
+            save_to_decks=save_to_decks,
         )
-        
-        logger.info(f"Колода успешно сгенерирована: {deck_name}, файл: {file_id}, карточек: {generated_deck.cards_count}")
-        
-        # Автоматически импортируем колоду в базу синхронизации Anki
-        try:
-            from apps.anki_sync.utils import import_apkg_to_anki_collection
-            import_result = import_apkg_to_anki_collection(
-                user=request.user,
-                apkg_path=output_path
-            )
-            logger.info(f"Колода импортирована в базу синхронизации: {import_result}")
-        except Exception as e:
-            # Не прерываем выполнение, если импорт не удался
-            logger.warning(f"Не удалось импортировать колоду в базу синхронизации: {str(e)}")
-        
-        # Если нужно сохранить в "Мои колоды"
-        deck_id = None
-        if save_to_decks:
-            # Создаём колоду для редактирования
-            deck = Deck.objects.create(
-                user=request.user,
-                name=deck_name,
-                target_lang=language,
-                source_lang=request.user.native_language or 'ru',
-                literary_source=getattr(request.user, 'active_literary_source', None),
-            )
-            # Добавляем слова в колоду
-            word_objects = Word.objects.filter(
-                user=request.user,
-                original_word__in=words_list,
-                language=language
-            )
-            deck.words.set(word_objects)
-            deck_id = deck.id
-            logger.info(f"Колода сохранена в 'Мои колоды': {deck_name}, ID: {deck_id}")
-        
-        response_data = {
-            'file_id': file_id,
-            'download_url': f'/api/cards/download/{file_id}/',
-            'deck_name': deck_name,
-            'cards_count': generated_deck.cards_count
-        }
-        
-        if deck_id:
-            response_data['deck_id'] = deck_id
-            response_data['deck_url'] = f'/decks/{deck_id}'
-        
-        return Response(response_data, status=status.HTTP_201_CREATED)
-    
+        return Response(result, status=status.HTTP_201_CREATED)
     except Exception as e:
-        logger.error(f"Ошибка при генерации карточек для пользователя {request.user.username}: {str(e)}", exc_info=True)
-        return Response({
-            'error': f'Ошибка при генерации карточек: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        logger.error(f"Card generation error for {request.user.username}: {e}", exc_info=True)
+        return Response(
+            {'error': f'Card generation error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def download_cards_view(request, file_id):
-    """
-    Скачивание сгенерированного .apkg файла
-    """
+    """Download generated .apkg file."""
     try:
         generated_deck = GeneratedDeck.objects.get(id=file_id, user=request.user)
     except GeneratedDeck.DoesNotExist:
-        raise Http404("Файл не найден")
-    
+        raise Http404("File not found")
+
     file_path = Path(generated_deck.file_path)
-    
     if not file_path.exists():
-        raise Http404("Файл не найден на сервере")
-    
-    # Отправляем файл
-    response = FileResponse(
-        open(file_path, 'rb'),
-        content_type='application/apkg'
-    )
+        raise Http404("File not found on server")
+
+    response = FileResponse(open(file_path, 'rb'), content_type='application/apkg')
     response['Content-Disposition'] = f'attachment; filename="{generated_deck.deck_name}.apkg"'
-    
     return response
 
+
+# ========== Media Generation ==========
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_image_view(request):
-    """
-    Генерация изображения для слова через OpenAI DALL-E 3
-    """
+    """Generate image for a word."""
     serializer = ImageGenerationSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    word = serializer.validated_data['word']
-    translation = serializer.validated_data['translation']
-    language = serializer.validated_data['language']
-    word_id = serializer.validated_data.get('word_id')
-    image_style = serializer.validated_data.get('image_style', 'balanced')
-    provider = serializer.validated_data.get('provider')  # Опционально, если не указан - берется из user.image_provider
-    gemini_model = serializer.validated_data.get('gemini_model')  # Опционально, если не указан - берется из user.gemini_model
-    
-    # ВАЖНО: Для инвертированных слов используем translation как word для генерации
-    # Потому что для инвертированного слова: original_word = перевод исходного слова, translation = исходное слово
-    # А для генерации изображения нужно отправлять исходное слово (как для обычных слов)
-    if word_id:
-        try:
-            word_obj = Word.objects.get(id=word_id, user=request.user)
-            if word_obj.card_type == 'inverted':
-                # Для инвертированного слова используем translation (исходное слово) вместо original_word
-                word = word_obj.translation
-                translation = word_obj.original_word
-                logger.info(f"🔄 Инвертированное слово: используем translation '{word}' вместо original_word '{word_obj.original_word}' для генерации изображения")
-        except Word.DoesNotExist:
-            pass  # Если слово не найдено, используем переданные значения
-    
-    # Определяем провайдер и модель для расчета стоимости
-    # 'auto' или None означает "использовать настройки пользователя"
-    if not provider or provider == 'auto':
-        provider = request.user.image_provider if hasattr(request.user, 'image_provider') else 'openai'
-    
-    if provider == 'gemini' and not gemini_model:
-        gemini_model = request.user.gemini_model if hasattr(request.user, 'gemini_model') else 'gemini-2.5-flash-image'
-    
-    # Рассчитываем стоимость генерации
-    cost = get_image_generation_cost(provider=provider, gemini_model=gemini_model)
-    
-    # Проверяем баланс токенов
-    balance = check_balance(request.user)
-    cost_int = max(1, int(cost))  # Минимум 1 токен
-    
-    if balance < cost_int:
-        return Response({
-            'error': f'Недостаточно токенов. Требуется: {cost_int}, доступно: {balance}'
-        }, status=status.HTTP_402_PAYMENT_REQUIRED)
-    
+
     try:
-        # Списываем токены перед генерацией
-        token, success = spend_tokens(
-            request.user,
-            cost_int,
-            description=f"Генерация изображения для слова '{word}' ({provider}, модель: {gemini_model or 'N/A'}, стоимость: {cost} токенов)"
-        )
-        
-        if not success:
-            return Response({
-                'error': f'Недостаточно токенов для генерации изображения. Требуется: {cost}'
-            }, status=status.HTTP_402_PAYMENT_REQUIRED)
-        
-        # Генерируем изображение с использованием выбранного стиля и провайдера
-        image_path, prompt = generate_image(
-            word=word,
-            translation=translation,
-            language=language,
+        result = generate_image_for_word(
             user=request.user,
-            native_language=getattr(request.user, 'native_language', 'русском'),
-            english_translation=None,  # TODO: получить из перевода или API
-            image_style=image_style,
-            provider=provider,  # Если указан в запросе, иначе берется из user.image_provider
-            gemini_model=gemini_model  # Если указан в запросе, иначе берется из user.gemini_model
+            word=serializer.validated_data['word'],
+            translation=serializer.validated_data['translation'],
+            language=serializer.validated_data['language'],
+            word_id=serializer.validated_data.get('word_id'),
+            image_style=serializer.validated_data.get('image_style', 'balanced'),
+            provider=serializer.validated_data.get('provider'),
+            gemini_model=serializer.validated_data.get('gemini_model'),
         )
-        
-        # Получаем относительный путь для URL
-        media_root = Path(settings.MEDIA_ROOT)
-        relative_path = image_path.relative_to(media_root)
-        image_url = f"{settings.MEDIA_URL}{relative_path}"
-        
-        # Получаем ID файла из имени
-        image_id = image_path.stem
-        
-        # Если передан word_id — привязываем изображение к слову
-        word_id = serializer.validated_data.get('word_id')
-        if word_id:
-            try:
-                word_obj = Word.objects.get(id=word_id, user=request.user)
-                # Сохраняем относительный путь
-                word_obj.image_file.name = str(relative_path)
-                word_obj.save()
-                logger.info(f"Изображение привязано к слову ID={word_id}")
-            except Word.DoesNotExist:
-                logger.warning(f"Слово с ID={word_id} не найдено для привязки изображения")
-        
-        return Response({
-            'image_url': image_url,
-            'image_id': image_id,
-            'file_path': str(image_path),
-            'prompt': prompt  # Для отладки - показываем промпт в ответе
-        }, status=status.HTTP_201_CREATED)
-    
+        return Response(result, status=status.HTTP_201_CREATED)
     except ValueError as e:
-        return Response({
-            'error': str(e)
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response({'error': str(e)}, status=status.HTTP_402_PAYMENT_REQUIRED)
     except Exception as e:
-        # При ошибке возвращаем токены
-        refund_tokens(
-            request.user,
-            IMAGE_GENERATION_COST,
-            description=f"Возврат токенов за ошибку генерации изображения для слова '{word}'"
-        )
-        return Response({
-            'error': f'Ошибка при генерации изображения: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Image generation error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def edit_image_view(request):
-    """
-    Редактирование изображения слова через миксин.
-    Использует nano-banana-pro-preview для image-to-image генерации.
-    
-    Принимает:
-    - word_id: ID слова с существующим изображением
-    - mixin: текст (1-3 слова) что добавить/изменить, например "добавь коня и всадника"
-    
-    Возвращает новое изображение, заменяя старое.
-    """
+    """Edit existing word image via mixin."""
     serializer = ImageEditSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    word_id = serializer.validated_data['word_id']
-    mixin = serializer.validated_data['mixin']
-    
-    # Получаем слово пользователя
+
     try:
-        word_obj = Word.objects.get(id=word_id, user=request.user)
-    except Word.DoesNotExist:
-        return Response({
-            'error': f'Слово с ID={word_id} не найдено'
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    # Проверяем наличие изображения
-    if not word_obj.image_file:
-        return Response({
-            'error': 'У этого слова нет изображения для редактирования. Сначала сгенерируйте изображение.'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Получаем путь к изображению
-    source_image_path = Path(settings.MEDIA_ROOT) / word_obj.image_file.name
-    
-    if not source_image_path.exists():
-        return Response({
-            'error': f'Файл изображения не найден: {word_obj.image_file.name}'
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    # Стоимость редактирования = 1 токен
-    EDIT_COST = 1
-    
-    # Проверяем баланс токенов
-    balance = check_balance(request.user)
-    if balance < EDIT_COST:
-        return Response({
-            'error': f'Недостаточно токенов. Требуется: {EDIT_COST}, доступно: {balance}'
-        }, status=status.HTTP_402_PAYMENT_REQUIRED)
-    
-    try:
-        # Списываем токены
-        token, success = spend_tokens(
-            request.user,
-            EDIT_COST,
-            description=f"Редактирование изображения для слова '{word_obj.original_word}' (миксин: '{mixin}')"
-        )
-        
-        if not success:
-            return Response({
-                'error': f'Недостаточно токенов для редактирования. Требуется: {EDIT_COST}'
-            }, status=status.HTTP_402_PAYMENT_REQUIRED)
-        
-        # Редактируем изображение через Gemini nano-banana-pro
-        new_image_path, prompt = edit_image_with_gemini(
-            source_image_path=source_image_path,
-            mixin=mixin,
+        result = edit_image_for_word(
             user=request.user,
-            model='nano-banana-pro-preview'
+            word_id=serializer.validated_data['word_id'],
+            mixin=serializer.validated_data['mixin'],
         )
-        
-        # Получаем относительный путь для URL
-        media_root = Path(settings.MEDIA_ROOT)
-        relative_path = new_image_path.relative_to(media_root)
-        image_url = f"{settings.MEDIA_URL}{relative_path}"
-        
-        # Получаем ID файла из имени
-        image_id = new_image_path.stem
-        
-        # Обновляем изображение в слове
-        word_obj.image_file.name = str(relative_path)
-        word_obj.save()
-        logger.info(f"Изображение слова ID={word_id} обновлено через миксин: '{mixin}'")
-        
-        return Response({
-            'image_url': image_url,
-            'image_id': image_id,
-            'file_path': str(new_image_path),
-            'prompt': prompt,
-            'mixin': mixin,
-            'word_id': word_id
-        }, status=status.HTTP_200_OK)
-    
+        return Response(result, status=status.HTTP_200_OK)
+    except Word.DoesNotExist:
+        return Response(
+            {'error': f'Word with ID={serializer.validated_data["word_id"]} not found'},
+            status=status.HTTP_404_NOT_FOUND)
+    except FileNotFoundError as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
     except ValueError as e:
-        return Response({
-            'error': str(e)
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        # При ошибке возвращаем токены
-        refund_tokens(
-            request.user,
-            EDIT_COST,
-            description=f"Возврат токенов за ошибку редактирования изображения для слова '{word_obj.original_word}'"
-        )
-        return Response({
-            'error': f'Ошибка при редактировании изображения: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Image edit error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_audio_view(request):
-    """
-    Генерация аудио для слова через OpenAI TTS-1-HD
-    """
+    """Generate audio for a word."""
     serializer = AudioGenerationSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    word = serializer.validated_data['word']
-    language = serializer.validated_data['language']
-    provider = serializer.validated_data.get('provider')  # Опционально, если не указан - берется из user.audio_provider
-    
-    # Определяем провайдер
-    if not provider:
-        provider = request.user.audio_provider if hasattr(request.user, 'audio_provider') else 'openai'
-    
-    # Для португальского по умолчанию используем gTTS
-    if language == 'pt' and provider == 'openai':
-        if not hasattr(request.user, 'audio_provider') or request.user.audio_provider == 'openai':
-            logger.info(f"[Audio] Для португальского языка используем gTTS (лучшее качество)")
-            provider = 'gtts'
-    
-    # Проверяем баланс токенов (только для OpenAI, gTTS бесплатный)
-    if provider == 'openai':
-        balance = check_balance(request.user)
-        if balance < AUDIO_GENERATION_COST:
-            return Response({
-                'error': f'Недостаточно токенов. Требуется: {AUDIO_GENERATION_COST}, доступно: {balance}'
-            }, status=status.HTTP_402_PAYMENT_REQUIRED)
-    
+
     try:
-        # Списываем токены перед генерацией (только для OpenAI)
-        if provider == 'openai':
-            token, success = spend_tokens(
-                request.user,
-                AUDIO_GENERATION_COST,
-                description=f"Генерация аудио для слова '{word}' (OpenAI TTS)"
-            )
-            
-            if not success:
-                return Response({
-                    'error': 'Недостаточно токенов для генерации аудио'
-                }, status=status.HTTP_402_PAYMENT_REQUIRED)
-        
-        # Генерируем аудио с использованием выбранного провайдера
-        audio_path = generate_audio_with_tts(
-            word=word,
-            language=language,
+        result = generate_audio_for_word(
             user=request.user,
-            provider=provider
+            word=serializer.validated_data['word'],
+            language=serializer.validated_data['language'],
+            word_id=serializer.validated_data.get('word_id'),
+            provider=serializer.validated_data.get('provider'),
         )
-        
-        # Получаем относительный путь для URL
-        media_root = Path(settings.MEDIA_ROOT)
-        relative_path = audio_path.relative_to(media_root)
-        audio_url = f"{settings.MEDIA_URL}{relative_path}"
-        
-        # Получаем ID файла из имени
-        audio_id = audio_path.stem
-        
-        # Если передан word_id — привязываем аудио к слову
-        word_id = serializer.validated_data.get('word_id')
-        if word_id:
-            try:
-                word_obj = Word.objects.get(id=word_id, user=request.user)
-                # Сохраняем относительный путь
-                word_obj.audio_file.name = str(relative_path)
-                word_obj.save()
-                logger.info(f"Аудио привязано к слову ID={word_id}")
-            except Word.DoesNotExist:
-                logger.warning(f"Слово с ID={word_id} не найдено для привязки аудио")
-        
-        return Response({
-            'audio_url': audio_url,
-            'audio_id': audio_id,
-            'file_path': str(audio_path)
-        }, status=status.HTTP_201_CREATED)
-    
+        return Response(result, status=status.HTTP_201_CREATED)
     except ValueError as e:
-        return Response({
-            'error': str(e)
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response({'error': str(e)}, status=status.HTTP_402_PAYMENT_REQUIRED)
     except Exception as e:
-        # При ошибке возвращаем токены (только для OpenAI)
-        if provider == 'openai':
-            refund_tokens(
-                request.user,
-                AUDIO_GENERATION_COST,
-                description=f"Возврат токенов за ошибку генерации аудио для слова '{word}'"
-            )
-        return Response({
-            'error': f'Ошибка при генерации аудио: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Audio generation error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_image_view(request):
-    """
-    Загрузка собственного изображения
-    """
+    """Upload custom image."""
     serializer = ImageUploadSerializer(data=request.FILES)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    image_file = serializer.validated_data['image']
-    
+
     try:
-        # Генерируем уникальное имя файла
-        file_id = str(uuid.uuid4())
-        file_extension = Path(image_file.name).suffix.lower()
-        
-        # Проверяем расширение
-        if file_extension not in ['.jpg', '.jpeg', '.png']:
-            file_extension = '.jpg'
-        
-        filename = f"{file_id}{file_extension}"
-        
-        # Сохраняем файл
-        media_root = Path(settings.MEDIA_ROOT)
-        images_dir = media_root / "images"
-        images_dir.mkdir(parents=True, exist_ok=True)
-        
-        file_path = images_dir / filename
-        
-        # Сохраняем файл
-        with open(file_path, 'wb') as f:
-            for chunk in image_file.chunks():
-                f.write(chunk)
-        
-        # Получаем относительный путь для URL
-        relative_path = file_path.relative_to(media_root)
-        image_url = f"{settings.MEDIA_URL}{relative_path}"
-        
+        file_path, file_id = save_uploaded_file(
+            serializer.validated_data['image'], 'images',
+            allowed_extensions=['.jpg', '.jpeg', '.png'])
+
+        relative_path = get_relative_media_path(file_path)
         return Response({
-            'image_url': image_url,
+            'image_url': get_media_url(relative_path),
             'image_id': file_id,
-            'file_path': str(file_path)
+            'file_path': str(file_path),
         }, status=status.HTTP_201_CREATED)
-    
     except Exception as e:
-        return Response({
-            'error': f'Ошибка при загрузке изображения: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Image upload error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_audio_view(request):
-    """
-    Загрузка собственного аудио
-    """
+    """Upload custom audio."""
     serializer = AudioUploadSerializer(data=request.FILES)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    audio_file = serializer.validated_data['audio']
-    
-    try:
-        # Генерируем уникальное имя файла с правильным расширением
-        file_id = str(uuid.uuid4())
-        ext = Path(audio_file.name).suffix.lower() or '.mp3'
-        filename = f"{file_id}{ext}"
-        
-        # Сохраняем файл
-        media_root = Path(settings.MEDIA_ROOT)
-        audio_dir = media_root / "audio"
-        audio_dir.mkdir(parents=True, exist_ok=True)
-        
-        file_path = audio_dir / filename
-        
-        # Сохраняем файл
-        with open(file_path, 'wb') as f:
-            for chunk in audio_file.chunks():
-                f.write(chunk)
-        
-        # Получаем относительный путь для URL
-        relative_path = file_path.relative_to(media_root)
-        audio_url = f"{settings.MEDIA_URL}{relative_path}"
-        
-        return Response({
-            'audio_url': audio_url,
-            'audio_id': file_id,
-            'file_path': str(file_path)
-        }, status=status.HTTP_201_CREATED)
-    
-    except Exception as e:
-        return Response({
-            'error': f'Ошибка при загрузке аудио: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    try:
+        file_path, file_id = save_uploaded_file(
+            serializer.validated_data['audio'], 'audio')
+
+        relative_path = get_relative_media_path(file_path)
+        return Response({
+            'audio_url': get_media_url(relative_path),
+            'audio_id': file_id,
+            'file_path': str(file_path),
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response(
+            {'error': f'Audio upload error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ========== User Prompts ==========
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_prompts_view(request):
-    """
-    Получение всех промптов пользователя
-    """
-    try:
-        # Получаем или создаем промпты для всех типов
-        prompt_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
-        prompts = []
-        
-        for prompt_type in prompt_types:
-            user_prompt = get_or_create_user_prompt(request.user, prompt_type)
-            prompts.append(user_prompt)
-        
-        serializer = UserPromptSerializer(prompts, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    except Exception as e:
-        return Response({
-            'error': f'Ошибка при получении промптов: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """Get all user prompts."""
+    prompt_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
+    prompts = [get_or_create_user_prompt(request.user, pt) for pt in prompt_types]
+    serializer = UserPromptSerializer(prompts, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_prompt_view(request, prompt_type):
-    """
-    Получение конкретного промпта пользователя
-    """
-    # Проверяем валидность типа промпта
+    """Get specific user prompt."""
     valid_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
     if prompt_type not in valid_types:
-        return Response({
-            'error': f'Неверный тип промпта. Доступные типы: {", ".join(valid_types)}'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        user_prompt = get_or_create_user_prompt(request.user, prompt_type)
-        serializer = UserPromptSerializer(user_prompt)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    except Exception as e:
-        return Response({
-            'error': f'Ошибка при получении промпта: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Invalid prompt type. Available: {", ".join(valid_types)}'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    user_prompt = get_or_create_user_prompt(request.user, prompt_type)
+    serializer = UserPromptSerializer(user_prompt)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def update_user_prompt_view(request, prompt_type):
-    """
-    Обновление промпта пользователя
-    """
-    # Проверяем валидность типа промпта
+    """Update user prompt."""
     valid_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
     if prompt_type not in valid_types:
-        return Response({
-            'error': f'Неверный тип промпта. Доступные типы: {", ".join(valid_types)}'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response(
+            {'error': f'Invalid prompt type. Available: {", ".join(valid_types)}'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    user_prompt = get_or_create_user_prompt(request.user, prompt_type)
+    serializer = UserPromptUpdateSerializer(user_prompt, data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     try:
-        user_prompt = get_or_create_user_prompt(request.user, prompt_type)
-        serializer = UserPromptUpdateSerializer(user_prompt, data=request.data)
-        
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Валидация плейсхолдеров
-        try:
-            user_prompt.custom_prompt = serializer.validated_data['custom_prompt']
-            user_prompt.is_custom = True
-            user_prompt.full_clean()  # Вызывает метод clean() модели
-            user_prompt.save()
-        except Exception as e:
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        result_serializer = UserPromptSerializer(user_prompt)
-        return Response(result_serializer.data, status=status.HTTP_200_OK)
-    
+        user_prompt.custom_prompt = serializer.validated_data['custom_prompt']
+        user_prompt.is_custom = True
+        user_prompt.full_clean()
+        user_prompt.save()
     except Exception as e:
-        return Response({
-            'error': f'Ошибка при обновлении промпта: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    result_serializer = UserPromptSerializer(user_prompt)
+    return Response(result_serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def reset_user_prompt_view(request, prompt_type):
-    """
-    Сброс промпта до заводских настроек
-    """
-    # Проверяем валидность типа промпта
+    """Reset prompt to default."""
     valid_types = [choice[0] for choice in UserPrompt.PROMPT_TYPE_CHOICES]
     if prompt_type not in valid_types:
-        return Response({
-            'error': f'Неверный тип промпта. Доступные типы: {", ".join(valid_types)}'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        user_prompt = reset_user_prompt_to_default(request.user, prompt_type)
-        serializer = UserPromptSerializer(user_prompt)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    except Exception as e:
-        return Response({
-            'error': f'Ошибка при сбросе промпта: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Invalid prompt type. Available: {", ".join(valid_types)}'},
+            status=status.HTTP_400_BAD_REQUEST)
 
+    user_prompt = reset_user_prompt_to_default(request.user, prompt_type)
+    serializer = UserPromptSerializer(user_prompt)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ========== Word Analysis & Translation ==========
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def analyze_words_view(request):
-    """
-    Анализ смешанных языков: определяет, какие слова на изучаемом языке,
-    а какие на родном, и возвращает пары слово-перевод
-    """
+    """Analyze mixed languages and return word-translation pairs."""
     serializer = WordAnalysisSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    words_list = serializer.validated_data['words']
-    learning_language = serializer.validated_data['learning_language']
-    native_language = serializer.validated_data['native_language']
-    
+
     try:
         result = analyze_mixed_languages(
-            words_list=words_list,
-            learning_language=learning_language,
-            native_language=native_language,
-            user=request.user
+            words_list=serializer.validated_data['words'],
+            learning_language=serializer.validated_data['learning_language'],
+            native_language=serializer.validated_data['native_language'],
+            user=request.user,
         )
-        
-        return Response({
-            'translations': result
-        }, status=status.HTTP_200_OK)
-        
+        return Response({'translations': result}, status=status.HTTP_200_OK)
     except Exception as e:
-        return Response({
-            'error': f'Ошибка при анализе слов: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Word analysis error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def translate_words_view(request):
-    """
-    Перевод слов с изучаемого языка на родной
-    """
+    """Translate words from learning language to native."""
     serializer = WordTranslationSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    words_list = serializer.validated_data['words']
-    learning_language = serializer.validated_data['learning_language']
-    native_language = serializer.validated_data['native_language']
-    
+
     try:
         result = translate_words(
-            words_list=words_list,
-            learning_language=learning_language,
-            native_language=native_language,
-            user=request.user
+            words_list=serializer.validated_data['words'],
+            learning_language=serializer.validated_data['learning_language'],
+            native_language=serializer.validated_data['native_language'],
+            user=request.user,
         )
-        
-        # Проверяем, что результат не пустой
+
         if not result:
-            logger.warning(f"Функция translate_words вернула пустой результат для {len(words_list)} слов")
             return Response({
-                'error': 'Не удалось получить переводы. Возможно, превышен лимит API или произошла ошибка.',
-                'translations': {}
+                'error': 'Failed to get translations.',
+                'translations': {},
             }, status=status.HTTP_200_OK)
-        
-        return Response({
-            'translations': result
-        }, status=status.HTTP_200_OK)
-        
+
+        return Response({'translations': result}, status=status.HTTP_200_OK)
     except ValueError as e:
-        # Ошибки валидации (квота, API ключ и т.д.)
-        logger.error(f"Ошибка валидации при переводе: {str(e)}")
-        return Response({
-            'error': str(e),
-            'translations': {}
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {'error': str(e), 'translations': {}},
+            status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при переводе слов: {str(e)}", exc_info=True)
-        return Response({
-            'error': f'Ошибка при переводе слов: {str(e)}',
-            'translations': {}
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Translation error: {e}', 'translations': {}},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def process_german_words_view(request):
-    """
-    Обработка немецкого слова: добавляет артикль для существительных,
-    исправляет регистр
-    """
+    """Process German word: add article for nouns, fix capitalization."""
     serializer = GermanWordProcessingSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    word = serializer.validated_data['word']
-    
+
     try:
-        processed_word = process_german_word(word, user=request.user)
-        
-        return Response({
-            'processed_word': processed_word
-        }, status=status.HTTP_200_OK)
-        
+        processed_word = process_german_word(
+            serializer.validated_data['word'], user=request.user)
+        return Response({'processed_word': processed_word}, status=status.HTTP_200_OK)
     except Exception as e:
-        return Response({
-            'error': f'Ошибка при обработке немецкого слова: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'German word processing error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def extract_words_from_photo_view(request):
-    """
-    Извлечение слов на изучаемом языке из фотографии текста через LLM vision.
-    Стоимость: 1 токен.
-    """
-    # Валидация
+    """Extract words from photo via LLM vision."""
     image_file = request.FILES.get('image')
     target_lang = request.data.get('target_lang')
     source_lang = request.data.get('source_lang')
 
     if not image_file:
-        return Response({'error': 'Поле image обязательно'}, status=status.HTTP_400_BAD_REQUEST)
-
+        return Response({'error': 'image field is required'}, status=status.HTTP_400_BAD_REQUEST)
     if not target_lang or not source_lang:
         return Response(
-            {'error': 'Поля target_lang и source_lang обязательны'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+            {'error': 'target_lang and source_lang are required'},
+            status=status.HTTP_400_BAD_REQUEST)
 
-    # Проверяем формат файла
     allowed_types = ['image/jpeg', 'image/png', 'image/jpg']
     if image_file.content_type not in allowed_types:
         return Response(
-            {'error': f'Неподдерживаемый формат файла: {image_file.content_type}. Допустимые: JPEG, PNG'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+            {'error': f'Unsupported format: {image_file.content_type}. Allowed: JPEG, PNG'},
+            status=status.HTTP_400_BAD_REQUEST)
 
-    # Проверяем размер (макс 10 МБ)
     max_size = 10 * 1024 * 1024
     if image_file.size > max_size:
         return Response(
-            {'error': f'Файл слишком большой ({image_file.size} байт). Максимум: 10 МБ'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Проверяем баланс токенов
-    from .token_utils import PHOTO_OCR_COST
-    balance = check_balance(request.user)
-    if balance < PHOTO_OCR_COST:
-        return Response(
-            {'error': f'Недостаточно токенов. Требуется: {PHOTO_OCR_COST}, доступно: {balance}'},
-            status=status.HTTP_402_PAYMENT_REQUIRED
-        )
+            {'error': f'File too large ({image_file.size} bytes). Max: 10 MB'},
+            status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        # Списываем токены
-        token, success = spend_tokens(
-            request.user,
-            PHOTO_OCR_COST,
-            description=f"Распознавание слов с фото ({target_lang} → {source_lang})"
-        )
-
-        if not success:
-            return Response(
-                {'error': 'Не удалось списать токены'},
-                status=status.HTTP_402_PAYMENT_REQUIRED
-            )
-
-        # Читаем байты изображения
-        image_data = image_file.read()
-
-        # Извлекаем слова
-        words = extract_words_from_photo(
-            image_data=image_data,
+        words = extract_words_from_photo_service(
+            user=request.user,
+            image_data=image_file.read(),
             target_lang=target_lang,
             source_lang=source_lang,
         )
-
         return Response({'words': words}, status=status.HTTP_200_OK)
-
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_402_PAYMENT_REQUIRED)
     except Exception as e:
-        # Возвращаем токены при ошибке
-        refund_tokens(
-            request.user,
-            PHOTO_OCR_COST,
-            description=f"Возврат за ошибку распознавания слов с фото"
-        )
         return Response(
-            {'error': f'Ошибка при извлечении слов из фото: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+            {'error': f'Photo extraction error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-# ========== ЭТАП 7: Управление колодами и карточками ==========
+# ========== Deck Management ==========
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def deck_list_create_view(request):
-    """
-    GET: Список колод пользователя
-    POST: Создание новой колоды
-    """
+    """GET: List decks. POST: Create deck."""
     if request.method == 'GET':
-        # Оптимизация: используем select_related для user
         decks = Deck.objects.filter(user=request.user).select_related('user')
         serializer = DeckSerializer(decks, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    elif request.method == 'POST':
-        serializer = DeckCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            deck = serializer.save(user=request.user)
-            result_serializer = DeckSerializer(deck)
-            return Response(result_serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = DeckCreateSerializer(data=request.data)
+    if serializer.is_valid():
+        deck = serializer.save(user=request.user)
+        result_serializer = DeckSerializer(deck)
+        return Response(result_serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def deck_detail_view(request, deck_id):
-    """
-    GET: Детали колоды со списком слов
-    PATCH: Обновление колоды
-    DELETE: Удаление колоды
-    """
-    # Оптимизация: используем select_related для user и prefetch_related для words
+    """GET: Deck details. PATCH: Update deck. DELETE: Delete deck."""
     deck = get_object_or_404(
         Deck.objects.select_related('user').prefetch_related('words'),
-        id=deck_id,
-        user=request.user
-    )
-    
+        id=deck_id, user=request.user)
+
     if request.method == 'GET':
-        serializer = DeckDetailSerializer(deck)
+        serializer = DeckDetailSerializer(deck, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    elif request.method == 'PATCH':
+
+    if request.method == 'PATCH':
         serializer = DeckUpdateSerializer(deck, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            result_serializer = DeckDetailSerializer(deck)
+            result_serializer = DeckDetailSerializer(deck, context={'request': request})
             return Response(result_serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    elif request.method == 'DELETE':
-        deck.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    deck.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def deck_set_literary_source_view(request, deck_id):
-    """
-    PATCH /api/cards/decks/<deck_id>/literary-source/
-    Body:
-      {"source_slug": "chekhov"}  → override=True, literary_source=chekhov
-      {"source_slug": null}       → override=True, literary_source=null (Стандарт)
-      {"use_global": true}        → override=False (глобальная настройка)
-    """
-    deck = get_object_or_404(Deck, id=deck_id, user=request.user)
-
-    if request.data.get('use_global'):
-        deck.literary_source_override = False
-        deck.save(update_fields=['literary_source_override', 'updated_at'])
-        return Response({'status': 'global'})
-
-    source_slug = request.data.get('source_slug')
-    if source_slug:
-        from apps.literary_context.models import LiterarySource
-        source = get_object_or_404(LiterarySource, slug=source_slug, is_active=True)
-        deck.literary_source = source
-        deck.literary_source_override = True
-        deck.save(update_fields=['literary_source', 'literary_source_override', 'updated_at'])
-        return Response({'status': 'source', 'source_slug': source.slug, 'source_name': source.name})
-
-    # source_slug is null → Стандарт (no overlay)
-    deck.literary_source = None
-    deck.literary_source_override = True
-    deck.save(update_fields=['literary_source', 'literary_source_override', 'updated_at'])
-    return Response({'status': 'standard'})
+    """Set literary source for a deck."""
+    try:
+        result = set_literary_source(
+            user=request.user,
+            deck_id=deck_id,
+            source_slug=request.data.get('source_slug'),
+            use_global=request.data.get('use_global', False),
+        )
+        return Response(result)
+    except Deck.DoesNotExist:
+        return Response({'error': 'Deck not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_add_words_view(request, deck_id):
-    """
-    Добавление слова(ов) в колоду
-    
-    Поддерживаемые форматы:
-    1. { "words": [ {...}, {...} ] }
-    2. [ {...}, {...} ]
-    3. { "original_word": "...", ... }
-    """
+    """Add words to a deck."""
     deck = get_object_or_404(Deck, id=deck_id, user=request.user)
-    
-    # Поддерживаем разные форматы входных данных
+
+    # Support multiple input formats
     if isinstance(request.data, list):
-        # Формат 2: массив напрямую
         words_data = request.data
     elif isinstance(request.data, dict) and 'words' in request.data:
-        # Формат 1: { "words": [...] }
         words_data = request.data['words']
     else:
-        # Формат 3: один объект
         words_data = [request.data]
-    
-    added_words = []
-    errors = []
-    
-    for word_data in words_data:
-        serializer = DeckWordAddSerializer(data=word_data)
-        if not serializer.is_valid():
-            errors.append(serializer.errors)
-            continue
-        
-        word_id = serializer.validated_data.get('word_id')
-        
-        if word_id:
-            # Добавляем существующее слово
-            try:
-                word = Word.objects.get(id=word_id, user=request.user)
-                if word not in deck.words.all():
-                    deck.words.add(word)
-                    added_words.append(word.id)
-            except Word.DoesNotExist:
-                errors.append({'word_id': f'Слово с ID {word_id} не найдено'})
-        else:
-            # Создаем новое слово
-            original_word = serializer.validated_data['original_word']
-            translation = serializer.validated_data['translation']
-            language = serializer.validated_data['language']
-            image_url = serializer.validated_data.get('image_url', '')
-            audio_url = serializer.validated_data.get('audio_url', '')
-            
-            # Проверяем, не существует ли уже такое слово
-            word, created = Word.objects.get_or_create(
-                user=request.user,
-                original_word=original_word,
-                language=language,
-                defaults={'translation': translation}
-            )
-            
-            if not created:
-                # Обновляем перевод, если слово уже существовало
-                word.translation = translation
-            
-            # Обновляем медиа-файлы, если переданы
-            if image_url:
-                # Извлекаем относительный путь из URL (убираем /media/)
-                relative_path = image_url.replace('/media/', '') if image_url.startswith('/media/') else image_url
-                word.image_file.name = relative_path
-            
-            if audio_url:
-                # Извлекаем относительный путь из URL
-                relative_path = audio_url.replace('/media/', '') if audio_url.startswith('/media/') else audio_url
-                word.audio_file.name = relative_path
-            
-            word.save()
-            
-            if word not in deck.words.all():
-                deck.words.add(word)
-                added_words.append(word.id)
-    
-    # Обновляем updated_at колоды после добавления слов
-    if added_words:
-        deck.save()
-    
+
+    added_words, errors = add_words_to_deck(request.user, deck, words_data)
+
     if errors:
-        return Response({
-            'added_words': added_words,
-            'errors': errors
-        }, status=status.HTTP_207_MULTI_STATUS)
-    
+        return Response(
+            {'added_words': added_words, 'errors': errors},
+            status=status.HTTP_207_MULTI_STATUS)
+
     return Response({
         'added_words': added_words,
-        'message': f'Добавлено слов: {len(added_words)}'
+        'message': f'Added {len(added_words)} words',
     }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_remove_word_view(request, deck_id):
-    """
-    Удаление слова из колоды
-    """
+    """Remove word from a deck."""
     deck = get_object_or_404(Deck, id=deck_id, user=request.user)
-    
+
     serializer = DeckWordRemoveSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     word_id = serializer.validated_data['word_id']
-    
     try:
         word = Word.objects.get(id=word_id, user=request.user)
         if word in deck.words.all():
             deck.words.remove(word)
-            return Response({
-                'message': 'Слово удалено из колоды'
-            }, status=status.HTTP_200_OK)
-        else:
-            return Response({
-                'error': 'Слово не найдено в колоде'
-            }, status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'Word removed from deck'}, status=status.HTTP_200_OK)
+        return Response({'error': 'Word not found in deck'}, status=status.HTTP_404_NOT_FOUND)
     except Word.DoesNotExist:
-        return Response({
-            'error': f'Слово с ID {word_id} не найдено'
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': f'Word with ID {word_id} not found'},
+            status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def deck_update_word_view(request, deck_id, word_id):
-    """
-    Обновление слова в колоде (слово, перевод, медиа-файлы)
-    
-    PATCH /api/cards/decks/{deck_id}/words/{word_id}/
-    {
-        "original_word": "новое слово",        // опционально, max 200 символов
-        "translation": "новый перевод",        // опционально, max 200 символов
-        "image_file": "/media/images/xxx.jpg", // опционально
-        "audio_file": "/media/audio/yyy.mp3"   // опционально
-    }
-    
-    Можно отправлять одно или несколько полей одновременно.
-    """
+    """Update word in a deck."""
     deck = get_object_or_404(Deck, id=deck_id, user=request.user)
-    
-    # Проверяем, что слово принадлежит колоде
+
     try:
-        word = deck.words.get(id=word_id)
-    except Word.DoesNotExist:
-        return Response({
-            'error': f'Слово с ID {word_id} не найдено в колоде'
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    # Обновляем поля
-    updated_fields = []
-    errors = {}
-    
-    # Обновление исходного слова
-    original_word = request.data.get('original_word')
-    if original_word is not None:
-        original_word = original_word.strip()
-        if not original_word:
-            errors['original_word'] = 'Поле не может быть пустым'
-        elif len(original_word) > 200:
-            errors['original_word'] = 'Максимальная длина: 200 символов'
-        else:
-            # Проверяем уникальность (user, original_word, language)
-            existing_word = Word.objects.filter(
-                user=request.user,
-                original_word=original_word,
-                language=word.language
-            ).exclude(id=word_id).first()
-            
-            if existing_word:
-                errors['original_word'] = f'Слово "{original_word}" уже существует для этого языка'
-            else:
-                word.original_word = original_word
-                updated_fields.append('original_word')
-    
-    # Обновление перевода
-    translation = request.data.get('translation')
-    if translation is not None:
-        translation = translation.strip()
-        if not translation:
-            errors['translation'] = 'Поле не может быть пустым'
-        elif len(translation) > 200:
-            errors['translation'] = 'Максимальная длина: 200 символов'
-        else:
-            word.translation = translation
-            updated_fields.append('translation')
-    
-    # Обновление изображения
-    image_file = request.data.get('image_file')
-    if image_file is not None:
-        if image_file == '' or image_file is None:
-            # Удаление изображения
-            word.image_file = None
-            updated_fields.append('image_file')
-        else:
-            relative_path = image_file.replace('/media/', '') if image_file.startswith('/media/') else image_file
-            word.image_file.name = relative_path
-            updated_fields.append('image_file')
-    
-    # Обновление аудио
-    audio_file = request.data.get('audio_file')
-    if audio_file is not None:
-        if audio_file == '' or audio_file is None:
-            # Удаление аудио
-            word.audio_file = None
-            updated_fields.append('audio_file')
-        else:
-            relative_path = audio_file.replace('/media/', '') if audio_file.startswith('/media/') else audio_file
-            word.audio_file.name = relative_path
-            updated_fields.append('audio_file')
-    
-    # Если есть ошибки валидации
-    if errors:
-        return Response({
-            'error': 'Ошибки валидации',
-            'errors': errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Если есть поля для обновления
-    if updated_fields:
-        try:
-            word.save()
-            logger.info(f"Слово ID={word_id} обновлено. Поля: {updated_fields}")
-            
-            return Response({
-                'id': word.id,
-                'original_word': word.original_word,
-                'translation': word.translation,
-                'language': word.language,
-                'image_file': word.image_file.url if word.image_file else None,
-                'audio_file': word.audio_file.url if word.audio_file else None,
-                'updated_fields': updated_fields
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении слова ID={word_id}: {str(e)}")
-            return Response({
-                'error': f'Ошибка при сохранении: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    else:
-        return Response({
-            'error': 'Не указаны поля для обновления'
-        }, status=status.HTTP_400_BAD_REQUEST)
+        result = update_word_in_deck(request.user, deck, word_id, request.data)
+        return Response(result, status=status.HTTP_200_OK)
+    except Word.DoesNotExist as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError as e:
+        error_data = e.args[0] if e.args and isinstance(e.args[0], dict) else str(e)
+        if isinstance(error_data, dict):
+            return Response(
+                {'error': 'Validation errors', 'errors': error_data},
+                status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': error_data}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response(
+            {'error': f'Error saving: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_merge_view(request):
-    """
-    Объединение нескольких колод в одну
-    
-    Параметры:
-    - deck_ids: список ID колод для объединения (минимум 2)
-    - target_deck_id: ID целевой колоды (опционально, если не указан - создается новая)
-    - new_deck_name: название новой колоды (используется только если target_deck_id не указан)
-    - delete_source_decks: удалить исходные колоды после объединения (по умолчанию False)
-    """
+    """Merge multiple decks into one."""
     serializer = DeckMergeSerializer(data=request.data)
-    
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    deck_ids = serializer.validated_data['deck_ids']
-    target_deck_id = serializer.validated_data.get('target_deck_id')
-    new_deck_name = serializer.validated_data.get('new_deck_name', 'Объединенная колода')
-    delete_source_decks = serializer.validated_data.get('delete_source_decks', False)
-    
-    # Проверяем, что все колоды принадлежат пользователю
-    decks = Deck.objects.filter(id__in=deck_ids, user=request.user)
-    
-    if decks.count() != len(deck_ids):
-        return Response({
-            'error': 'Некоторые колоды не найдены или не принадлежат вам'
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    # Проверяем, что колоды не дублируются
-    if len(set(deck_ids)) != len(deck_ids):
-        return Response({
-            'error': 'В списке есть дублирующиеся ID колод'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Собираем все слова из всех колод
-    all_words = set()
-    for deck in decks:
-        all_words.update(deck.words.all())
-    
-    if not all_words:
-        return Response({
-            'error': 'Все указанные колоды пусты'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Определяем целевую колоду
-    if target_deck_id:
-        # Используем существующую колоду
-        target_deck = get_object_or_404(Deck, id=target_deck_id, user=request.user)
-        
-        # Проверяем, что целевая колода не в списке исходных (если не удаляем исходные)
-        if not delete_source_decks and target_deck_id in deck_ids:
-            return Response({
-                'error': 'Целевая колода не может быть в списке исходных колод, если исходные колоды не удаляются'
-            }, status=status.HTTP_400_BAD_REQUEST)
-    else:
-        # Создаем новую колоду
-        # Определяем язык из первой колоды (предполагаем, что все колоды одного языка)
-        first_deck = decks.first()
-        target_deck = Deck.objects.create(
+
+    try:
+        result = merge_decks(
             user=request.user,
-            name=new_deck_name,
-            target_lang=first_deck.target_lang,
-            source_lang=first_deck.source_lang
+            deck_ids=serializer.validated_data['deck_ids'],
+            target_deck_id=serializer.validated_data.get('target_deck_id'),
+            new_deck_name=serializer.validated_data.get('new_deck_name', 'Merged deck'),
+            delete_source_decks=serializer.validated_data.get('delete_source_decks', False),
         )
-        logger.info(f"Создана новая колода для объединения: {target_deck.name} (ID: {target_deck.id})")
-    
-    # Добавляем все слова в целевую колоду
-    target_deck.words.add(*all_words)
-    # Обновляем updated_at колоды после добавления слов
-    target_deck.save()
-    
-    # Удаляем исходные колоды, если нужно
-    deleted_decks = []
-    if delete_source_decks:
-        # Не удаляем целевую колоду, если она была в списке
-        decks_to_delete = decks.exclude(id=target_deck.id)
-        for deck in decks_to_delete:
-            deleted_decks.append({
-                'id': deck.id,
-                'name': deck.name
-            })
-            deck.delete()
-        logger.info(f"Удалено исходных колод: {len(deleted_decks)}")
-    
-    # Обновляем целевую колоду
-    target_deck.save()
-    
-    result_serializer = DeckDetailSerializer(target_deck)
-    
-    return Response({
-        'message': f'Колоды успешно объединены в "{target_deck.name}"',
-        'target_deck': result_serializer.data,
-        'words_count': len(all_words),
-        'source_decks_count': len(deck_ids),
-        'deleted_decks': deleted_decks if delete_source_decks else None
-    }, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Deck.DoesNotExist:
+        return Response({'error': 'Target deck not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_generate_apkg_view(request, deck_id):
-    """
-    Генерация .apkg файла из колоды
-    """
-    # Оптимизация: используем prefetch_related для words
-    deck = get_object_or_404(
-        Deck.objects.select_related('user').prefetch_related('words'),
-        id=deck_id,
-        user=request.user
-    )
-    
-    # Получаем все слова колоды (уже загружены через prefetch_related)
-    words = deck.words.all()
-    
-    if not words.exists():
-        return Response({
-            'error': 'Колода пуста. Добавьте слова перед генерацией.'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+    """Generate .apkg file from a deck."""
     try:
-        # Подготавливаем данные для генерации
-        words_data = []
-        media_files = []
-        
-        logger.info(f"📦 Начало генерации .apkg из колоды '{deck.name}' (ID: {deck_id})")
-        logger.info(f"📝 Количество слов в колоде: {words.count()}")
-        
-        for word in words:
-            word_data = {
-                'original_word': word.original_word,
-                'translation': word.translation,
-                'card_type': word.card_type,  # Передаем тип карточки
-            }
-            
-            if word.audio_file:
-                # Получаем путь к файлу (может быть относительным или абсолютным)
-                audio_name = word.audio_file.name
-                
-                # Если это URL, извлекаем имя файла
-                if audio_name.startswith('http://') or audio_name.startswith('https://'):
-                    # Извлекаем имя файла из URL: https://.../media/audio/filename.mp3 -> audio/filename.mp3
-                    if '/media/audio/' in audio_name:
-                        audio_name = 'audio/' + audio_name.split('/media/audio/')[-1]
-                    elif '/media/' in audio_name:
-                        audio_name = audio_name.split('/media/')[-1]
-                    else:
-                        # Если не можем извлечь, берем последнюю часть URL
-                        audio_name = 'audio/' + audio_name.split('/')[-1]
-                
-                # Формируем полный путь к файлу
-                # Если путь уже абсолютный, используем его, иначе добавляем MEDIA_ROOT
-                if Path(audio_name).is_absolute():
-                    audio_path = Path(audio_name)
-                else:
-                    audio_path = Path(settings.MEDIA_ROOT) / audio_name
-                
-                if audio_path.exists():
-                    word_data['audio_file'] = str(audio_path)
-                    media_files.append(str(audio_path))
-                    logger.info(f"  🔊 Слово '{word.original_word}': аудио = {audio_path} ✅")
-                else:
-                    logger.warning(f"  🔊 Слово '{word.original_word}': аудио не найдено: {audio_path} ❌")
-            
-            if word.image_file:
-                # Получаем путь к файлу (может быть относительным или абсолютным)
-                image_name = word.image_file.name
-                
-                # Если это URL, извлекаем имя файла
-                if image_name.startswith('http://') or image_name.startswith('https://'):
-                    # Извлекаем имя файла из URL: https://.../media/images/filename.jpg -> images/filename.jpg
-                    if '/media/images/' in image_name:
-                        image_name = 'images/' + image_name.split('/media/images/')[-1]
-                    elif '/media/' in image_name:
-                        image_name = image_name.split('/media/')[-1]
-                    else:
-                        # Если не можем извлечь, берем последнюю часть URL
-                        image_name = 'images/' + image_name.split('/')[-1]
-                
-                # Формируем полный путь к файлу
-                # Если путь уже абсолютный, используем его, иначе добавляем MEDIA_ROOT
-                if Path(image_name).is_absolute():
-                    image_path = Path(image_name)
-                else:
-                    image_path = Path(settings.MEDIA_ROOT) / image_name
-                
-                if image_path.exists():
-                    word_data['image_file'] = str(image_path)
-                    media_files.append(str(image_path))
-                    logger.info(f"  🖼️ Слово '{word.original_word}': изображение = {image_path} ✅")
-                else:
-                    logger.warning(f"  🖼️ Слово '{word.original_word}': изображение не найдено: {image_path} ❌")
-            
-            words_data.append(word_data)
-        
-        logger.info(f"📊 Итого подготовлено:")
-        logger.info(f"  - Слов: {len(words_data)}")
-        logger.info(f"  - Медиафайлов: {len(media_files)}")
-        logger.info(f"  - Пути к медиафайлам: {media_files}")
-        
-        # Генерируем .apkg файл
-        file_id = str(uuid.uuid4())
-        output_path = Path(settings.MEDIA_ROOT) / "temp_files" / f"{file_id}.apkg"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        logger.info(f"🎯 Вызов generate_apkg с {len(words_data)} словами и {len(media_files)} медиафайлами")
-        
-        generate_apkg(
-            words_data=words_data,
-            deck_name=deck.name,
-            media_files=media_files if media_files else None,
-            output_path=output_path
-        )
-        
-        # Проверяем размер созданного файла
-        file_size = output_path.stat().st_size if output_path.exists() else 0
-        logger.info(f"✅ .apkg файл создан: {output_path} (размер: {file_size / 1024:.2f} KB)")
-        
-        # Сохраняем информацию о сгенерированной колоде
-        generated_deck = GeneratedDeck.objects.create(
-            user=request.user,
-            deck_name=deck.name,
-            file_path=str(output_path),
-            cards_count=len(words_data)
-        )
-        
-        # Автоматически импортируем колоду в базу синхронизации Anki
-        try:
-            from apps.anki_sync.utils import import_apkg_to_anki_collection
-            import_result = import_apkg_to_anki_collection(
-                user=request.user,
-                apkg_path=output_path
-            )
-            logger.info(f"Колода импортирована в базу синхронизации: {import_result}")
-        except Exception as e:
-            # Не прерываем выполнение, если импорт не удался
-            logger.warning(f"Не удалось импортировать колоду в базу синхронизации: {str(e)}")
-        
-        return Response({
-            'file_id': str(generated_deck.id),
-            'message': 'Колода успешно сгенерирована'
-        }, status=status.HTTP_201_CREATED)
-        
+        result = generate_apkg_from_deck(request.user, deck_id)
+        return Response(result, status=status.HTTP_201_CREATED)
+    except Deck.DoesNotExist:
+        return Response({'error': 'Deck not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        return Response({
-            'error': f'Ошибка при генерации колоды: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Deck generation error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-# ========== ЭТАП 9: Система токенов ==========
+# ========== Token System ==========
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_token_balance_view(request):
-    """
-    Получение баланса токенов пользователя
-    """
-    try:
-        balance = check_balance(request.user)
-        return Response({
-            'balance': balance
-        }, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({
-            'error': f'Ошибка при получении баланса: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """Get user token balance."""
+    balance = check_balance(request.user)
+    return Response({'balance': balance}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_token_transactions_view(request):
-    """
-    Получение истории транзакций токенов пользователя
-    """
+    """Get token transaction history."""
     from .models import TokenTransaction
-    
-    try:
-        # Оптимизация: используем select_related для user (хотя это не нужно, так как user уже известен)
-        transactions = TokenTransaction.objects.filter(user=request.user)[:50]  # Последние 50 транзакций
-        
-        transactions_data = []
-        for transaction in transactions:
-            transactions_data.append({
-                'id': transaction.id,
-                'transaction_type': transaction.transaction_type,
-                'transaction_type_display': transaction.get_transaction_type_display(),
-                'amount': transaction.amount,
-                'description': transaction.description,
-                'created_at': transaction.created_at
-            })
-        
-        return Response({
-            'transactions': transactions_data,
-            'count': len(transactions_data)
-        }, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({
-            'error': f'Ошибка при получении транзакций: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    transactions = TokenTransaction.objects.filter(user=request.user)[:50]
+    transactions_data = [{
+        'id': t.id,
+        'transaction_type': t.transaction_type,
+        'transaction_type_display': t.get_transaction_type_display(),
+        'amount': t.amount,
+        'description': t.description,
+        'created_at': t.created_at,
+    } for t in transactions]
+
+    return Response({
+        'transactions': transactions_data,
+        'count': len(transactions_data),
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_tokens_view(request):
-    """
-    Начисление токенов (только для администраторов)
-    """
-    from rest_framework.permissions import IsAdminUser
-    
+    """Add tokens (admin only)."""
     if not request.user.is_staff:
-        return Response({
-            'error': 'Только администраторы могут начислять токены'
-        }, status=status.HTTP_403_FORBIDDEN)
-    
+        return Response(
+            {'error': 'Only admins can add tokens'},
+            status=status.HTTP_403_FORBIDDEN)
+
     amount = request.data.get('amount')
     description = request.data.get('description', '')
     user_id = request.data.get('user_id')
-    
-    # Преобразуем amount в int
+
     try:
         amount = int(amount) if amount else 0
     except (ValueError, TypeError):
-        return Response({
-            'error': 'Количество токенов должно быть числом'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    if not amount or amount <= 0:
-        return Response({
-            'error': 'Количество токенов должно быть положительным числом'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    if not user_id:
-        return Response({
-            'error': 'Необходимо указать user_id'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        from django.contrib.auth import get_user_model
-        UserModel = get_user_model()
-        target_user = UserModel.objects.get(id=user_id)
-        
-        token = add_tokens(
-            target_user,
-            amount,
-            description or f"Начислено администратором {request.user.username}"
-        )
-        
-        return Response({
-            'message': f'Начислено {amount} токенов пользователю {target_user.username}',
-            'balance': token.balance
-        }, status=status.HTTP_200_OK)
-    except UserModel.DoesNotExist:
-        return Response({
-            'error': 'Пользователь не найден'
-        }, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({
-            'error': f'Ошибка при начислении токенов: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': 'Amount must be a number'},
+            status=status.HTTP_400_BAD_REQUEST)
 
+    if not amount or amount <= 0:
+        return Response(
+            {'error': 'Amount must be positive'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    if not user_id:
+        return Response(
+            {'error': 'user_id is required'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    from django.contrib.auth import get_user_model
+    UserModel = get_user_model()
+    try:
+        target_user = UserModel.objects.get(id=user_id)
+    except UserModel.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    token = add_tokens(
+        target_user, amount,
+        description or f"Added by admin {request.user.username}")
+
+    return Response({
+        'message': f'Added {amount} tokens to {target_user.username}',
+        'balance': token.balance,
+    }, status=status.HTTP_200_OK)
+
+
+# ========== Deck Invert & Empty Cards ==========
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_invert_all_words_view(request, deck_id):
-    """
-    Инвертирование всех слов в колоде (Card-level)
-    
-    Создаёт инвертированные Card-ы для слов колоды:
-    - Card(card_type='inverted') указывает на тот же Word
-    - Новые Word-объекты НЕ создаются
-    - Каждая инвертированная карточка живёт в SM-2 независимо
-    """
-    deck = get_object_or_404(
-        Deck.objects.select_related('user').prefetch_related('words'),
-        id=deck_id,
-        user=request.user
-    )
-    
-    words = deck.words.all()
-    if not words.exists():
+    """Create inverted cards for all words in a deck."""
+    try:
+        result = invert_all_words(request.user, deck_id)
         return Response({
-            'error': 'Колода пуста'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    inverted_cards = []
-    skipped_words = []
-    errors = []
-    
-    for idx, word in enumerate(words):
-        try:
-            logger.debug(
-                f"Инвертирование слова [{idx + 1}/{words.count()}]: "
-                f"id={word.id}, word='{word.original_word}', card_type='{word.card_type}'"
-            )
-            
-            # Пропускаем legacy-инвертированные и пустые Word-ы
-            if word.card_type in ('inverted', 'empty'):
-                skipped_words.append({
-                    'id': word.id,
-                    'original_word': word.original_word,
-                    'reason': f'Пропущено: legacy {word.card_type} Word'
-                })
-                logger.debug(f"  -> Пропущено: legacy {word.card_type}")
-                continue
-            
-            # Проверяем, есть ли уже инвертированная Card для этого Word
-            existing_card = Card.objects.filter(
-                user=request.user,
-                word=word,
-                card_type='inverted'
-            ).first()
-            
-            if existing_card:
-                skipped_words.append({
-                    'id': word.id,
-                    'original_word': word.original_word,
-                    'reason': 'Инвертированная карточка уже существует'
-                })
-                logger.debug(f"  -> Пропущено: inverted Card #{existing_card.id} уже существует")
-                continue
-            
-            # Создаём инвертированную Card на уровне Card-модели
-            inverted_card = Card.create_inverted(word)
-            
-            inverted_cards.append({
-                'card_id': inverted_card.id,
-                'word_id': word.id,
-                'original_word': word.original_word,
-                'translation': word.translation,
-                'card_type': 'inverted',
-            })
-            logger.debug(f"  -> Создана inverted Card #{inverted_card.id}")
-                
-        except Exception as e:
-            errors.append({
-                'word_id': word.id,
-                'original_word': word.original_word,
-                'error': str(e)
-            })
-            logger.error(f"Ошибка при создании инвертированной карточки для слова {word.id}: {str(e)}")
-    
-    # Обновляем updated_at колоды
-    if inverted_cards:
-        deck.save()
-    
-    logger.info(
-        f"Инвертирование всех слов колоды {deck_id}: "
-        f"создано карточек {len(inverted_cards)}, пропущено {len(skipped_words)}, ошибок {len(errors)}"
-    )
-    
-    return Response({
-        'message': f'Создано {len(inverted_cards)} инвертированных карточек',
-        'deck_id': deck_id,
-        'deck_name': deck.name,
-        'inverted_cards_count': len(inverted_cards),
-        'inverted_cards': inverted_cards,
-        'skipped_words': skipped_words if skipped_words else None,
-        'errors': errors if errors else None
-    }, status=status.HTTP_200_OK)
+            'message': f'Created {result["inverted_cards_count"]} inverted cards',
+            **result,
+        }, status=status.HTTP_200_OK)
+    except Deck.DoesNotExist:
+        return Response({'error': 'Deck not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_invert_word_view(request, deck_id):
-    """
-    Инвертирование одного слова в колоде (Card-level)
-    
-    Создаёт инвертированную Card для указанного слова:
-    - Card(card_type='inverted') указывает на тот же Word
-    - Новый Word-объект НЕ создаётся
-    - Карточка живёт в SM-2 независимо
-    """
-    deck = get_object_or_404(
-        Deck.objects.select_related('user').prefetch_related('words'),
-        id=deck_id,
-        user=request.user
-    )
-    
+    """Create inverted card for a single word."""
     serializer = DeckInvertWordSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    word_id = serializer.validated_data['word_id']
-    
-    # Проверяем, что слово принадлежит колоде
+
     try:
-        word = deck.words.get(id=word_id)
-    except Word.DoesNotExist:
+        result = invert_single_word(
+            request.user, deck_id, serializer.validated_data['word_id'])
         return Response({
-            'error': f'Слово с ID {word_id} не найдено в колоде'
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    try:
-        # Проверяем, что слово не является legacy-инвертированным или пустым
-        if word.card_type in ('inverted', 'empty'):
-            return Response({
-                'error': f'Нельзя инвертировать {word.card_type} слово.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Проверяем, есть ли уже инвертированная Card
-        existing_card = Card.objects.filter(
-            user=request.user,
-            word=word,
-            card_type='inverted'
-        ).first()
-        
-        if existing_card:
-            return Response({
-                'error': 'Инвертированная карточка уже существует для этого слова.',
-                'inverted_card': {
-                    'card_id': existing_card.id,
-                    'word_id': word.id,
-                }
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Создаём инвертированную Card на уровне Card-модели
-        inverted_card = Card.create_inverted(word)
-        
-        # Обновляем updated_at колоды
-        deck.save()
-        
-        logger.info(
-            f"Инвертирование слова {word_id} в колоде {deck_id}: "
-            f"создана Card {inverted_card.id} (card_type=inverted)"
-        )
-        
-        return Response({
-            'message': 'Инвертированная карточка создана',
-            'original_word': {
-                'id': word.id,
-                'original_word': word.original_word,
-                'translation': word.translation,
-                'language': word.language
-            },
-            'inverted_card': {
-                'card_id': inverted_card.id,
-                'word_id': word.id,
-                'card_type': 'inverted',
-            }
+            'message': 'Inverted card created',
+            **result,
         }, status=status.HTTP_200_OK)
-        
+    except Deck.DoesNotExist:
+        return Response({'error': 'Deck not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Word.DoesNotExist as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        logger.error(f"Ошибка при инвертировании слова {word_id}: {str(e)}")
-        return Response({
-            'error': f'Ошибка при инвертировании слова: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Inversion error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_create_empty_cards_view(request, deck_id):
-    """
-    Создание пустых карточек для всех слов в колоде
-    
-    Создает пустые карточки (original_word='') для всех слов колоды:
-    - original_word = '' (пусто)
-    - translation = '<слово на изучаемом языке> // <перевод>'
-    - language = target_lang колоды (изучаемый язык)
-    - Медиафайлы остаются теми же
-    - Пустые карточки добавляются в ту же колоду
-    """
-    deck = get_object_or_404(
-        Deck.objects.select_related('user').prefetch_related('words'),
-        id=deck_id,
-        user=request.user
-    )
-    
-    words = deck.words.all()
-    if not words.exists():
+    """Create empty cards for all words in a deck."""
+    try:
+        result = create_empty_cards_for_deck(request.user, deck_id)
         return Response({
-            'error': 'Колода пуста'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    empty_cards = []
-    skipped_cards = []
-    errors = []
-    
-    for word in words:
-        try:
-            # Пропускаем инвертированные и пустые карточки - создаем пустые только для обычных
-            # Проверяем по card_type и дополнительно по логике (language == source_lang означает инвертированную)
-            is_inverted = (
-                word.card_type == 'inverted' or 
-                (word.card_type == 'normal' and word.language == deck.source_lang)
-            )
-            is_empty = word.card_type == 'empty' or word.original_word.startswith('_empty_')
-            
-            if is_inverted or is_empty:
-                reason = 'инвертированная' if is_inverted else 'пустая'
-                skipped_cards.append({
-                    'id': word.id,
-                    'original_word': word.original_word,
-                    'reason': f'Пропущено: {reason} карточка (card_type: {word.card_type}, language: {word.language})'
-                })
-                continue
-            
-            # Создаем пустую карточку
-            # original_word = '_empty_{word_id}' (уникальный идентификатор для пустой карточки)
-            # translation = '<слово на изучаемом языке> // <перевод>'
-            # language = target_lang колоды (изучаемый язык)
-            # Используем уникальный идентификатор, чтобы избежать нарушения unique_together
-            empty_original = f"_empty_{word.id}"
-            empty_translation = f"{word.original_word} // {word.translation}"
-            empty_language = deck.target_lang
-            
-            # Ищем существующую пустую карточку для этого слова
-            # Используем уникальный original_word на основе word.id
-            empty_card = Word.objects.filter(
-                user=request.user,
-                original_word=empty_original,
-                language=empty_language
-            ).first()
-            
-            if empty_card:
-                # Обновляем медиафайлы и translation, если карточка уже существует
-                empty_card.translation = empty_translation
-                empty_card.card_type = 'empty'  # Убеждаемся, что тип правильный
-                empty_card.audio_file = word.audio_file
-                empty_card.image_file = word.image_file
-                empty_card.save()
-                created = False
-            else:
-                # Создаем новую пустую карточку
-                empty_card = Word.objects.create(
-                    user=request.user,
-                    original_word=empty_original,
-                    translation=empty_translation,
-                    language=empty_language,
-                    card_type='empty',  # Помечаем как пустую карточку
-                    audio_file=word.audio_file,
-                    image_file=word.image_file
-                )
-                created = True
-            
-            # Добавляем пустую карточку в колоду, если её там еще нет
-            if empty_card not in deck.words.all():
-                deck.words.add(empty_card)
-                empty_cards.append({
-                    'id': empty_card.id,
-                    'original_word': empty_card.original_word,
-                    'translation': empty_card.translation,
-                    'language': empty_card.language,
-                    'created': created
-                })
-            else:
-                skipped_cards.append({
-                    'id': empty_card.id,
-                    'translation': empty_card.translation,
-                    'reason': 'Уже в колоде'
-                })
-                
-        except Exception as e:
-            errors.append({
-                'word_id': word.id,
-                'original_word': word.original_word,
-                'error': str(e)
-            })
-            logger.error(f"Ошибка при создании пустой карточки для слова {word.id}: {str(e)}")
-    
-    # Обновляем updated_at колоды после добавления пустых карточек
-    if empty_cards or skipped_cards:
-        deck.save()
-    
-    logger.info(
-        f"Создание пустых карточек для колоды {deck_id}: "
-        f"создано {len(empty_cards)}, пропущено {len(skipped_cards)}, ошибок {len(errors)}"
-    )
-    
-    return Response({
-        'message': f'Создано {len(empty_cards)} пустых карточек',
-        'deck_id': deck_id,
-        'deck_name': deck.name,
-        'empty_cards_count': len(empty_cards),
-        'empty_cards': empty_cards,
-        'skipped_cards': skipped_cards if skipped_cards else None,
-        'errors': errors if errors else None
-    }, status=status.HTTP_200_OK)
+            'message': f'Created {result["empty_cards_count"]} empty cards',
+            **result,
+        }, status=status.HTTP_200_OK)
+    except Deck.DoesNotExist:
+        return Response({'error': 'Deck not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deck_create_empty_card_view(request, deck_id):
-    """
-    Создание пустой карточки для одного слова в колоде
-    
-    Создает пустую карточку (original_word='') для указанного слова:
-    - original_word = '' (пусто)
-    - translation = '<слово на изучаемом языке> // <перевод>'
-    - language = target_lang колоды (изучаемый язык)
-    - Медиафайлы остаются теми же
-    - Пустая карточка добавляется в колоду
-    """
-    deck = get_object_or_404(
-        Deck.objects.select_related('user').prefetch_related('words'),
-        id=deck_id,
-        user=request.user
-    )
-    
+    """Create empty card for a single word."""
     serializer = DeckCreateEmptyCardSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    word_id = serializer.validated_data['word_id']
-    
-    # Проверяем, что слово принадлежит колоде
+
     try:
-        word = deck.words.get(id=word_id)
-    except Word.DoesNotExist:
+        result = create_empty_card_for_word(
+            request.user, deck_id, serializer.validated_data['word_id'])
         return Response({
-            'error': f'Слово с ID {word_id} не найдено в колоде'
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    try:
-        # Пропускаем инвертированные и пустые карточки - создаем пустые только для обычных
-        # Проверяем по card_type и дополнительно по логике (language == source_lang означает инвертированную)
-        is_inverted = (
-            word.card_type == 'inverted' or 
-            (word.card_type == 'normal' and word.language == deck.source_lang)
-        )
-        is_empty = word.card_type == 'empty' or word.original_word.startswith('_empty_')
-        
-        if is_inverted or is_empty:
-            reason = 'инвертированная' if is_inverted else 'пустая'
-            return Response({
-                'error': f'Нельзя создать пустую карточку для {reason} карточки. Пустые карточки создаются только для обычных карточек.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Создаем пустую карточку
-        # original_word = '_empty_{word_id}' (уникальный идентификатор для пустой карточки)
-        # translation = '<слово на изучаемом языке> // <перевод>'
-        # language = target_lang колоды (изучаемый язык)
-        # Используем уникальный идентификатор, чтобы избежать нарушения unique_together
-        empty_original = f"_empty_{word.id}"
-        empty_translation = f"{word.original_word} // {word.translation}"
-        empty_language = deck.target_lang
-        
-        # Ищем существующую пустую карточку для этого слова
-        # Используем уникальный original_word на основе word.id
-        empty_card = Word.objects.filter(
-            user=request.user,
-            original_word=empty_original,
-            language=empty_language
-        ).first()
-        
-        if empty_card:
-            # Обновляем медиафайлы и translation, если карточка уже существует
-            empty_card.translation = empty_translation
-            empty_card.card_type = 'empty'  # Убеждаемся, что тип правильный
-            empty_card.audio_file = word.audio_file
-            empty_card.image_file = word.image_file
-            empty_card.save()
-            created = False
-        else:
-            # Создаем новую пустую карточку
-            empty_card = Word.objects.create(
-                user=request.user,
-                original_word=empty_original,
-                translation=empty_translation,
-                language=empty_language,
-                card_type='empty',  # Помечаем как пустую карточку
-                audio_file=word.audio_file,
-                image_file=word.image_file
-            )
-            created = True
-        
-        # Добавляем пустую карточку в колоду, если её там еще нет
-        was_in_deck = empty_card in deck.words.all()
-        if not was_in_deck:
-            deck.words.add(empty_card)
-            # Обновляем updated_at колоды после добавления карточки
-            deck.save()
-        
-        logger.info(
-            f"Создание пустой карточки для слова {word_id} в колоде {deck_id}: "
-            f"создана карточка {empty_card.id} (created={created}, was_in_deck={was_in_deck})"
-        )
-        
-        return Response({
-            'message': 'Пустая карточка успешно создана',
-            'original_word': {
-                'id': word.id,
-                'original_word': word.original_word,
-                'translation': word.translation,
-                'language': word.language
-            },
-            'empty_card': {
-                'id': empty_card.id,
-                'original_word': empty_card.original_word,
-                'translation': empty_card.translation,
-                'language': empty_card.language,
-                'created': created,
-                'added_to_deck': not was_in_deck
-            }
+            'message': 'Empty card created',
+            **result,
         }, status=status.HTTP_200_OK)
-        
+    except Deck.DoesNotExist:
+        return Response({'error': 'Deck not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Word.DoesNotExist as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        logger.error(f"Ошибка при создании пустой карточки для слова {word_id}: {str(e)}")
-        return Response({
-            'error': f'Ошибка при создании пустой карточки: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Empty card creation error: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-# ═══════════════════════════════════════════════════════════════
-# ЭТАП 3: Card API Views
-# ═══════════════════════════════════════════════════════════════
+# ========== Card API ==========
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def card_list_view(request):
-    """
-    GET /api/cards/ — Список карточек пользователя
-    
-    Query params:
-        - type: фильтр по типу (normal, inverted, empty, cloze)
-        - learning: true/false — только в режиме изучения
-        - suspended: true/false — включая приостановленные
-        - word_id: фильтр по слову
-    """
-    user = request.user
-    cards = Card.objects.filter(user=user).select_related('word')
-    
-    # Фильтры
+    """List user's cards with filters."""
+    cards = Card.objects.filter(user=request.user).select_related('word')
+
     card_type = request.query_params.get('type')
     if card_type:
         cards = cards.filter(card_type=card_type)
-    
+
     learning = request.query_params.get('learning')
     if learning == 'true':
         cards = cards.filter(is_in_learning_mode=True)
     elif learning == 'false':
         cards = cards.filter(is_in_learning_mode=False)
-    
+
     suspended = request.query_params.get('suspended')
     if suspended != 'true':
         cards = cards.filter(is_suspended=False)
-    
+
     word_id = request.query_params.get('word_id')
     if word_id:
         cards = cards.filter(word_id=word_id)
-    
+
     serializer = CardListSerializer(cards, many=True, context={'request': request})
     return Response(serializer.data)
 
@@ -2348,45 +829,37 @@ def card_list_view(request):
 @api_view(['GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def card_detail_view(request, card_id):
-    """
-    GET /api/cards/{id}/ — Детали карточки
-    DELETE /api/cards/{id}/ — Удалить карточку
-    """
-    card = get_object_or_404(Card.objects.select_related('word'), id=card_id, user=request.user)
-    
+    """GET: Card details. DELETE: Delete card."""
+    card = get_object_or_404(
+        Card.objects.select_related('word'), id=card_id, user=request.user)
+
     if request.method == 'GET':
         serializer = CardSerializer(card)
         return Response(serializer.data)
-    
-    elif request.method == 'DELETE':
-        # Нельзя удалить основную карточку, если это единственная
-        if card.card_type == 'normal':
-            other_cards = Card.objects.filter(word=card.word).exclude(id=card.id).count()
-            if other_cards == 0:
-                return Response(
-                    {'error': 'Нельзя удалить единственную карточку слова'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        
-        card.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # DELETE
+    if card.card_type == 'normal':
+        other_cards = Card.objects.filter(word=card.word).exclude(id=card.id).count()
+        if other_cards == 0:
+            return Response(
+                {'error': 'Cannot delete the only card for a word'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+    card.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def card_create_inverted_view(request, word_id):
-    """
-    POST /api/words/{word_id}/cards/inverted/ — Создать инвертированную карточку
-    """
+    """Create inverted card for a word."""
     word = get_object_or_404(Word, id=word_id, user=request.user)
-    
-    # Проверяем, нет ли уже инвертированной
+
     if Card.objects.filter(word=word, card_type='inverted').exists():
         return Response(
-            {'error': 'Инвертированная карточка уже существует'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
+            {'error': 'Inverted card already exists'},
+            status=status.HTTP_400_BAD_REQUEST)
+
     card = Card.create_inverted(word)
     serializer = CardSerializer(card)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -2395,79 +868,57 @@ def card_create_inverted_view(request, word_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def card_create_empty_view(request, word_id):
-    """
-    POST /api/words/{word_id}/cards/empty/ — Создать пустую карточку
-    """
+    """Create empty card for a word."""
     word = get_object_or_404(Word, id=word_id, user=request.user)
-    
-    # Проверяем наличие медиа
+
     if not word.image_file and not word.audio_file:
         return Response(
-            {'error': 'Для empty-карточки нужно изображение или аудио'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    # Проверяем, нет ли уже пустой
+            {'error': 'Empty card requires image or audio'},
+            status=status.HTTP_400_BAD_REQUEST)
+
     if Card.objects.filter(word=word, card_type='empty').exists():
         return Response(
-            {'error': 'Пустая карточка уже существует'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
+            {'error': 'Empty card already exists'},
+            status=status.HTTP_400_BAD_REQUEST)
+
     try:
         card = Card.create_empty(word)
         serializer = CardSerializer(card)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     except ValueError as e:
-        return Response(
-            {'error': str(e)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def card_create_cloze_view(request, word_id):
-    """
-    POST /api/words/{word_id}/cards/cloze/ — Создать cloze-карточку
-    
-    Body:
-        - sentence: str — Предложение с целевым словом
-        - word_index: int — Индекс слова для пропуска (0-based)
-    """
+    """Create cloze card for a word."""
     word = get_object_or_404(Word, id=word_id, user=request.user)
-    
+
     serializer = CardCreateClozeSerializer(data=request.data, context={'request': request})
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     sentence = serializer.validated_data['sentence']
     word_index = serializer.validated_data.get('word_index', 0)
-    
-    # Проверяем, нет ли уже такой cloze
+
     if Card.objects.filter(word=word, card_type='cloze', cloze_sentence=sentence).exists():
         return Response(
-            {'error': 'Cloze-карточка с этим предложением уже существует'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
+            {'error': 'Cloze card with this sentence already exists'},
+            status=status.HTTP_400_BAD_REQUEST)
+
     try:
         card = Card.create_cloze(word, sentence, word_index)
         serializer = CardSerializer(card)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     except ValueError as e:
-        return Response(
-            {'error': str(e)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def card_suspend_view(request, card_id):
-    """
-    POST /api/cards/{id}/suspend/ — Приостановить карточку
-    """
+    """Suspend a card."""
     card = get_object_or_404(Card, id=card_id, user=request.user)
     card.suspend()
     return Response({'status': 'suspended'})
@@ -2476,9 +927,7 @@ def card_suspend_view(request, card_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def card_unsuspend_view(request, card_id):
-    """
-    POST /api/cards/{id}/unsuspend/ — Возобновить карточку
-    """
+    """Unsuspend a card."""
     card = get_object_or_404(Card, id=card_id, user=request.user)
     card.unsuspend()
     return Response({'status': 'unsuspended'})
@@ -2487,9 +936,7 @@ def card_unsuspend_view(request, card_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def card_enter_learning_view(request, card_id):
-    """
-    POST /api/cards/{id}/enter-learning/ — Отправить в режим Изучения
-    """
+    """Enter learning mode for a card."""
     card = get_object_or_404(Card, id=card_id, user=request.user)
     card.enter_learning_mode()
     return Response({'status': 'in_learning_mode'})
@@ -2498,9 +945,7 @@ def card_enter_learning_view(request, card_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def word_cards_list_view(request, word_id):
-    """
-    GET /api/words/{word_id}/cards/ — Все карточки слова
-    """
+    """List all cards for a word."""
     word = get_object_or_404(Word, id=word_id, user=request.user)
     cards = Card.objects.filter(word=word).select_related('word')
     serializer = CardListSerializer(cards, many=True, context={'request': request})

@@ -21,7 +21,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { deckService } from '../../services/deck.service';
+import { mediaService } from '../../services/media.service';
 import { wordsService } from '../../services/words.service';
 import { ImageEditModal } from '../ImageEditModal';
 import type { CardListItem } from '../../types';
@@ -73,7 +73,7 @@ export const TrainingCardMenu: React.FC<TrainingCardMenuProps> = ({
     setGen('image', true);
     try {
       const lang = wordDetail?.language || 'en';
-      const res = await deckService.generateImage({
+      const res = await mediaService.generateImage({
         word: card.word_text,
         translation: card.word_translation,
         language: lang,
@@ -93,7 +93,7 @@ export const TrainingCardMenu: React.FC<TrainingCardMenuProps> = ({
   const handleEditImage = async (mixin: string) => {
     setGen('imageEdit', true);
     try {
-      const res = await deckService.editImage({
+      const res = await mediaService.editImage({
         word_id: card.word_id,
         mixin,
       });
@@ -119,7 +119,7 @@ export const TrainingCardMenu: React.FC<TrainingCardMenuProps> = ({
     setGen('audio', true);
     try {
       const lang = wordDetail?.language || 'en';
-      const res = await deckService.generateAudio({
+      const res = await mediaService.generateAudio({
         word: card.word_text,
         language: lang,
         word_id: card.word_id,

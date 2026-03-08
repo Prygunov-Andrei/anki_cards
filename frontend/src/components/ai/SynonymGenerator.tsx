@@ -11,6 +11,7 @@ import { toast } from 'sonner@2.0.3';
 import { useTranslation } from '../../contexts/LanguageContext';
 import { Word } from '../../types';
 import axios from 'axios';
+import { logger } from '../../utils/logger';
 
 interface SynonymGeneratorProps {
   wordId: number;
@@ -51,7 +52,7 @@ export const SynonymGenerator: React.FC<SynonymGeneratorProps> = ({
         description: `${response.synonym_word.original_word} • ${t.tokens.spent}: ${response.tokens_spent}`,
       });
     } catch (error: unknown) {
-      console.error('Synonym generation error:', error);
+      logger.error('Synonym generation error:', error);
       
       const errorMessage = axios.isAxiosError(error)
         ? (error.response?.data?.detail || error.response?.data?.error || error.message)

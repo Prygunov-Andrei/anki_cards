@@ -6,11 +6,12 @@
 """
 import json
 import logging
+import re
 from typing import Optional
 
 from django.db.models import Q
 
-from apps.cards.llm_utils import get_openai_client
+from apps.core.llm import get_openai_client
 from .models import (
     LiteraryFragment, LiterarySource, LiteraryContextSettings,
 )
@@ -202,6 +203,10 @@ def _llm_match(
         )
 
         raw = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if raw.startswith('```'):
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
         try:
             result = json.loads(raw)
         except (json.JSONDecodeError, ValueError) as e:

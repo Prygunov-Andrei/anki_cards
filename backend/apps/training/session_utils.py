@@ -8,13 +8,8 @@ from datetime import timedelta
 
 from apps.cards.models import Card, Deck
 from apps.words.models import Category
+from apps.core.constants import TIME_PER_LEARNING_CARD, TIME_PER_REVIEW_CARD, TIME_PER_NEW_CARD
 from .models import UserTrainingSettings
-
-
-# Константы времени на карточку (в минутах)
-TIME_PER_LEARNING_CARD = 1.5
-TIME_PER_REVIEW_CARD = 0.25
-TIME_PER_NEW_CARD = 0.5
 
 
 def estimate_session_time(

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { logger } from '../../utils/logger';
 
 /** Flatten tree for parent picker */
 function flattenTree(
@@ -99,7 +100,7 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
       });
       onOpenChange(false);
     } catch (error) {
-      console.error('Category form error:', error);
+      logger.error('Category form error:', error);
     } finally {
       setIsSubmitting(false);
     }

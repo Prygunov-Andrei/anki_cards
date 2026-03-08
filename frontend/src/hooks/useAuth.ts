@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '../types';
 import authService from '../services/authService';
+import { logger } from '../utils/logger';
 
 /**
  * Хук для работы с авторизацией
@@ -29,7 +30,7 @@ export const useAuth = () => {
             setIsAuthenticated(true);
           }
         } catch (error) {
-          console.error('Failed to load profile:', error);
+          logger.error('Failed to load profile:', error);
           // Если не удалось ��агрузить профиль, используем сохраненные данные
           // но помечаем пользователя как неавторизованного если ошибка 401
           if (error instanceof Error && error.message.includes('401')) {

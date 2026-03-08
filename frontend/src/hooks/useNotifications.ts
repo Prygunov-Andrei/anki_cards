@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { notificationsService } from '@/services/notifications.service';
+import { TIMEOUTS } from '@/utils/timeouts';
 
 /**
  * Хук для автоматической проверки и показа уведомлений.
@@ -35,10 +36,10 @@ export function useNotifications(isAuthenticated: boolean) {
     notificationsService.requestPermission();
 
     // Первая проверка через 30 секунд (дать время загрузить страницу)
-    const initialTimeout = setTimeout(checkNotifications, 30_000);
+    const initialTimeout = setTimeout(checkNotifications, TIMEOUTS.NOTIFICATION_INITIAL);
 
     // Потом каждые 5 минут
-    intervalRef.current = setInterval(checkNotifications, 5 * 60 * 1000);
+    intervalRef.current = setInterval(checkNotifications, TIMEOUTS.NOTIFICATION_INTERVAL);
 
     return () => {
       clearTimeout(initialTimeout);

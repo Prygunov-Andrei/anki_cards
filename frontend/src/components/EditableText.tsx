@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Input } from './ui/input';
 import { Edit2 } from 'lucide-react';
 import { displayWord } from '../utils/helpers';
+import { logger } from '../utils/logger';
 
 interface EditableTextProps {
   value: string;
@@ -10,11 +11,18 @@ interface EditableTextProps {
   className?: string;
   inputClassName?: string;
   maxLength?: number;
+  minLength?: number;
+  /** Custom view renderer. Defaults to displayWord(value). */
+  renderView?: (value: string) => React.ReactNode;
+  /** Icon size class. Defaults to "h-3.5 w-3.5". */
+  iconSize?: string;
+  /** Icon hover opacity class. Defaults to "group-hover:opacity-60". */
+  iconHoverOpacity?: string;
 }
 
 /**
- * Компонент EditableText - inline редактирование текста
- * iOS 25 стиль, оптимизирован для мобильных устройств
+ * Unified inline-editable text component.
+ * Replaces both EditableText and EditableTitle.
  */
 export const EditableText: React.FC<EditableTextProps> = ({
   value,
@@ -23,18 +31,20 @@ export const EditableText: React.FC<EditableTextProps> = ({
   className = '',
   inputClassName = '',
   maxLength = 200,
+  minLength,
+  renderView,
+  iconSize = 'h-3.5 w-3.5',
+  iconHoverOpacity = 'group-hover:opacity-60',
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Синхронизация с внешним значением
   useEffect(() => {
     setEditValue(value);
   }, [value]);
 
-  // Автофокус при входе в режим редактирования
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
@@ -42,33 +52,27 @@ export const EditableText: React.FC<EditableTextProps> = ({
     }
   }, [isEditing]);
 
-  /**
-   * Сохранить изменения
-   */
   const handleSave = async () => {
     const trimmedValue = editValue.trim();
 
-    // Если значение не изменилось или пустое
     if (!trimmedValue || trimmedValue === value) {
       setEditValue(value);
       setIsEditing(false);
       return;
     }
 
-    // Валидация длины
-    if (trimmedValue.length > maxLength) {
+    if (trimmedValue.length > maxLength || (minLength && trimmedValue.length < minLength)) {
       setEditValue(value);
       setIsEditing(false);
       return;
     }
 
-    // Сохранение
     setIsSaving(true);
     try {
       await onSave(trimmedValue);
       setIsEditing(false);
     } catch (error) {
-      console.error('Error saving text:', error);
+      logger.error('Error saving text:', error);
       setEditValue(value);
       setIsEditing(false);
     } finally {
@@ -76,17 +80,11 @@ export const EditableText: React.FC<EditableTextProps> = ({
     }
   };
 
-  /**
-   * Отменить редактирование
-   */
   const handleCancel = () => {
     setEditValue(value);
     setIsEditing(false);
   };
 
-  /**
-   * Обработка нажатия клавиш
-   */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleSave();
@@ -95,7 +93,6 @@ export const EditableText: React.FC<EditableTextProps> = ({
     }
   };
 
-  // Режим редактирования
   if (isEditing) {
     return (
       <div className={className}>
@@ -114,14 +111,13 @@ export const EditableText: React.FC<EditableTextProps> = ({
     );
   }
 
-  // Режим просмотра
   return (
     <button
       onClick={() => setIsEditing(true)}
       className={`group inline-flex items-center gap-1.5 text-left transition-colors hover:text-primary ${className}`}
     >
-      <span>{displayWord(value)}</span>
-      <Edit2 className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" />
+      <span>{renderView ? renderView(value) : displayWord(value)}</span>
+      <Edit2 className={`${iconSize} opacity-0 transition-opacity ${iconHoverOpacity}`} />
     </button>
   );
 };

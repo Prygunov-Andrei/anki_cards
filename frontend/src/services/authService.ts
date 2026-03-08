@@ -2,6 +2,7 @@ import axios from 'axios';
 import apiClient, { handleApiError } from './api';
 import { User } from '../types'; // ИСПРАВЛЕНО: правильный импорт User
 import { API_ENDPOINTS } from '../lib/api-constants'; // ИСПРАВЛЕНО: используем новый файл констант
+import { logger } from '@/utils/logger';
 
 /**
  * Интерфейс для данных входа
@@ -41,50 +42,45 @@ export const authService = {
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      console.log('[authService] Sending login request with credentials:', { username: credentials.username });
+      logger.log('[authService] Sending login request with credentials:', { username: credentials.username });
       const response = await apiClient.post<{ token: string; user_id: number }>(API_ENDPOINTS.LOGIN, credentials);
       
-      console.log('[authService] Login response received:', response.data);
-      console.log('[authService] Response headers:', response.headers);
-      console.log('[authService] Full response:', response);
+      logger.log('[authService] Login response received:', response.data);
+      logger.log('[authService] Response headers:', response.headers);
+      logger.log('[authService] Full response:', response);
       
       // ⚠️ Проверка: убеждаемся, что ответ не HTML
       if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-        console.error('[authService] ❌ Получен HTML вместо JSON!');
-        console.error('[authService] Это означает, что запрос уходит не на backend API');
-        console.error('[authService] Проверьте BASE_URL в /services/api.ts');
+        logger.error('[authService] ❌ Получен HTML вместо JSON!');
+        logger.error('[authService] Это означает, что запрос уходит не на backend API');
+        logger.error('[authService] Проверьте BASE_URL в /services/api.ts');
         throw new Error('Backend недоступен: получен HTML вместо JSON. Проверьте, что backend запущен и VITE_API_BASE_URL указан верно.');
       }
       
       // Сохраняем токен
       if (response.data.token) {
         const token = response.data.token;
-        console.log('[authService] Token found:', token);
+        logger.log('[authService] Token found:', token);
         localStorage.setItem('authToken', token);
-        
-        // Получаем профиль пользователя с сервера с токеном
-        console.log('[authService] Fetching user profile...');
-        const profileResponse = await apiClient.get<User>('/api/user/profile/', {
-          headers: {
-            'Authorization': `Token ${token}`
-          }
-        });
-        const user = profileResponse.data;
-        console.log('[authService] User profile received:', user);
-        
+
+        // Backend returns full profile + token in one response
+        const { token: _, ...userData } = response.data;
+        const user = userData as unknown as User;
+        logger.log('[authService] User profile from login response:', user);
+
         // Сохраняем данные пользователя
         localStorage.setItem('user', JSON.stringify(user));
-        
+
         return {
           token: token,
           user: user
         };
       }
       
-      console.error('[authService] No token in response! Response data:', response.data);
+      logger.error('[authService] No token in response! Response data:', response.data);
       throw new Error('No token received');
     } catch (error) {
-      console.error('[authService] Login error:', error);
+      logger.error('[authService] Login error:', error);
       const apiError = handleApiError(error);
       throw new Error(apiError.message);
     }
@@ -101,26 +97,13 @@ export const authService = {
       if (response.data.token) {
         const token = response.data.token;
         localStorage.setItem('authToken', token);
-        
-        // Если сервер вернул полный объект user, используем его
-        if (response.data.user) {
-          localStorage.setItem('user', JSON.stringify(response.data.user));
-          return {
-            token: token,
-            user: response.data.user
-          };
-        }
-        
-        // Иначе получаем профиль с сервера с токеном
-        const profileResponse = await apiClient.get<User>('/api/user/profile/', {
-          headers: {
-            'Authorization': `Token ${token}`
-          }
-        });
-        const user = profileResponse.data;
-        
+
+        // Backend returns full profile + token in one response
+        const { token: _, user_id: _uid, ...userData } = response.data;
+        const user = userData as unknown as User;
+
         localStorage.setItem('user', JSON.stringify(user));
-        
+
         return {
           token: token,
           user: user
@@ -130,9 +113,9 @@ export const authService = {
       throw new Error('No token received');
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.error('[authService] Registration error details:', error.response?.data);
+        logger.error('[authService] Registration error details:', error.response?.data);
       } else {
-        console.error('[authService] Registration error details:', error);
+        logger.error('[authService] Registration error details:', error);
       }
       const apiError = handleApiError(error);
       throw new Error(apiError.message);
@@ -147,7 +130,7 @@ export const authService = {
       await apiClient.post(API_ENDPOINTS.LOGOUT);
     } catch (error) {
       // Игнорируем ошибки при выходе
-      console.error('Logout error:', error);
+      logger.error('Logout error:', error);
     } finally {
       // Очищаем локальное хранилище в любом случае
       localStorage.removeItem('authToken');
@@ -166,7 +149,7 @@ export const authService = {
       }
       return JSON.parse(userJson);
     } catch (error) {
-      console.error('Error parsing user data:', error);
+      logger.error('Error parsing user data:', error);
       // Очищаем поврежденные данные
       localStorage.removeItem('user');
       return null;
@@ -178,7 +161,7 @@ export const authService = {
    */
   async getProfile(): Promise<User> {
     try {
-      const response = await apiClient.get<User>('/api/user/profile/');
+      const response = await apiClient.get<User>(API_ENDPOINTS.USER_PROFILE);
       
       // Обновляем данные пользователя в localStorage
       localStorage.setItem('user', JSON.stringify(response.data));

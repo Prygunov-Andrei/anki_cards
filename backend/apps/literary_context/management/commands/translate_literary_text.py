@@ -27,7 +27,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
-from apps.cards.llm_utils import get_openai_client
+from apps.core.llm import get_openai_client
 
 DEFAULT_MODEL = 'gpt-4.1'
 DEFAULT_CHUNK_SIZE = 3000  # chars per chunk

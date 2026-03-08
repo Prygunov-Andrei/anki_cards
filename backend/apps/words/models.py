@@ -2,6 +2,13 @@ from django.db import models
 from django.db.models import Q
 from django.conf import settings
 
+from apps.core.constants import (
+    LANGUAGE_CHOICES,
+    CARD_TYPE_CHOICES,
+    LEARNING_STATUS_CHOICES,
+    PART_OF_SPEECH_CHOICES,
+)
+
 
 class Category(models.Model):
     """
@@ -126,44 +133,10 @@ class Category(models.Model):
 class Word(models.Model):
     """Модель слова для изучения"""
     
-    LANGUAGE_CHOICES = [
-        ('ru', 'Русский'),
-        ('en', 'English'),
-        ('pt', 'Португальский'),
-        ('de', 'Немецкий'),
-        ('es', 'Испанский'),
-        ('fr', 'Французский'),
-        ('it', 'Итальянский'),
-        ('tr', 'Турецкий'),
-    ]
-    
-    CARD_TYPE_CHOICES = [
-        ('normal', 'Обычная карточка'),
-        ('inverted', 'Инвертированная карточка'),
-        ('empty', 'Пустая карточка'),
-    ]
-    
-    LEARNING_STATUS_CHOICES = [
-        ('new', 'Новое'),
-        ('learning', 'В изучении'),
-        ('reviewing', 'На повторении'),
-        ('mastered', 'Освоено'),
-    ]
-    
-    PART_OF_SPEECH_CHOICES = [
-        ('noun', 'Существительное'),
-        ('verb', 'Глагол'),
-        ('adjective', 'Прилагательное'),
-        ('adverb', 'Наречие'),
-        ('pronoun', 'Местоимение'),
-        ('preposition', 'Предлог'),
-        ('conjunction', 'Союз'),
-        ('interjection', 'Междометие'),
-        ('article', 'Артикль'),
-        ('numeral', 'Числительное'),
-        ('particle', 'Частица'),
-        ('other', 'Другое'),
-    ]
+    LANGUAGE_CHOICES = LANGUAGE_CHOICES
+    CARD_TYPE_CHOICES = CARD_TYPE_CHOICES
+    LEARNING_STATUS_CHOICES = LEARNING_STATUS_CHOICES
+    PART_OF_SPEECH_CHOICES = PART_OF_SPEECH_CHOICES
     
     # ═══════════════════════════════════════════════════════════════
     # СУЩЕСТВУЮЩИЕ ПОЛЯ

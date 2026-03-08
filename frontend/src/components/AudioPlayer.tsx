@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { getAbsoluteUrl } from '../utils/url-helpers';
+import { logger } from '../utils/logger';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -98,7 +99,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         setIsPlaying(true);
       }
     } catch (error) {
-      console.error('Error playing audio:', error);
+      logger.error('Error playing audio:', error);
       setHasError(true);
       setIsPlaying(false);
     }

@@ -56,4 +56,23 @@ export interface BatchContextStats {
   skipped: number;
   fallback: number;
   errors: number;
+  unmatched_words?: Array<{
+    id: number;
+    original_word: string;
+    translation: string;
+  }>;
+}
+
+export interface JobStatus {
+  job_id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  progress: number;
+  current_word: string;
+  stats: BatchContextStats;
+  unmatched_words: Array<{
+    id: number;
+    original_word: string;
+    translation: string;
+  }>;
+  error_message: string;
 }

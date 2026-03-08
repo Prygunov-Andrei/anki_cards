@@ -367,7 +367,16 @@ def word_detail_view(request, word_id):
     word = get_object_or_404(Word, id=word_id, user=request.user)
     
     if request.method == 'GET':
-        serializer = WordWithRelationsSerializer(word, context={'request': request})
+        context = {'request': request}
+        deck_id = request.query_params.get('deck_id')
+        if deck_id:
+            try:
+                from apps.cards.models import Deck
+                deck = Deck.objects.get(id=int(deck_id), user=request.user)
+                context['deck'] = deck
+            except (Deck.DoesNotExist, ValueError, TypeError):
+                pass
+        serializer = WordWithRelationsSerializer(word, context=context)
         return Response(serializer.data)
     
     elif request.method == 'PATCH':

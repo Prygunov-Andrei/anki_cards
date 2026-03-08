@@ -6,6 +6,8 @@ urlpatterns = [
     path('generate/', views.generate_context_view, name='literary-generate'),
     path('generate-batch/', views.generate_batch_context_view, name='literary-generate-batch'),
     path('generate-deck-context/', views.generate_deck_context_view, name='literary-generate-deck-context'),
+    path('generate-deck-context-async/', views.generate_deck_context_async_view, name='literary-generate-deck-context-async'),
+    path('job/<uuid:job_id>/status/', views.job_status_view, name='literary-job-status'),
     path('word/<int:word_id>/media/', views.word_context_media_view, name='literary-word-media'),
     # Reader API
     path('sources/<slug:source_slug>/texts/', views.texts_list_view, name='literary-texts-list'),

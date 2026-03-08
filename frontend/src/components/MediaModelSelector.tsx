@@ -169,7 +169,7 @@ export const MediaModelSelector: React.FC<MediaModelSelectorProps> = ({
 
 export const mediaModelToBackend = (model: MediaModel): {
   image_provider: 'openai' | 'gemini';
-  gemini_model: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview';
+  gemini_model: 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview';
 } => {
   switch (model) {
     case 'dalle3':
@@ -185,14 +185,14 @@ export const mediaModelToBackend = (model: MediaModel): {
     case 'nano-banana':
       return {
         image_provider: 'gemini',
-        gemini_model: 'nano-banana-pro-preview',
+        gemini_model: 'gemini-3.1-flash-image-preview',
       };
   }
 };
 
 export const backendToMediaModel = (
   imageProvider: 'openai' | 'gemini',
-  geminiModel: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
+  geminiModel: 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview'
 ): MediaModel => {
   if (imageProvider === 'openai') {
     return 'dalle3';

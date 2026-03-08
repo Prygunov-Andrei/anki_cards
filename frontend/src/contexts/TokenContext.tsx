@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { tokenService } from '../services/token.service';
 import { TokenBalance, TokenTransaction } from '../types';
 import { useAuthContext } from './AuthContext';
+import { logger } from '../utils/logger';
 
 interface TokenContextType {
   balance: number;
@@ -40,7 +41,7 @@ export const TokenProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const data = await tokenService.getTokenBalance();
       setBalance(data.balance);
     } catch (error) {
-      console.error('Failed to fetch token balance:', error);
+      logger.error('Failed to fetch token balance:', error);
       // В случае ошибки устанавливаем 0 (безопасное значение)
       setBalance(0);
     } finally {
@@ -61,7 +62,7 @@ export const TokenProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const data = await tokenService.getTokenTransactions();
       setTransactions(data);
     } catch (error) {
-      console.error('Failed to fetch token transactions:', error);
+      logger.error('Failed to fetch token transactions:', error);
       setTransactions([]);
     }
   }, [isAuthenticated]);

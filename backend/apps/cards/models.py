@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 import uuid
 
+from apps.core.constants import LANGUAGE_CHOICES, CARD_TYPE_CHOICES
+
 
 class GeneratedDeck(models.Model):
     """Модель для хранения информации о сгенерированных колодах"""
@@ -158,28 +160,9 @@ class PartOfSpeechCache(models.Model):
 
 class Deck(models.Model):
     """Модель колоды карточек"""
-    
-    LANGUAGE_CHOICES = [
-        ('ru', 'Русский'),
-        ('en', 'English'),
-        ('pt', 'Португальский'),
-        ('de', 'Немецкий'),
-        ('es', 'Испанский'),
-        ('fr', 'Французский'),
-        ('it', 'Итальянский'),
-        ('tr', 'Турецкий'),
-    ]
-    
-    NATIVE_LANGUAGE_CHOICES = [
-        ('ru', 'Русский'),
-        ('en', 'English'),
-        ('pt', 'Português'),
-        ('de', 'Deutsch'),
-        ('es', 'Español'),
-        ('fr', 'Français'),
-        ('it', 'Italiano'),
-        ('tr', 'Türkçe'),
-    ]
+
+    LANGUAGE_CHOICES = LANGUAGE_CHOICES
+    NATIVE_LANGUAGE_CHOICES = LANGUAGE_CHOICES
     
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

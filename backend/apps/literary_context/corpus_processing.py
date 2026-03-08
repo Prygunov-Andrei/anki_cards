@@ -6,7 +6,7 @@ import re
 import logging
 from typing import Optional
 
-from apps.cards.llm_utils import get_openai_client
+from apps.core.llm import get_openai_client
 from .models import LiteraryContextSettings
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,10 @@ def extract_keywords(
     )
 
     raw = response.choices[0].message.content.strip()
+    # Strip markdown code fences if present
+    if raw.startswith('```'):
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw)
 
     try:
         keywords = json.loads(raw)

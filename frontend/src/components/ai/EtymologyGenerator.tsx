@@ -8,6 +8,7 @@ import { useTokenContext } from '../../contexts/TokenContext';
 import { toast } from 'sonner@2.0.3';
 import { useTranslation } from '../../contexts/LanguageContext';
 import axios from 'axios';
+import { logger } from '../../utils/logger';
 
 interface EtymologyGeneratorProps {
   wordId: number;
@@ -49,58 +50,58 @@ export const EtymologyGenerator: React.FC<EtymologyGeneratorProps> = ({
         description: `${t.tokens.spent}: ${response.tokens_spent}`,
       });
     } catch (error: unknown) {
-      console.error('Etymology generation error:', error);
+      logger.error('Etymology generation error:', error);
       if (axios.isAxiosError(error)) {
-        console.log('🔍 [Error Debug] Full error object:', JSON.stringify(error.response?.data, null, 2));
+        logger.log('🔍 [Error Debug] Full error object:', JSON.stringify(error.response?.data, null, 2));
       }
       
       const errorMessage = axios.isAxiosError(error)
         ? (error.response?.data?.detail || error.response?.data?.error || error.message)
         : (error instanceof Error ? error.message : undefined);
-      console.log('🔍 [Error Debug] Error message:', errorMessage);
+      logger.log('🔍 [Error Debug] Error message:', errorMessage);
       
       // Если этимология уже существует, пытаемся загрузить её с бекенда
       if (errorMessage?.includes('already exists') || errorMessage?.includes('уже существует')) {
-        console.log('⚠️ Etymology already exists, trying to load from backend...');
-        console.log('🔍 [Debug] deckId:', deckId);
-        console.log('🔍 [Debug] wordId:', wordId);
+        logger.log('⚠️ Etymology already exists, trying to load from backend...');
+        logger.log('🔍 [Debug] deckId:', deckId);
+        logger.log('🔍 [Debug] wordId:', wordId);
         
         // Пытаемся перезагрузить слово, если есть deckId
         if (deckId) {
           try {
-            console.log('🔄 Loading deck...');
+            logger.log('🔄 Loading deck...');
             const deck = await deckService.getDeck(deckId);
-            console.log('✅ Deck loaded, words count:', deck.words?.length);
+            logger.log('✅ Deck loaded, words count:', deck.words?.length);
             
             const updatedWord = deck.words?.find(w => w.id === wordId);
             
-            console.log('🔍 [Debug] Found word:', updatedWord);
-            console.log('🔍 [Debug] Etymology value:', updatedWord?.etymology);
-            console.log('🔍 [Debug] Etymology type:', typeof updatedWord?.etymology);
-            console.log('🔍 [Debug] Etymology length:', updatedWord?.etymology?.length);
-            console.log('🔍 [Debug] All word fields:', Object.keys(updatedWord || {}));
+            logger.log('🔍 [Debug] Found word:', updatedWord);
+            logger.log('🔍 [Debug] Etymology value:', updatedWord?.etymology);
+            logger.log('🔍 [Debug] Etymology type:', typeof updatedWord?.etymology);
+            logger.log('🔍 [Debug] Etymology length:', updatedWord?.etymology?.length);
+            logger.log('🔍 [Debug] All word fields:', Object.keys(updatedWord || {}));
             
             if (updatedWord) {
               if (updatedWord.etymology && updatedWord.etymology.trim().length > 0) {
-                console.log('✅ Found existing etymology:', updatedWord.etymology);
+                logger.log('✅ Found existing etymology:', updatedWord.etymology);
                 onEtymologyUpdate(updatedWord.etymology);
                 toast.success('Этимология загружена с бекенда', {
                   description: 'Используйте кнопку "Перегенерировать" для создания новой версии',
                 });
                 return; // ВАЖНО: выходим, чтобы не показывать ошибку ниже
               } else {
-                console.log('⚠️ Etymology exists on backend but is empty string');
-                console.log('🔍 [Debug] Checking if etymology is in response...');
+                logger.log('⚠️ Etymology exists on backend but is empty string');
+                logger.log('🔍 [Debug] Checking if etymology is in response...');
                 // Не показываем toast.warning, только логируем
               }
             } else {
-              console.log('❌ Word not found in deck');
+              logger.log('❌ Word not found in deck');
             }
           } catch (loadError) {
-            console.error('❌ Failed to load existing etymology:', loadError);
+            logger.error('❌ Failed to load existing etymology:', loadError);
           }
         } else {
-          console.log('⚠️ No deckId provided, cannot reload from backend');
+          logger.log('⚠️ No deckId provided, cannot reload from backend');
         }
         
         // Показываем сообщение только один раз

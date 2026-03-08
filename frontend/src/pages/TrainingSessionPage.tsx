@@ -28,6 +28,7 @@ import {
 import { Trophy, ArrowRight, RotateCcw, Volume2, Lightbulb, BookOpen, Loader2, DoorOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
+import { logger } from '../utils/logger';
 
 interface LocationState {
   session: TrainingSessionResponse;
@@ -37,6 +38,7 @@ interface LocationState {
   isFlipped?: boolean;
   answered?: number;
   correct?: number;
+  deckId?: number;
 }
 
 export default function TrainingSessionPage() {
@@ -72,6 +74,43 @@ export default function TrainingSessionPage() {
       document.body.style.overscrollBehavior = prevBodyOverscroll;
     };
   }, []);
+
+  // Whether there's an active session that should be protected from accidental navigation
+  const isActiveSession = !!state?.session && !isFinished;
+
+  // Block tab close / refresh via beforeunload
+  useEffect(() => {
+    if (!isActiveSession) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isActiveSession]);
+
+  // Block browser back button via popstate interception
+  useEffect(() => {
+    if (!isActiveSession) return;
+
+    // Push a sentry state so pressing Back pops it instead of leaving
+    window.history.pushState({ trainingGuard: true }, '');
+
+    const handler = () => {
+      // User pressed Back — show confirmation dialog instead of navigating
+      // Re-push sentry so that subsequent presses are also caught
+      window.history.pushState({ trainingGuard: true }, '');
+      setShowExitDialog(true);
+    };
+
+    window.addEventListener('popstate', handler);
+    return () => {
+      window.removeEventListener('popstate', handler);
+      // Clean up the sentry entry if the component unmounts normally (e.g. confirmed exit)
+      if (window.history.state?.trainingGuard) {
+        window.history.back();
+      }
+    };
+  }, [isActiveSession]);
 
   // Hint generation state
   const [isGeneratingHint, setIsGeneratingHint] = useState(false);
@@ -146,7 +185,7 @@ export default function TrainingSessionPage() {
     async (card: CardListItem) => {
       if (wordDetailCache[card.id]) return;
       try {
-        const word = await wordsService.getWord(card.word_id);
+        const word = await wordsService.getWord(card.word_id, state?.deckId);
         setWordDetailCache((prev) => ({
           ...prev,
           [card.id]: {
@@ -163,7 +202,7 @@ export default function TrainingSessionPage() {
         // Silent fail — word details are supplementary
       }
     },
-    [wordDetailCache]
+    [wordDetailCache, state?.deckId]
   );
 
   // Preload word details for current card (and next card for smoother UX)
@@ -287,8 +326,9 @@ export default function TrainingSessionPage() {
       isFlipped,
       answered: sessionStats.answered,
       correct: sessionStats.correct,
+      deckId: state?.deckId,
     };
-  }, [cards, currentIndex, durationMinutes, isFlipped, sessionId, sessionStartedAt, sessionStats]);
+  }, [cards, currentIndex, durationMinutes, isFlipped, sessionId, sessionStartedAt, sessionStats, state?.deckId]);
 
   const handleDeleteWord = async (wordId: number) => {
     await wordsService.deleteWord(wordId);
@@ -348,7 +388,7 @@ export default function TrainingSessionPage() {
       }
     } catch (error) {
       toast.error(t.trainingSession.errors.submitAnswer);
-      console.error(error);
+      logger.error(error);
     } finally {
       setIsAnswering(false);
     }
@@ -370,6 +410,10 @@ export default function TrainingSessionPage() {
   const confirmExit = () => {
     setShowExitDialog(false);
     navigate('/training');
+  };
+
+  const cancelExit = () => {
+    setShowExitDialog(false);
   };
 
   // No session data
@@ -585,7 +629,7 @@ export default function TrainingSessionPage() {
       </div>
 
       {/* Exit dialog */}
-      <AlertDialog open={showExitDialog} onOpenChange={setShowExitDialog}>
+      <AlertDialog open={showExitDialog} onOpenChange={(open: boolean) => { if (!open) cancelExit(); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t.trainingSession.exitDialog.title}</AlertDialogTitle>

@@ -1,5 +1,6 @@
 import apiClient from './api';
 import { User } from '../types';
+import { API_ENDPOINTS } from '../lib/api-constants';
 
 /**
  * Сервис для работы с профилем пользователя
@@ -12,7 +13,7 @@ export interface ProfileUpdateData {
   native_language?: string;
   learning_language?: string;
   image_provider?: 'openai' | 'gemini' | 'nano-banana';
-  gemini_model?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview';
+  gemini_model?: 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview';
 }
 
 export const profileService = {
@@ -20,7 +21,7 @@ export const profileService = {
    * Получить данные профиля
    */
   async getProfile(): Promise<User> {
-    const response = await apiClient.get<User>('/api/user/profile/');
+    const response = await apiClient.get<User>(API_ENDPOINTS.USER_PROFILE);
     return response.data;
   },
 
@@ -28,7 +29,7 @@ export const profileService = {
    * Обновить данные профиля (текстовые поля)
    */
   async updateProfile(data: ProfileUpdateData): Promise<User> {
-    const response = await apiClient.patch<User>('/api/user/profile/', data);
+    const response = await apiClient.patch<User>(API_ENDPOINTS.USER_PROFILE, data);
     return response.data;
   },
 
@@ -39,7 +40,7 @@ export const profileService = {
     const formData = new FormData();
     formData.append('avatar', file);
 
-    const response = await apiClient.patch<User>('/api/user/profile/', formData, {
+    const response = await apiClient.patch<User>(API_ENDPOINTS.USER_PROFILE, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -51,7 +52,7 @@ export const profileService = {
    * Удалить аватар
    */
   async removeAvatar(): Promise<User> {
-    const response = await apiClient.patch<User>('/api/user/profile/', {
+    const response = await apiClient.patch<User>(API_ENDPOINTS.USER_PROFILE, {
       avatar: null,
     });
     return response.data;
@@ -79,7 +80,7 @@ export const profileService = {
       formData.append('avatar', avatarFile);
     }
 
-    const response = await apiClient.patch<User>('/api/user/profile/', formData, {
+    const response = await apiClient.patch<User>(API_ENDPOINTS.USER_PROFILE, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

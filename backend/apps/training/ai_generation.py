@@ -10,9 +10,16 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 
 from apps.cards.token_utils import check_balance, spend_tokens
-from apps.cards.llm_utils import get_openai_client
+from apps.core.llm import get_openai_client
 from apps.words.models import Word, WordRelation
 from apps.cards.models import Card
+from apps.core.constants import (
+    ETYMOLOGY_COST,
+    HINT_TEXT_COST,
+    HINT_AUDIO_COST,
+    SENTENCE_COST,
+    SYNONYM_COST,
+)
 from .prompts import (
     get_etymology_prompt,
     get_hint_prompt,
@@ -23,14 +30,6 @@ from .prompts import (
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
-
-
-# Стоимость операций (в токенах)
-ETYMOLOGY_COST = 1
-HINT_TEXT_COST = 1
-HINT_AUDIO_COST = 1  # Если используется OpenAI TTS
-SENTENCE_COST = 1  # Для 1-5 предложений
-SYNONYM_COST = 1
 
 
 def generate_etymology(

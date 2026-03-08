@@ -10,6 +10,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Wand2 } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
+import { logger } from '../utils/logger';
 
 interface ImageEditModalProps {
   isOpen: boolean;
@@ -39,7 +40,7 @@ export const ImageEditModal: React.FC<ImageEditModalProps> = ({
       await onSubmit(mixin.trim());
       setMixin('');
     } catch (error) {
-      console.error('Error editing image:', error);
+      logger.error('Error editing image:', error);
       // Ошибка обрабатывается в родительском компоненте через toast
     } finally {
       setIsSubmitting(false);

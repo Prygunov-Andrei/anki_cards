@@ -25,7 +25,7 @@ const GEMINI_MODELS_DATA: Array<{
     icon: '⚡',
   },
   {
-    id: 'nano-banana-pro-preview',
+    id: 'gemini-3.1-flash-image-preview',
     cost: 1,
     speed: '~12.6 сек',
     icon: '🆕',

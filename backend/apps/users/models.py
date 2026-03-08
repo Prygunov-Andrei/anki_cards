@@ -1,73 +1,30 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from apps.core.constants import (
+    LANGUAGE_CHOICES,
+    THEME_CHOICES,
+    MODE_CHOICES,
+    IMAGE_PROVIDER_CHOICES,
+    AUDIO_PROVIDER_CHOICES,
+    IMAGE_STYLE_CHOICES,
+    GEMINI_MODEL_CHOICES,
+)
+
 
 class User(AbstractUser):
     """Расширенная модель пользователя"""
-    
-    LANGUAGE_CHOICES = [
-        ('ru', 'Russian'),
-        ('en', 'English'),
-        ('pt', 'Portuguese'),
-        ('de', 'German'),
-        ('es', 'Spanish'),
-        ('fr', 'French'),
-        ('it', 'Italian'),
-        ('tr', 'Turkish'),
-    ]
-    
-    NATIVE_LANGUAGE_CHOICES = [
-        ('ru', 'Russian'),
-        ('en', 'English'),
-        ('pt', 'Portuguese'),
-        ('de', 'German'),
-        ('es', 'Spanish'),
-        ('fr', 'French'),
-        ('it', 'Italian'),
-        ('tr', 'Turkish'),
-    ]
-    
-    LEARNING_LANGUAGE_CHOICES = [
-        ('ru', 'Russian'),
-        ('en', 'English'),
-        ('pt', 'Portuguese'),
-        ('de', 'German'),
-        ('es', 'Spanish'),
-        ('fr', 'French'),
-        ('it', 'Italian'),
-        ('tr', 'Turkish'),
-    ]
-    
-    THEME_CHOICES = [
-        ('light', 'Светлая'),
-        ('dark', 'Темная'),
-    ]
-    
-    MODE_CHOICES = [
-        ('simple', 'Простой'),
-        ('advanced', 'Расширенный'),
-    ]
-    
-    IMAGE_PROVIDER_CHOICES = [
-        ('openai', 'OpenAI DALL-E 3'),
-        ('gemini', 'Google Gemini'),
-    ]
-    
-    AUDIO_PROVIDER_CHOICES = [
-        ('openai', 'OpenAI TTS'),
-        ('gtts', 'Google TTS (gTTS)'),
-    ]
 
-    IMAGE_STYLE_CHOICES = [
-        ('minimalistic', 'Минималистичный'),
-        ('balanced', 'Сбалансированный'),
-        ('creative', 'Креативный'),
-    ]
-    
-    GEMINI_MODEL_CHOICES = [
-        ('gemini-2.5-flash-image', 'Gemini Flash (быстрая, 0.5 токена)'),
-        ('nano-banana-pro-preview', 'Nano Banana Pro (новая, 1 токен)'),
-    ]
+    # Алиасы для обратной совместимости с сериализаторами, которые обращаются к User.LANGUAGE_CHOICES
+    LANGUAGE_CHOICES = LANGUAGE_CHOICES
+    NATIVE_LANGUAGE_CHOICES = LANGUAGE_CHOICES
+    LEARNING_LANGUAGE_CHOICES = LANGUAGE_CHOICES
+    THEME_CHOICES = THEME_CHOICES
+    MODE_CHOICES = MODE_CHOICES
+    IMAGE_PROVIDER_CHOICES = IMAGE_PROVIDER_CHOICES
+    AUDIO_PROVIDER_CHOICES = AUDIO_PROVIDER_CHOICES
+    IMAGE_STYLE_CHOICES = IMAGE_STYLE_CHOICES
+    GEMINI_MODEL_CHOICES = GEMINI_MODEL_CHOICES
     
     preferred_language = models.CharField(
         max_length=2,
@@ -152,6 +109,34 @@ class User(AbstractUser):
         default='balanced',
         verbose_name='Стиль генерации изображений'
     )
+
+    # Per-user LLM settings (blank = use system defaults from LiteraryContextSettings)
+    hint_generation_model = models.CharField(
+        max_length=50, default='gpt-4o-mini', verbose_name='Модель для подсказок'
+    )
+    scene_description_model = models.CharField(
+        max_length=50, default='gpt-4o-mini', verbose_name='Модель для описания сцен'
+    )
+    matching_model = models.CharField(
+        max_length=50, default='gpt-4o', verbose_name='Модель для матчинга'
+    )
+    keyword_extraction_model = models.CharField(
+        max_length=50, default='gpt-4o-mini', verbose_name='Модель для ключевых слов'
+    )
+
+    hint_temperature = models.FloatField(default=0.8, verbose_name='Температура подсказок')
+    scene_description_temperature = models.FloatField(default=0.5, verbose_name='Температура описания сцен')
+    matching_temperature = models.FloatField(default=0.2, verbose_name='Температура матчинга')
+    keyword_temperature = models.FloatField(default=0.3, verbose_name='Температура ключевых слов')
+
+    elevenlabs_voice_id = models.CharField(
+        max_length=50, blank=True, default='', verbose_name='ElevenLabs Voice ID'
+    )
+
+    hint_prompt_template = models.TextField(blank=True, default='', verbose_name='Шаблон промпта подсказок')
+    scene_description_prompt = models.TextField(blank=True, default='', verbose_name='Промпт описания сцен')
+    keyword_extraction_prompt = models.TextField(blank=True, default='', verbose_name='Промпт ключевых слов')
+    image_prompt_template = models.TextField(blank=True, default='', verbose_name='Шаблон промпта изображений')
 
     active_literary_source = models.ForeignKey(
         'literary_context.LiterarySource',

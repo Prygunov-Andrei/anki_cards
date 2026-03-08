@@ -10,18 +10,18 @@ from datetime import timedelta
 from typing import Dict, Optional
 
 from apps.cards.models import Card
+from apps.core.constants import MAX_EASE_FACTOR
 from .models import UserTrainingSettings
 
 
 class SM2Algorithm:
     """
     Реализация алгоритма SuperMemo SM-2 с адаптацией.
-    
+
     Все константы берутся из UserTrainingSettings, а не захардкожены.
     """
-    
-    # Максимальный Ease Factor (можно вынести в настройки, но пока жестко)
-    MAX_EASE_FACTOR = 5.0
+
+    MAX_EASE_FACTOR = MAX_EASE_FACTOR
     
     @classmethod
     def process_answer(

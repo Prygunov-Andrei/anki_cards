@@ -1,4 +1,5 @@
 import logging
+import threading
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -11,7 +12,7 @@ from django.db.models import Count
 from apps.words.models import Word
 from apps.cards.models import Deck
 from apps.cards.llm_utils import translate_words
-from .models import LiterarySource, LiteraryText, WordContextMedia
+from .models import LiterarySource, LiteraryText, WordContextMedia, DeckContextJob
 from .serializers import (
     LiterarySourceSerializer,
     LiteraryTextListSerializer,
@@ -52,7 +53,7 @@ def generate_context_view(request):
     source = get_object_or_404(LiterarySource, slug=source_slug, is_active=True)
 
     try:
-        context_media = generate_word_context(word, source)
+        context_media = generate_word_context(word, source, user=request.user)
     except Exception as e:
         logger.error(f'Context generation failed for word {word_id}: {e}')
         return Response(
@@ -84,7 +85,7 @@ def generate_batch_context_view(request):
     words = Word.objects.filter(id__in=word_ids, user=request.user)
 
     try:
-        stats = generate_batch_context(words, source, skip_existing=skip_existing)
+        stats = generate_batch_context(words, source, skip_existing=skip_existing, user=request.user)
     except Exception as e:
         logger.error(f'Batch context generation failed: {e}')
         return Response(
@@ -133,7 +134,7 @@ def generate_deck_context_view(request):
         return Response({'generated': 0, 'skipped': 0, 'errors': 0})
 
     try:
-        stats = generate_batch_context(words, source, skip_existing=True)
+        stats = generate_batch_context(words, source, skip_existing=True, user=request.user)
     except Exception as e:
         logger.error(f'Deck context generation failed for deck {deck_id}: {e}')
         return Response(
@@ -147,6 +148,133 @@ def generate_deck_context_view(request):
     deck.save(update_fields=['literary_source', 'literary_source_override', 'updated_at'])
 
     return Response(stats, status=status.HTTP_200_OK)
+
+
+def _run_deck_context_job(job_id, word_ids, source_id, deck_id, user_id):
+    """Background thread: generate literary context for all words in a deck."""
+    import django
+    django.db.connections.close_all()
+
+    job = DeckContextJob.objects.get(id=job_id)
+    job.status = 'running'
+    job.save(update_fields=['status', 'updated_at'])
+
+    try:
+        source = LiterarySource.objects.get(id=source_id)
+        words = Word.objects.filter(id__in=word_ids)
+
+        def on_progress(current, total, word_text):
+            pct = int(current / total * 100) if total else 0
+            DeckContextJob.objects.filter(id=job_id).update(
+                progress=pct,
+                current_word=word_text[:200],
+            )
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.get(id=user_id)
+
+        stats = generate_batch_context(
+            words, source,
+            skip_existing=True,
+            skip_hint=False,
+            force=False,
+            on_progress=on_progress,
+            user=user,
+        )
+
+        # Set deck literary source
+        Deck.objects.filter(id=deck_id).update(
+            literary_source=source,
+            literary_source_override=True,
+        )
+
+        job.refresh_from_db()
+        job.status = 'completed'
+        job.progress = 100
+        job.current_word = ''
+        job.stats = stats
+        job.unmatched_words = stats.get('unmatched_words', [])
+        job.save(update_fields=[
+            'status', 'progress', 'current_word', 'stats',
+            'unmatched_words', 'updated_at',
+        ])
+
+    except Exception as e:
+        logger.error(f'Deck context job {job_id} failed: {e}')
+        DeckContextJob.objects.filter(id=job_id).update(
+            status='failed',
+            error_message=str(e)[:2000],
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_deck_context_async_view(request):
+    """
+    POST /api/literary-context/generate-deck-context-async/
+    Body: {deck_id: int, source_slug: str}
+    Returns: {job_id: str}
+    """
+    deck_id = request.data.get('deck_id')
+    source_slug = request.data.get('source_slug')
+
+    if not deck_id or not source_slug:
+        return Response(
+            {'error': 'deck_id and source_slug are required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    deck = get_object_or_404(Deck, id=deck_id, user=request.user)
+    source = get_object_or_404(LiterarySource, slug=source_slug, is_active=True)
+
+    word_ids = list(deck.words.values_list('id', flat=True))
+    if not word_ids:
+        return Response(
+            {'error': 'Deck has no words'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check for already running job for this deck+source
+    running = DeckContextJob.objects.filter(
+        deck=deck, source=source, status__in=['pending', 'running']
+    ).first()
+    if running:
+        return Response({'job_id': str(running.id)})
+
+    job = DeckContextJob.objects.create(
+        deck=deck,
+        source=source,
+        user=request.user,
+    )
+
+    thread = threading.Thread(
+        target=_run_deck_context_job,
+        args=(job.id, word_ids, source.id, deck.id, request.user.id),
+        daemon=True,
+    )
+    thread.start()
+
+    return Response({'job_id': str(job.id)}, status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def job_status_view(request, job_id):
+    """
+    GET /api/literary-context/job/<job_id>/status/
+    Returns job progress and stats.
+    """
+    job = get_object_or_404(DeckContextJob, id=job_id, user=request.user)
+    return Response({
+        'job_id': str(job.id),
+        'status': job.status,
+        'progress': job.progress,
+        'current_word': job.current_word,
+        'stats': job.stats,
+        'unmatched_words': job.unmatched_words,
+        'error_message': job.error_message,
+    })
 
 
 # --- Reader API ---
@@ -268,7 +396,7 @@ def word_from_reader_view(request):
     if source_slug:
         try:
             source = LiterarySource.objects.get(slug=source_slug, is_active=True)
-            context_media = generate_word_context(word, source)
+            context_media = generate_word_context(word, source, user=request.user)
             result['context_media'] = {
                 'hint_text': context_media.hint_text,
                 'sentences': context_media.sentences,

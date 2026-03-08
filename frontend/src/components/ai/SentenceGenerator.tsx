@@ -10,6 +10,7 @@ import { toast } from 'sonner@2.0.3';
 import { useTranslation } from '../../contexts/LanguageContext';
 import { WordSentence } from '../../types';
 import axios from 'axios';
+import { logger } from '../../utils/logger';
 
 interface SentenceGeneratorProps {
   wordId: number;
@@ -64,7 +65,7 @@ export const SentenceGenerator: React.FC<SentenceGeneratorProps> = ({
       // Очищаем контекст после успешной генерации
       setContext('');
     } catch (error: unknown) {
-      console.error('Sentences generation error:', error);
+      logger.error('Sentences generation error:', error);
       
       const errorMessage = axios.isAxiosError(error)
         ? (error.response?.data?.detail || error.response?.data?.error || error.message)

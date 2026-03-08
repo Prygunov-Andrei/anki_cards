@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-SERVER="root@72.56.83.95"
+SERVER="${1:-root@72.56.83.95}"
 REMOTE_PATH="/opt/anki_cards"
 
 echo -e "${BLUE}⚙️  Настройка переменных окружения на сервере...${NC}\n"

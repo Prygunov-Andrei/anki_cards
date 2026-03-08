@@ -4,7 +4,7 @@ Embedding generation utilities for literary context semantic search.
 import logging
 from typing import Optional
 
-from apps.cards.llm_utils import get_openai_client
+from apps.core.llm import get_openai_client
 from .models import LiteraryContextSettings
 
 logger = logging.getLogger(__name__)

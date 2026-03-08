@@ -1,5 +1,7 @@
 import api from './api';
 import { TokenBalance, TokenTransaction } from '../types';
+import { API_ENDPOINTS } from '../lib/api-constants';
+import { logger } from '@/utils/logger';
 
 /**
  * Token Service - сервис для работы с токенами пользователя
@@ -11,10 +13,10 @@ class TokenService {
    */
   async getTokenBalance(): Promise<TokenBalance> {
     try {
-      const response = await api.get<TokenBalance>('/api/tokens/balance/');
+      const response = await api.get<TokenBalance>(API_ENDPOINTS.TOKENS_BALANCE);
       return response.data;
     } catch (error) {
-      console.error('Error fetching token balance:', error);
+      logger.error('Error fetching token balance:', error);
       throw error;
     }
   }
@@ -25,10 +27,10 @@ class TokenService {
    */
   async getTokenTransactions(): Promise<TokenTransaction[]> {
     try {
-      const response = await api.get<TokenTransaction[]>('/api/tokens/transactions/');
+      const response = await api.get<TokenTransaction[]>(API_ENDPOINTS.TOKENS_TRANSACTIONS);
       return response.data;
     } catch (error) {
-      console.error('Error fetching token transactions:', error);
+      logger.error('Error fetching token transactions:', error);
       throw error;
     }
   }
@@ -43,7 +45,7 @@ class TokenService {
       const { balance } = await this.getTokenBalance();
       return balance >= requiredAmount;
     } catch (error) {
-      console.error('Error checking token balance:', error);
+      logger.error('Error checking token balance:', error);
       return false;
     }
   }

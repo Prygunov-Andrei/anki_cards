@@ -16,10 +16,24 @@ export interface User {
   theme?: 'light' | 'dark';
   mode?: 'simple' | 'advanced';
   image_provider?: 'openai' | 'gemini' | 'nano-banana'; // Провайдер генерации изображений
-  gemini_model?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'; // Модель Gemini для генерации изображений (deprecated, используется image_provider)
-  audio_provider?: 'openai' | 'gtts'; // Провайдер генерации аудио
+  gemini_model?: 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview'; // Модель Gemini для генерации изображений (deprecated, используется image_provider)
+  audio_provider?: 'openai' | 'gtts' | 'elevenlabs'; // Провайдер генерации аудио
   image_style?: 'minimalistic' | 'balanced' | 'creative'; // Стиль генерации изображений
   active_literary_source?: string | null; // Активный литературный контекст (slug)
+  // Per-user LLM settings
+  hint_generation_model?: string;
+  scene_description_model?: string;
+  matching_model?: string;
+  keyword_extraction_model?: string;
+  hint_temperature?: number;
+  scene_description_temperature?: number;
+  matching_temperature?: number;
+  keyword_temperature?: number;
+  elevenlabs_voice_id?: string;
+  hint_prompt_template?: string;
+  scene_description_prompt?: string;
+  keyword_extraction_prompt?: string;
+  image_prompt_template?: string;
 }
 
 // ========== WORD ==========
@@ -411,7 +425,7 @@ export interface ImageGenerationRequest {
   language: 'pt' | 'de' | 'en' | 'es' | 'fr' | 'it' | 'zh' | 'ja' | 'ko';
   image_style?: 'minimalistic' | 'balanced' | 'creative';
   provider?: 'openai' | 'gemini';
-  gemini_model?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview';
+  gemini_model?: 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview';
   word_id?: number;
 }
 
@@ -421,7 +435,7 @@ export interface ImageGenerationResponse {
 }
 
 // Типы моделей Gemini
-export type GeminiModel = 'gemini-2.5-flash-image' | 'nano-banana-pro-preview';
+export type GeminiModel = 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview';
 
 // Информация о модели Gemini
 export interface GeminiModelInfo {

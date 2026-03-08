@@ -74,7 +74,7 @@ export const formatTokensWithText = (
  */
 export const getGenerationCost = (
   provider: 'openai' | 'gemini',
-  geminiModel?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
+  geminiModel?: 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview'
 ): number => {
   if (provider === 'openai') {
     return 1; // DALL-E 3: 1 токен
@@ -84,7 +84,7 @@ export const getGenerationCost = (
     if (geminiModel === 'gemini-2.5-flash-image') {
       return 0.5; // Gemini Flash: 0.5 токена
     }
-    if (geminiModel === 'nano-banana-pro-preview') {
+    if (geminiModel === 'gemini-3.1-flash-image-preview') {
       return 1; // Nano Banana Pro: 1 токен
     }
     // Дефолтная модель
@@ -102,7 +102,7 @@ export const getTotalMediaCost = (
   generateImages: boolean,
   generateAudio: boolean,
   provider: 'openai' | 'gemini' = 'openai',
-  geminiModel?: 'gemini-2.5-flash-image' | 'nano-banana-pro-preview'
+  geminiModel?: 'gemini-2.5-flash-image' | 'gemini-3.1-flash-image-preview'
 ): number => {
   let cost = 0;
 

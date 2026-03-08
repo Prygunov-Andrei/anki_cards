@@ -10,6 +10,7 @@ import { useTokenContext } from '../../contexts/TokenContext';
 import { toast } from 'sonner@2.0.3';
 import { useTranslation } from '../../contexts/LanguageContext';
 import axios from 'axios';
+import { logger } from '../../utils/logger';
 
 interface HintGeneratorProps {
   wordId: number;
@@ -56,7 +57,7 @@ export const HintGenerator: React.FC<HintGeneratorProps> = ({
         description: `${t.tokens.spent}: ${response.tokens_spent}`,
       });
     } catch (error: unknown) {
-      console.error('Hint generation error:', error);
+      logger.error('Hint generation error:', error);
       
       const errorMessage = axios.isAxiosError(error)
         ? (error.response?.data?.detail || error.response?.data?.error || error.message)
