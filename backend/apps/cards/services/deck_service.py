@@ -42,6 +42,8 @@ def add_words_to_deck(user, deck: Deck, words_data: list[dict]) -> tuple[list[in
                 if word not in deck.words.all():
                     deck.words.add(word)
                     added_words.append(word.id)
+                # Ensure Card exists (signal only fires on Word creation)
+                Card.create_from_word(word, 'normal')
             except Word.DoesNotExist:
                 errors.append({'word_id': f'Word with ID {word_id} not found'})
         else:
@@ -70,6 +72,9 @@ def add_words_to_deck(user, deck: Deck, words_data: list[dict]) -> tuple[list[in
                 word.audio_file.name = relative_path
 
             word.save()
+
+            # Ensure Card exists (signal only fires on Word creation)
+            Card.create_from_word(word, 'normal')
 
             if word not in deck.words.all():
                 deck.words.add(word)

@@ -101,7 +101,6 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         onChange={handleFileSelected}
         className="hidden"
       />
@@ -114,7 +113,7 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
         disabled={disabled}
         className="w-full gap-2"
       >
-        <Camera className="h-5 w-5" />
+        <Camera className="h-8 w-8 sm:h-5 sm:w-5" />
         {pt.scanFromPhoto}
       </Button>
 

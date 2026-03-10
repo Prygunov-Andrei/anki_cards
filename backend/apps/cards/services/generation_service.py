@@ -9,7 +9,7 @@ from django.conf import settings
 from django.db import transaction
 
 from apps.words.models import Word
-from apps.cards.models import GeneratedDeck, Deck
+from apps.cards.models import GeneratedDeck, Deck, Card
 from apps.cards.utils import generate_apkg
 from apps.cards.llm_utils import (
     translate_words,
@@ -145,10 +145,17 @@ def generate_cards(user, words_list: list[str], language: str,
             target_lang=language,
             source_lang=getattr(user, 'native_language', 'ru') or 'ru',
             literary_source=getattr(user, 'active_literary_source', None),
+            is_learning_active=True,
         )
         word_objects = Word.objects.filter(
             user=user, original_word__in=words_list, language=language)
         deck.words.set(word_objects)
+
+        # Ensure every word has a normal Card (signal only fires on create,
+        # but words may already exist from bulk-create or previous decks)
+        for word_obj in word_objects:
+            Card.create_from_word(word_obj, 'normal')
+
         response_data['deck_id'] = deck.id
         response_data['deck_url'] = f'/decks/{deck.id}'
 
@@ -253,7 +260,7 @@ def generate_apkg_from_deck(user, deck_id: int) -> dict:
         user=user,
         deck_name=deck.name,
         file_path=str(output_path),
-        cards_count=len(words_data),
+        cards_count=len(words_data) * 2,
     )
 
     # Try anki sync
