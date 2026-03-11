@@ -102,6 +102,52 @@ def generate_cards(user, words_list: list[str], language: str,
 
         words_data.append(word_data)
 
+    # Literary context enrichment (if user has active literary source)
+    literary_source = getattr(user, 'active_literary_source', None)
+    if literary_source and save_to_decks:
+        try:
+            from apps.literary_context.generation import generate_batch_context
+            from apps.literary_context.models import WordContextMedia
+
+            # Use already-created word objects (in same transaction)
+            word_obj_list = [
+                Word.objects.get(user=user, original_word=w, language=language)
+                for w in words_list
+            ]
+
+            # Generate context for all words (skips existing)
+            logger.info(
+                f"Generating literary context for {len(word_obj_list)} words "
+                f"from source '{literary_source}'"
+            )
+            generate_batch_context(word_obj_list, literary_source, skip_existing=True, user=user)
+
+            # Collect results into a lookup map
+            context_qs = WordContextMedia.objects.filter(
+                word__in=word_obj_list, source=literary_source
+            ).select_related('word')
+            literary_context_map = {}
+            for ctx in context_qs:
+                sentences = ctx.sentences or []
+                first_sentence = sentences[0]['text'] if sentences else ''
+                literary_context_map[ctx.word.original_word] = {
+                    'hint': ctx.hint_text or '',
+                    'sentence': first_sentence,
+                }
+
+            # Enrich word_data with literary context
+            for wd in words_data:
+                w_key = wd['original_word']
+                ctx_data = literary_context_map.get(w_key, {})
+                wd['hint'] = ctx_data.get('hint', '')
+                wd['example_sentence'] = ctx_data.get('sentence', '')
+
+            logger.info(
+                f"Literary context enriched {len(literary_context_map)}/{len(words_list)} words"
+            )
+        except Exception as e:
+            logger.error(f"Literary context enrichment failed (non-critical): {e}", exc_info=True)
+
     # Generate .apkg file
     file_id = uuid.uuid4()
     temp_dir = Path(settings.MEDIA_ROOT) / 'temp_files'

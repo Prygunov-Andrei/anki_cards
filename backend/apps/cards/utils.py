@@ -25,20 +25,30 @@ def create_card_model() -> Model:
             {"name": "OriginalWord"},
             {"name": "Translation"},
             {"name": "Audio"},
-            {"name": "Image"}
+            {"name": "Image"},
+            {"name": "Hint"},
+            {"name": "ExampleSentence"},
         ],
         templates=[
             {
                 "name": "Card 1",
                 "qfmt": "{{OriginalWord}}<br>{{Image}}",
-                "afmt": "{{OriginalWord}}<br>{{Image}}<br>{{Audio}}<br>{{Translation}}"
+                "afmt": (
+                    "{{OriginalWord}}<br>{{Image}}<br>{{Audio}}<br>{{Translation}}"
+                    "{{#Hint}}<br><hr><div style='font-style:italic;color:#666;font-size:0.9em;'>{{Hint}}</div>{{/Hint}}"
+                    "{{#ExampleSentence}}<br><div style='font-size:0.85em;color:#555;'>{{ExampleSentence}}</div>{{/ExampleSentence}}"
+                ),
             },
             {
                 "name": "Card 2",
                 "qfmt": "{{Translation}}<br>{{Image}}",
-                "afmt": "{{Translation}}<br>{{Image}}<br>{{OriginalWord}}<br>{{Audio}}"
-            }
-        ]
+                "afmt": (
+                    "{{Translation}}<br>{{Image}}<br>{{OriginalWord}}<br>{{Audio}}"
+                    "{{#Hint}}<br><hr><div style='font-style:italic;color:#666;font-size:0.9em;'>{{Hint}}</div>{{/Hint}}"
+                    "{{#ExampleSentence}}<br><div style='font-size:0.85em;color:#555;'>{{ExampleSentence}}</div>{{/ExampleSentence}}"
+                ),
+            },
+        ],
     )
     
     return model
@@ -127,6 +137,9 @@ def generate_apkg(
             image_filename = Path(word_data['image_file']).name
             image_field = f'<img src="{image_filename}">'
         
+        hint_field = word_data.get('hint', '')
+        sentence_field = word_data.get('example_sentence', '')
+
         # Создаем запись (Note)
         note = Note(
             model=model,
@@ -134,7 +147,9 @@ def generate_apkg(
                 display_word,  # Используем display_word вместо original_word
                 translation,
                 audio_field,
-                image_field
+                image_field,
+                hint_field,
+                sentence_field,
             ]
         )
         deck.add_note(note)

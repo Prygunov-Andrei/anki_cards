@@ -79,30 +79,6 @@ export function MainPageActionArea({
       {translations.length > 0 && (
         <Card className="p-4">
           <div className="space-y-3">
-            {/* Compact media toggles */}
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                <Checkbox
-                  id="generate-images"
-                  checked={generateImages}
-                  onCheckedChange={setGenerateImages}
-                  disabled={isGenerating}
-                />
-                <ImageIcon className="h-3.5 w-3.5 text-cyan-500" />
-                <span>{t.generation.generateImages}</span>
-              </label>
-              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                <Checkbox
-                  id="generate-audio"
-                  checked={generateAudio}
-                  onCheckedChange={setGenerateAudio}
-                  disabled={isGenerating}
-                />
-                <Volume2 className="h-3.5 w-3.5 text-pink-500" />
-                <span>{t.generation.generateAudio}</span>
-              </label>
-            </div>
-
             {/* Generate media button with token badge */}
             {!hasMedia && (
               <Button

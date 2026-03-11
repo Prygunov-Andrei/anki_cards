@@ -113,7 +113,7 @@ export async function extractWordsFromPhoto(data: {
     API_ENDPOINTS.EXTRACT_WORDS_FROM_PHOTO,
     formData,
     {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': undefined },
       timeout: TIMEOUTS.API_MEDIUM,
     }
   );

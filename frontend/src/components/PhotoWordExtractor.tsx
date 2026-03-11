@@ -28,7 +28,7 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
   disabled = false,
 }) => {
   const t = useTranslation();
-  const pt = t.words?.photoExtraction ?? {} as Record<string, string>;
+  const pt = (t as any).toast?.photoExtraction ?? {} as Record<string, string>;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -42,6 +42,7 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    console.log('[PhotoExtractor] File selected:', file?.name, file?.size, file?.type);
     if (!file) return;
 
     // Показываем превью
@@ -53,15 +54,18 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
     setExtractedWords([]);
 
     try {
+      console.log('[PhotoExtractor] Sending request...', { targetLang, sourceLang });
       const result = await mediaService.extractWordsFromPhoto({
         image: file,
         target_lang: targetLang,
         source_lang: sourceLang,
       });
 
+      console.log('[PhotoExtractor] Result:', result);
       setExtractedWords(result.words);
       setHasResult(true);
     } catch (error: any) {
+      console.error('[PhotoExtractor] Error:', error?.message, error?.response?.status, error?.response?.data);
       logger.error('Error extracting words from photo:', error);
       const message = error?.response?.data?.error || pt.extractionError;
       showError(message);
@@ -102,7 +106,7 @@ export const PhotoWordExtractor: React.FC<PhotoWordExtractorProps> = ({
         type="file"
         accept="image/*"
         onChange={handleFileSelected}
-        className="hidden"
+        className="sr-only"
       />
 
       {/* Кнопка камеры */}

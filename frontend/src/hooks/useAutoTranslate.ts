@@ -254,7 +254,10 @@ export function useAutoTranslate({
         logger.warn(`Could not translate ${stillUntranslated.length} words:`, stillUntranslated);
       }
 
-      // Bulk-create words on backend and remember their IDs
+      // Переводы уже в таблице — убираем спиннер сразу
+      setIsTranslating(false);
+
+      // Bulk-create words on backend and remember their IDs (фоново)
       try {
         const language = userLanguage;
         const bulkPayload = updatedTranslations

@@ -428,7 +428,7 @@ def extract_words_from_photo_view(request):
             {'error': 'target_lang and source_lang are required'},
             status=status.HTTP_400_BAD_REQUEST)
 
-    allowed_types = ['image/jpeg', 'image/png', 'image/jpg']
+    allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/heic', 'image/heif', 'image/webp']
     if image_file.content_type not in allowed_types:
         return Response(
             {'error': f'Unsupported format: {image_file.content_type}. Allowed: JPEG, PNG'},
